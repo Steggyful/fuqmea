@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#39ff14">
+  <meta name="description" content="FuqMeA Meme Vault - Download and share the best memes">
+  <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
+  <title>fuqmea.com • MEME VAULT</title>
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="logo">FUQMEA.COM</div>
+    <nav>
+      <ul>
+        <li><a href="index.html">HOME</a></li>
+        <li><a href="fifi.html">FiFi ZONE</a></li>
+        <li><a href="memes.html">MEME VAULT</a></li>
+        <li><a href="socials.html">SOCIALS</a></li>
+        <li><a href="giveaways.html">GIVEAWAYS</a></li>
+      </ul>
+    </nav>
+    <div class="streamers">
+      <div class="streamer-btn" data-streamer="steggyful1">
+        <strong>Steggyful1</strong>
+        <a href="https://www.twitch.tv/steggyful1" target="_blank">Twitch</a>
+        <a href="https://www.tiktok.com/@steggyful1" target="_blank">TikTok</a>
+        <span class="live-dot" id="live-steggyful1"></span>
+        <span class="live-text" id="live-text-steggyful1">OFFLINE</span>
+      </div>
+      <div class="streamer-btn" data-streamer="ssgvivid">
+        <strong>SSGVivid</strong>
+        <a href="https://www.twitch.tv/ssgvivid" target="_blank">Twitch</a>
+        <a href="https://www.tiktok.com/@SSGVivid" target="_blank">TikTok</a>
+        <span class="live-dot" id="live-ssgvivid"></span>
+        <span class="live-text" id="live-text-ssgvivid">OFFLINE</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-content">
+    <div class="vault-sticky-header">
+      <h1>MEME VAULT</h1>
+      <p style="font-size:1.4rem; opacity:0.9; margin-bottom:1.5rem;">
+        Click to select • Yellow = ready to download • 
+        <strong id="selected-count">0 selected</strong>
+      </p>
+
+      <div class="button-group">
+        <button id="download-zip-btn" class="button" style="font-size:1.4rem; padding:18px 50px; display:none;">
+          DOWNLOAD SELECTED AS ZIP
+        </button>
+        <button id="deselect-all-btn" class="button" style="font-size:1.4rem; padding:18px 50px; display:none; background: #FF1744; border-color: #FF1744; box-shadow: 0 0 40px #FF1744;">
+          DESELECT ALL
+        </button>
+      </div>
+    </div>
+
+    <div class="gallery" id="gallery"></div>
+  </div>
+
+  <script src="assets/js/hub.js" defer></script>
+</body>
+</html>
