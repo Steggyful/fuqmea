@@ -250,9 +250,9 @@ function setupLightbox() {
     <button type="button" class="meme-lightbox-nav next" id="meme-lightbox-next" aria-label="Next meme">NEXT</button>
     <div class="meme-lightbox-actions">
       <button type="button" class="button meme-lightbox-action" id="meme-lightbox-download">DOWNLOAD THIS MEME</button>
-      <button type="button" class="button meme-lightbox-action" id="meme-lightbox-toggle-select">ADD TO ZIP SELECTION</button>
+      <button type="button" class="button meme-lightbox-action" id="meme-lightbox-toggle-select">ADD TO DOWNLOADS</button>
       <button type="button" class="button meme-lightbox-action" id="meme-lightbox-selected-preview">VIEW SELECTED</button>
-      <button type="button" class="button meme-lightbox-action" id="meme-lightbox-download-zip">DOWNLOAD SELECTED AS ZIP</button>
+      <button type="button" class="button meme-lightbox-action" id="meme-lightbox-download-zip">DOWNLOAD ZIP</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -268,6 +268,10 @@ function setupLightbox() {
   document.getElementById('meme-lightbox-toggle-select').addEventListener('click', toggleCurrentLightboxSelection);
   document.getElementById('meme-lightbox-selected-preview').addEventListener('click', openSelectedPreviewModal);
   document.getElementById('meme-lightbox-download-zip').addEventListener('click', () => downloadSelectedAsZip());
+  const frame = overlay.querySelector('.meme-lightbox-frame');
+  if (frame) {
+    frame.addEventListener('click', toggleCurrentLightboxSelection);
+  }
 
   document.addEventListener('keydown', (event) => {
     if (!overlay.classList.contains('open')) return;
@@ -313,7 +317,7 @@ function syncLightbox() {
   const isSelected = selected.has(src);
   img.src = src;
   img.alt = `FuqMeA Meme ${lightboxIndex + 1}`;
-  toggleBtn.textContent = isSelected ? 'REMOVE FROM ZIP SELECTION' : 'ADD TO ZIP SELECTION';
+  toggleBtn.textContent = isSelected ? 'REMOVE FROM DOWNLOADS' : 'ADD TO DOWNLOADS';
   if (frame) frame.classList.toggle('selected', isSelected);
   if (zipBtn) zipBtn.disabled = selected.size === 0;
 }
@@ -526,7 +530,7 @@ function updateSelectedUI() {
   const lightboxPreviewBtn = document.getElementById('meme-lightbox-selected-preview');
   const lightboxZipBtn = document.getElementById('meme-lightbox-download-zip');
   const selectedCount = selected.size;
-  const zipLabel = `DOWNLOAD SELECTED AS ZIP (${selectedCount})`;
+  const zipLabel = `DOWNLOAD ZIP (${selectedCount})`;
   const previewLabel = `VIEW SELECTED (${selectedCount})`;
   
   if (previewBtn) {
