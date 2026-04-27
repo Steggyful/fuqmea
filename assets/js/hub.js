@@ -174,8 +174,23 @@ async function initGallery() {
   }
 
   const params = new URLSearchParams(window.location.search);
+  const openMeme = params.get('openMeme');
+  if (openMeme && validateImagePath(openMeme)) {
+    const openIndex = memes.indexOf(openMeme);
+    if (openIndex >= 0) {
+      scrollToMemeCard(openMeme);
+      openLightboxAt(openIndex, memes);
+    }
+    // Consume one-time deep link so refresh doesn't reopen repeatedly.
+    params.delete('openMeme');
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, document.title, nextUrl);
+    return;
+  }
+
   if (params.get('randomMeme') === '1') {
-    openRandomMeme(memes);
+    openRandomMeme(memes, { jumpToCard: true });
     // Consume one-time random trigger so refresh doesn't reopen repeatedly.
     params.delete('randomMeme');
     const nextQuery = params.toString();
@@ -217,8 +232,20 @@ async function startRotator() {
   rotatorList.forEach((src, i) => {
     const img = document.createElement('img');
     img.src = src;
+    img.alt = 'Featured meme preview';
+    img.loading = 'lazy';
+    img.dataset.src = src;
     if (i === 0) img.classList.add('active');
     container.appendChild(img);
+  });
+
+  container.addEventListener('click', () => {
+    const activeImg = container.querySelector('img.active');
+    if (!activeImg) return;
+    const src = activeImg.dataset.src || activeImg.getAttribute('src');
+    if (!src) return;
+    const target = `memes.html?openMeme=${encodeURIComponent(src)}`;
+    window.location.href = target;
   });
 
   setInterval(() => {
@@ -244,6 +271,7 @@ function setupLightbox() {
   overlay.innerHTML = `
     <button type="button" class="meme-lightbox-close" id="meme-lightbox-close" aria-label="Close lightbox">CLOSE</button>
     <button type="button" class="meme-lightbox-nav prev" id="meme-lightbox-prev" aria-label="Previous meme">PREV</button>
+    <button type="button" class="meme-lightbox-nav random" id="meme-lightbox-random" aria-label="Random meme">RANDOM</button>
     <div class="meme-lightbox-frame">
       <img id="meme-lightbox-image" alt="Selected meme preview">
     </div>
@@ -264,6 +292,7 @@ function setupLightbox() {
   document.getElementById('meme-lightbox-close').addEventListener('click', closeLightbox);
   document.getElementById('meme-lightbox-prev').addEventListener('click', () => shiftLightbox(-1));
   document.getElementById('meme-lightbox-next').addEventListener('click', () => shiftLightbox(1));
+  document.getElementById('meme-lightbox-random').addEventListener('click', jumpToRandomLightboxMeme);
   document.getElementById('meme-lightbox-download').addEventListener('click', downloadCurrentLightboxMeme);
   document.getElementById('meme-lightbox-toggle-select').addEventListener('click', toggleCurrentLightboxSelection);
   document.getElementById('meme-lightbox-selected-preview').addEventListener('click', openSelectedPreviewModal);
@@ -304,6 +333,22 @@ function closeLightbox() {
 function shiftLightbox(direction) {
   if (!lightboxMemes.length) return;
   lightboxIndex = (lightboxIndex + direction + lightboxMemes.length) % lightboxMemes.length;
+  syncLightbox();
+}
+
+function jumpToRandomLightboxMeme() {
+  if (!lightboxMemes.length) return;
+  if (lightboxMemes.length === 1) {
+    syncLightbox();
+    return;
+  }
+
+  let randomIndex = lightboxIndex;
+  while (randomIndex === lightboxIndex) {
+    randomIndex = Math.floor(Math.random() * lightboxMemes.length);
+  }
+
+  lightboxIndex = randomIndex;
   syncLightbox();
 }
 
@@ -359,9 +404,21 @@ async function downloadCurrentLightboxMeme() {
   await downloadSingleMeme(lightboxMemes[lightboxIndex]);
 }
 
-function openRandomMeme(memes) {
+function scrollToMemeCard(src) {
+  const safeSrc = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(src) : src.replace(/"/g, '\\"');
+  const targetCard = document.querySelector(`.meme-card[data-src="${safeSrc}"]`);
+  if (!targetCard) return;
+  // Jump directly to the card position (no animated scroll).
+  targetCard.scrollIntoView({ behavior: 'auto', block: 'center' });
+}
+
+function openRandomMeme(memes, options = {}) {
   if (!Array.isArray(memes) || memes.length === 0) return;
   const randomIndex = Math.floor(Math.random() * memes.length);
+  if (options.jumpToCard) {
+    const randomSrc = memes[randomIndex];
+    if (randomSrc) scrollToMemeCard(randomSrc);
+  }
   openLightboxAt(randomIndex, memes);
 }
 
