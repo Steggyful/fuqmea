@@ -5,14 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#39ff14">
   <meta name="description" content="FuqMeA Meme Vault - Download and share the best memes">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://decapi.me https://www.tiktok.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
   <title>fuqmea.com • MEME VAULT</title>
   <link rel="stylesheet" href="assets/css/styles.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" defer></script>
 </head>
 <body>
   <header>
-    <div class="logo">FUQMEA.COM</div>
+    <a href="index.html" class="logo">FUQMEA.COM</a>
     <nav>
       <ul>
         <li><a href="index.html">HOME</a></li>
@@ -22,18 +23,25 @@
         <li><a href="giveaways.html">GIVEAWAYS</a></li>
       </ul>
     </nav>
+
+    <a href="https://discord.com/invite/ZsFuQMEA" target="_blank" rel="noopener noreferrer" class="discord-icon-link" title="Join Discord">
+      <svg class="discord-icon-small" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path fill="currentColor" d="M20.2 4.6A16.6 16.6 0 0 0 16 3.3l-.2.5-.3.9c-2.3-.4-4.6-.4-6.9 0l-.3-.9-.2-.5A16.6 16.6 0 0 0 3.8 4.6C1.1 8.6.4 12.4.7 16.1a16.9 16.9 0 0 0 5.1 2.6l.4-.7.7-1.2a10.8 10.8 0 0 1-1.7-.8l.4-.3a12 12 0 0 0 10.8 0l.4.3c-.6.3-1.1.6-1.7.8l.7 1.2.4.7a16.9 16.9 0 0 0 5.1-2.6c.3-4.3-.6-8.1-3.3-11.5ZM9.5 13.8c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm5 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z"/>
+      </svg>
+    </a>
+
     <div class="streamers">
       <div class="streamer-btn" data-streamer="steggyful1">
         <strong>Steggyful1</strong>
-        <a href="https://www.twitch.tv/steggyful1" target="_blank">Twitch</a>
-        <a href="https://www.tiktok.com/@steggyful1" target="_blank">TikTok</a>
+        <a href="https://www.twitch.tv/steggyful1" target="_blank" rel="noopener noreferrer">Twitch</a>
+        <a href="https://www.tiktok.com/@steggyful1" target="_blank" rel="noopener noreferrer">TikTok</a>
         <span class="live-dot" id="live-steggyful1"></span>
         <span class="live-text" id="live-text-steggyful1">OFFLINE</span>
       </div>
       <div class="streamer-btn" data-streamer="ssgvivid">
         <strong>SSGVivid</strong>
-        <a href="https://www.twitch.tv/ssgvivid" target="_blank">Twitch</a>
-        <a href="https://www.tiktok.com/@SSGVivid" target="_blank">TikTok</a>
+        <a href="https://www.twitch.tv/ssgvivid" target="_blank" rel="noopener noreferrer">Twitch</a>
+        <a href="https://www.tiktok.com/@SSGVivid" target="_blank" rel="noopener noreferrer">TikTok</a>
         <span class="live-dot" id="live-ssgvivid"></span>
         <span class="live-text" id="live-text-ssgvivid">OFFLINE</span>
       </div>
@@ -44,23 +52,32 @@
     <div class="vault-sticky-header">
       <h1>MEME VAULT</h1>
       <p style="font-size:1.4rem; opacity:0.9; margin-bottom:1.5rem;">
-        Click to select • Yellow = ready to download • 
-        <strong id="selected-count">0 selected</strong>
+        Click to select • Yellow = ready to download
       </p>
 
       <div class="button-group">
+        <button id="random-meme-btn" class="button" style="font-size:1.4rem; padding:18px 50px;">
+          RANDOM MEME
+        </button>
         <button id="download-zip-btn" class="button" style="font-size:1.4rem; padding:18px 50px; display:none;">
           DOWNLOAD SELECTED AS ZIP
         </button>
-        <button id="deselect-all-btn" class="button" style="font-size:1.4rem; padding:18px 50px; display:none; background: #FF1744; border-color: #FF1744; box-shadow: 0 0 40px #FF1744;">
-          DESELECT ALL
-        </button>
+      </div>
+      <div class="vault-utility-row">
+        <button id="select-all-btn" type="button" class="vault-utility-btn">Select all</button>
+        <button id="selected-preview-btn" type="button" class="vault-utility-btn" style="display:none;">View selected</button>
+        <button id="deselect-all-btn" type="button" class="vault-utility-btn" style="display:none;">Clear selected</button>
       </div>
     </div>
 
     <div class="gallery" id="gallery"></div>
+    <p class="credit">created by 
+  <a href="https://www.tiktok.com/@steggyful1" target="_blank" rel="noopener noreferrer">@steggyful1</a>
+</p>
+    <p class="legal-footer"><a href="legal.html">Legal</a></p>
   </div>
 
   <script src="assets/js/hub.js" defer></script>
+  <script src="assets/js/init.js" defer></script>
 </body>
 </html>

@@ -12,6 +12,7 @@ body {
   color: var(--lime);
   font-family: 'Courier New', Courier, monospace;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 header {
@@ -39,6 +40,12 @@ header {
   left: 5%;
   top: 50%;
   transform: translateY(-50%);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.logo:visited {
+  color: var(--lime);
 }
 
 nav ul {
@@ -58,6 +65,14 @@ nav a {
   transition: all 0.3s;
 }
 
+nav a:focus-visible,
+.button:focus-visible,
+.streamer-btn a:focus-visible,
+.social-link:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
 nav a:hover {
   border-color: var(--lime);
   background: rgba(57, 255, 20, 0.15);
@@ -65,8 +80,52 @@ nav a:hover {
   transform: translateY(-2px);
 }
 
+.discord-icon-link {
+  position: absolute;
+  right: 5%;
+  top: 50%;
+  transform: translateY(-50%);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 8px;
+  transition: all 0.3s;
+  background: rgba(88, 101, 242, 0.15);
+  border: 2px solid #5865f2;
+  z-index: 1001;
+}
+
+.discord-icon-link:hover {
+  background: #5865f2;
+  box-shadow: 0 0 25px rgba(88, 101, 242, 0.9);
+  transform: translateY(-50%) scale(1.1);
+}
+
+.discord-icon-link:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.discord-icon-small {
+  width: 32px;
+  height: 32px;
+  color: #dbe1ff;
+  transition: all 0.3s;
+}
+
+.discord-icon-link:hover .discord-icon-small {
+  color: #fff;
+}
+
 .streamers {
-  display: none;
+  display: none !important;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .streamer-btn {
@@ -121,13 +180,26 @@ nav a:hover {
   box-shadow: 0 0 15px #FF1744;
 }
 
+.streamer-btn.checking .live-dot {
+  background: #ffb703;
+  animation: pulse-offline 1.4s infinite;
+  box-shadow: 0 0 12px rgba(255, 183, 3, 0.7);
+}
+
+.streamer-btn.offline .live-dot {
+  background: #777;
+  animation: pulse-offline 1.8s infinite;
+}
+
 .live-text {
-  font-size: 0.85rem;
+  font-size: 0.86rem;
   font-weight: bold;
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: 999px;
-  background: transparent;
-  color: #999;
+  min-width: 126px;
+  text-align: center;
+  background: rgba(95, 95, 95, 0.25);
+  color: #b8b8b8;
   text-shadow: none;
   transition: all 0.3s;
 }
@@ -139,6 +211,18 @@ nav a:hover {
   text-shadow: 0 0 10px rgba(255, 50, 50, 0.8);
   box-shadow: 0 0 15px #FF1744;
   animation: badge-pulse 2s infinite;
+}
+
+.streamer-btn.checking .live-text {
+  background: #ffb703;
+  color: #171717;
+  box-shadow: 0 0 14px rgba(255, 183, 3, 0.8);
+}
+
+.streamer-btn.offline .live-text {
+  background: rgba(95, 95, 95, 0.25);
+  color: #b8b8b8;
+  box-shadow: none;
 }
 
 @keyframes badge-pulse {
@@ -195,6 +279,7 @@ nav a:hover {
   aspect-ratio: 1;
   contain: layout style paint; 
   will-change: transform; 
+  position: relative;
 }
 
 .meme-card:hover {
@@ -225,6 +310,130 @@ nav a:hover {
   filter: brightness(1.15) drop-shadow(0 0 8px #ffff00);
 }
 
+.meme-view-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  border: 2px solid var(--lime);
+  background: rgba(10, 10, 10, 0.92);
+  color: var(--lime);
+  font-weight: bold;
+  font-size: 0.8rem;
+  letter-spacing: 0.8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.meme-view-btn:hover {
+  color: #000;
+  background: var(--lime);
+}
+
+.meme-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 54px 12px 14px;
+  z-index: 3000;
+}
+
+.meme-lightbox.open {
+  display: flex;
+}
+
+.meme-lightbox-frame {
+  width: min(92vw, 1080px);
+  height: min(74vh, 760px);
+  border: 5px solid var(--lime);
+  border-radius: 10px;
+  box-shadow: 0 0 40px rgba(57, 255, 20, 0.45);
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.meme-lightbox-frame.selected {
+  border-color: var(--yellow);
+  box-shadow: 0 0 40px rgba(255, 255, 0, 0.55);
+}
+
+.meme-lightbox img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.meme-lightbox-close,
+.meme-lightbox-nav {
+  position: absolute;
+  border: 2px solid var(--lime);
+  background: rgba(10, 10, 10, 0.95);
+  color: var(--lime);
+  font-weight: bold;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.meme-lightbox-close {
+  top: 18px;
+  right: 18px;
+}
+
+.meme-lightbox-nav.prev {
+  left: 20px;
+}
+
+.meme-lightbox-nav.next {
+  right: 20px;
+}
+
+.meme-lightbox-actions {
+  position: static;
+  margin-top: 12px;
+  width: min(96vw, 860px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(300px, 1fr));
+  gap: 10px 12px;
+  align-items: center;
+}
+
+.meme-lightbox .meme-lightbox-action {
+  font-size: 0.9rem !important;
+  padding: 7px 16px !important;
+  margin: 0;
+  border-width: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  max-width: none;
+  min-height: 44px;
+  white-space: nowrap;
+  line-height: 1;
+  letter-spacing: 0.3px;
+}
+
+#meme-lightbox-download,
+#meme-lightbox-download-zip {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: min(100%, 430px);
+}
+
+#meme-lightbox-toggle-select,
+#meme-lightbox-selected-preview {
+  width: 100%;
+}
+
 .button {
   display: inline-block;
   font-size: 2.2rem;
@@ -246,6 +455,17 @@ nav a:hover {
   box-shadow: 0 0 70px var(--lime);
 }
 
+.random-home-cta {
+  margin: 0.5rem 0 1rem;
+}
+
+.random-home-button {
+  font-size: 0.95rem;
+  padding: 8px 16px;
+  border-width: 3px;
+  box-shadow: 0 0 14px var(--lime);
+}
+
 .main-content {
   text-align: center;
   padding: 4rem 5%;
@@ -262,69 +482,7 @@ h1 {
   margin-top: 4rem;
 }
 
-.live-dot {
-  width: 14px;
-  height: 14px;
-  background: #555;
-  border-radius: 50%;
-  box-shadow: none;
-  animation: pulse-offline 1.8s infinite;
-  transition: all 0.3s;
-}
-
-@keyframes pulse-offline { 0%,100% { opacity: 0.3; } 50% { opacity: 0.1; } }
-
-@keyframes pulse-live { 
-  0%,100% { box-shadow: 0 0 0 0 rgba(255, 50, 50, 0.7); } 
-  50% { box-shadow: 0 0 0 8px rgba(255, 50, 50, 0); } 
-}
-
-.streamer-btn.live .live-dot {
-  background: #FF1744;
-  animation: pulse-live 2s infinite;
-  box-shadow: 0 0 15px #FF1744;
-}
-
-.live-text {
-  font-size: 0.85rem;
-  font-weight: bold;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: transparent;
-  color: #999;
-  text-shadow: none;
-  transition: all 0.3s;
-}
-
-.streamer-btn.live .live-text {
-  background: #FF1744;
-  color: #FFF;
-  font-size: 0.8rem;
-  text-shadow: 0 0 10px rgba(255, 50, 50, 0.8);
-  box-shadow: 0 0 15px #FF1744;
-  animation: badge-pulse 2s infinite;
-}
-
-@keyframes badge-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-}
-
-@keyframes badge-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-  text-decoration: none;
-  box-shadow: 0 0 40px var(--lime);
-  transition: all 0.4s;
-  margin: 10px;
-}
-
-.button:hover {
-  background: var(--lime);
-  color: #000;
-  transform: scale(1.12) rotate(4deg);
-  box-shadow: 0 0 70px var(--lime);
-}
+/* duplicate live-status/button blocks removed to avoid cross-browser parse issues */
 
 .vault-sticky-header {
   position: sticky;
@@ -361,6 +519,119 @@ h1 {
   padding: 16px 45px;
 }
 
+.vault-utility-row {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.vault-utility-btn {
+  border: 1px solid rgba(57, 255, 20, 0.65);
+  background: transparent;
+  color: rgba(57, 255, 20, 0.9);
+  font-size: 0.8rem;
+  letter-spacing: 0.4px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.vault-utility-btn:hover {
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+.selected-preview-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 3200;
+}
+
+.selected-preview-modal.open {
+  display: flex;
+}
+
+.selected-preview-panel {
+  width: min(92vw, 980px);
+  max-height: 82vh;
+  background: #070707;
+  border: 3px solid var(--lime);
+  border-radius: 10px;
+  box-shadow: 0 0 35px rgba(57, 255, 20, 0.4);
+  overflow: hidden;
+}
+
+.selected-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 2px solid rgba(57, 255, 20, 0.45);
+}
+
+.selected-preview-header h2 {
+  margin: 0;
+}
+
+.selected-preview-close {
+  border: 2px solid var(--lime);
+  background: #000;
+  color: var(--lime);
+  font-weight: bold;
+  border-radius: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.selected-preview-table-wrap {
+  overflow: auto;
+  max-height: calc(82vh - 68px);
+}
+
+.selected-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.selected-preview-table th,
+.selected-preview-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(57, 255, 20, 0.25);
+  vertical-align: middle;
+}
+
+.selected-preview-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border: 2px solid var(--lime);
+  border-radius: 6px;
+  background: #000;
+}
+
+.selected-preview-action {
+  border: 2px solid var(--lime);
+  background: transparent;
+  color: var(--lime);
+  border-radius: 8px;
+  padding: 5px 10px;
+  margin-right: 8px;
+  cursor: pointer;
+}
+
+.selected-preview-action.remove {
+  border-color: #FF1744;
+  color: #FF1744;
+}
+
 #deselect-all-btn:hover {
   background: #FF1744 !important;
   color: #FFF !important;
@@ -384,24 +655,154 @@ h1 {
   margin-top: 4rem;
 }
 
-.live-text {
-  font-size: 0.9rem;
-  font-weight: bold;
-  color: var(--lime);
-  text-shadow: 0 0 10px var(--lime);
-}
-
 .streamer-section {
   padding: 2rem;
-  border: 3px solid transparent;
+  border: 3px solid var(--lime);
   border-radius: 15px;
+  box-shadow: 0 0 26px rgba(57, 255, 20, 0.45);
   transition: all 0.3s ease;
+  position: relative;
 }
 
 .streamer-section.live {
-  border: 3px solid #FF1744;
-  box-shadow: 0 0 40px #FF1744, inset 0 0 20px rgba(255, 23, 68, 0.1);
-  animation: section-pulse 2s infinite;
+  border: 3px solid var(--lime);
+  box-shadow: 0 0 26px rgba(57, 255, 20, 0.55), inset 0 0 12px rgba(57, 255, 20, 0.12);
+  animation: none;
+}
+
+.streamer-section h2 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 0 1.1rem;
+}
+
+.streamer-section .button {
+  display: block;
+  margin: 0.8rem auto;
+  width: fit-content;
+}
+
+.streamer-section.live h2::after {
+  content: "LIVE NOW";
+  display: inline-block;
+  background: #FF1744;
+  color: #fff;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  letter-spacing: 0.7px;
+  box-shadow: 0 0 16px rgba(255, 23, 68, 0.9);
+  transform: rotate(-12deg) translateY(-1px);
+}
+
+.streamer-section.checking {
+  border: 3px solid #ffb703;
+  box-shadow: 0 0 30px rgba(255, 183, 3, 0.8), inset 0 0 16px rgba(255, 183, 3, 0.14);
+  animation: none;
+}
+
+.streamer-section.offline {
+  border: 3px solid var(--lime);
+  box-shadow: 0 0 26px rgba(57, 255, 20, 0.45);
+  animation: none;
+}
+
+.socials-subtitle {
+  font-size: 2rem;
+  margin: 3rem 0;
+}
+
+.socials-grid {
+  display: flex;
+  gap: 4rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 3rem;
+}
+
+.socials-card {
+  text-align: center;
+}
+
+.social-button {
+  font-size: 1.6rem;
+  padding: 18px 50px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.button-icon {
+  font-size: 1em;
+  line-height: 1;
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.social-icon {
+  fill: currentColor;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.social-icon-twitch {
+  color: #a970ff;
+}
+
+.social-icon-tiktok {
+  color: #ffffff;
+}
+
+.social-icon-discord {
+  color: #ffffff;
+}
+
+.socials-community {
+  margin-top: 3rem;
+  text-align: center;
+}
+
+.socials-community h2 {
+  margin-bottom: 1rem;
+}
+
+.discord-button {
+  border-color: #5865f2;
+  box-shadow: 0 0 30px rgba(88, 101, 242, 0.85);
+  color: #dbe1ff;
+}
+
+.discord-button:hover {
+  background: #5865f2;
+  color: #fff;
+  box-shadow: 0 0 36px rgba(88, 101, 242, 0.95);
+}
+
+.streamer-section .button.platform-live {
+  border-color: #FF1744;
+  box-shadow: 0 0 24px rgba(255, 23, 68, 0.9);
+  animation: platform-live-pulse 1.4s ease-in-out infinite;
+}
+
+.streamer-section .button.platform-live:hover {
+  background: #FF1744;
+  color: #fff;
+  box-shadow: 0 0 32px rgba(255, 23, 68, 0.95);
+}
+
+@keyframes platform-live-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 23, 68, 0.7);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 34px rgba(255, 23, 68, 1);
+    transform: scale(1.04);
+  }
 }
 
 @keyframes section-pulse {
@@ -431,6 +832,46 @@ h1 {
 .credit a:hover {
   color: var(--yellow);
   text-shadow: 0 0 15px var(--yellow);
+}
+
+.legal-footer {
+  margin-top: 2.5rem;
+  opacity: 0.85;
+}
+
+.legal-footer a {
+  color: var(--lime);
+  text-decoration: underline;
+  font-size: 0.95rem;
+  letter-spacing: 0.5px;
+}
+
+.legal-footer a:hover {
+  color: var(--yellow);
+}
+
+.business-card {
+  margin: 2rem auto 0;
+  max-width: 860px;
+  border: 3px solid var(--lime);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 0 24px rgba(57, 255, 20, 0.45);
+  text-align: left;
+}
+
+.business-card h2 {
+  margin-top: 0;
+}
+
+.business-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.business-list li {
+  margin: 0.5rem 0;
 }
 
 /* ====================== MOBILE RESPONSIVE ====================== */
@@ -493,6 +934,23 @@ h1 {
     font-size: 0.9rem;
     padding: 5px 10px;
     border: 2px solid transparent;
+  }
+
+  .discord-icon-link {
+    position: static;
+    transform: none;
+    width: 40px;
+    height: 40px;
+    order: 2;
+  }
+
+  .discord-icon-link:hover {
+    transform: scale(1.08);
+  }
+
+  .discord-icon-small {
+    width: 24px;
+    height: 24px;
   }
 
   .streamers {
@@ -560,6 +1018,31 @@ h1 {
     padding: 12px 28px;
   }
 
+  .meme-lightbox-actions {
+    margin-top: 10px;
+    width: 96%;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .meme-lightbox-action {
+    width: 100%;
+    max-width: none;
+    font-size: 0.72rem;
+    padding: 7px 9px;
+    border-width: 2px;
+  }
+
+  #meme-lightbox-download,
+  #meme-lightbox-download-zip {
+    width: 100%;
+  }
+
+  .meme-lightbox-frame {
+    width: 94vw;
+    height: 56vh;
+  }
+
   h1 {
     font-size: 2.5rem;
     margin: 0 0 0.8rem;
@@ -585,6 +1068,24 @@ h1 {
   .streamer-section {
     padding: 1.5rem;
     border-radius: 12px;
+  }
+
+  .socials-grid {
+    gap: 2.2rem;
+  }
+
+  .social-button {
+    font-size: 1.25rem;
+    padding: 14px 34px;
+  }
+
+  .streamer-section h2 {
+    gap: 8px;
+  }
+
+  .streamer-section.live h2::after {
+    font-size: 0.62rem;
+    padding: 3px 8px;
   }
 
   .streamer-section.live {
@@ -636,6 +1137,23 @@ h1 {
   nav a {
     font-size: 0.75rem;
     padding: 4px 8px;
+  }
+
+  .discord-icon-link {
+    position: static;
+    transform: none;
+    width: 34px;
+    height: 34px;
+    order: 2;
+  }
+
+  .discord-icon-link:hover {
+    transform: scale(1.06);
+  }
+
+  .discord-icon-small {
+    width: 20px;
+    height: 20px;
   }
 
   .streamers {
@@ -743,6 +1261,38 @@ h1 {
     border-radius: 10px;
   }
 
+  .socials-subtitle {
+    font-size: 1.4rem;
+    margin: 2rem 0 1.5rem;
+  }
+
+  .socials-grid {
+    gap: 1rem;
+    margin-top: 1.4rem;
+  }
+
+  .social-button {
+    font-size: 1rem;
+    padding: 12px 22px;
+    gap: 8px;
+  }
+
+  .streamer-section h2 {
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .streamer-section .button {
+    margin: 0.6rem auto;
+  }
+
+  .streamer-section.live h2::after {
+    font-size: 0.56rem;
+    padding: 2px 7px;
+    transform: rotate(-10deg);
+  }
+
   .streamer-section.live {
     box-shadow: 0 0 20px #FF1744, inset 0 0 10px rgba(255, 23, 68, 0.1);
   }
@@ -759,6 +1309,49 @@ h1 {
 
   .meme-card img {
     padding: 6px;
+  }
+
+  .meme-view-btn {
+    right: 8px;
+    bottom: 8px;
+    font-size: 0.7rem;
+    padding: 5px 8px;
+  }
+
+  .meme-lightbox-nav {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+  }
+
+  .meme-lightbox-close {
+    top: 10px;
+    right: 10px;
+    font-size: 0.75rem;
+  }
+
+  .meme-lightbox-actions {
+    margin-top: 8px;
+    width: 98%;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .meme-lightbox-action {
+    width: 100%;
+    max-width: none;
+    font-size: 0.64rem;
+    padding: 6px 7px;
+    border-width: 2px;
+  }
+
+  #meme-lightbox-download,
+  #meme-lightbox-download-zip {
+    width: 100%;
+  }
+
+  .meme-lightbox-frame {
+    width: 94vw;
+    height: 50vh;
   }
 
   .meme-card:hover {
