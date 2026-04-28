@@ -247,6 +247,10 @@ nav a:hover {
   cursor: pointer;
 }
 
+.home-page .rotator {
+  margin: 1.1rem auto 2.2rem;
+}
+
 .rotator img {
   position: absolute;
   inset: 0;
@@ -472,14 +476,14 @@ nav a:hover {
 }
 
 .random-home-cta {
-  margin: 0.5rem 0 1rem;
+  margin: 0.25rem 0 0.75rem;
 }
 
 .random-home-button {
-  font-size: 0.95rem;
-  padding: 8px 16px;
+  font-size: 1.08rem;
+  padding: 10px 22px;
   border-width: 3px;
-  box-shadow: 0 0 14px var(--lime);
+  box-shadow: 0 0 18px var(--lime);
 }
 
 .main-content {
@@ -765,6 +769,47 @@ h1 {
   text-align: center;
 }
 
+.home-socials {
+  margin: 2.5rem auto 0;
+  max-width: 1100px;
+}
+
+.home-socials h2 {
+  margin: 0 0 1.2rem;
+  font-size: 2.1rem;
+  letter-spacing: 2px;
+}
+
+.home-socials-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 1.4rem;
+  align-items: stretch;
+}
+
+.home-socials-card {
+  padding: 0.2rem 0.5rem 0.4rem;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  border-radius: 0;
+}
+
+.home-socials-card h3 {
+  margin: 0 0 0.8rem;
+  font-size: 1.5rem;
+  letter-spacing: 0.8px;
+}
+
+.home-socials-card .social-button {
+  margin: 0.32rem auto;
+  min-width: 170px;
+  font-size: 1.12rem;
+  padding: 10px 20px;
+  border-width: 3px;
+  box-shadow: 0 0 14px rgba(57, 255, 20, 0.7);
+}
+
 .social-button {
   font-size: 1.6rem;
   padding: 18px 50px;
@@ -806,6 +851,101 @@ h1 {
 
 .socials-community h2 {
   margin-bottom: 1rem;
+}
+
+.home-discord-cta {
+  margin-top: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.home-discord-cta .social-button {
+  margin: 0 auto;
+  font-size: 1.05rem;
+  padding: 9px 18px;
+}
+
+@media (min-width: 1025px) {
+  .home-socials {
+    margin-top: 1.9rem;
+    max-width: 980px;
+  }
+
+  .home-socials h2 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+    letter-spacing: 2px;
+  }
+
+  .home-socials-grid {
+    grid-template-columns: repeat(2, minmax(320px, 1fr));
+    gap: 2.2rem;
+  }
+
+  .home-socials-card {
+    padding: 0.25rem 0.4rem 0.5rem;
+  }
+
+  .home-socials-card h3 {
+    font-size: 1.45rem;
+    margin-bottom: 0.7rem;
+  }
+
+  .home-socials-card .social-button {
+    min-width: 210px;
+    font-size: 1.2rem;
+    padding: 11px 22px;
+    border-width: 3px;
+    box-shadow: 0 0 14px rgba(57, 255, 20, 0.72);
+    margin: 0.32rem auto;
+  }
+
+  /* Desktop: sized between “tiny pill” and full social row — capped width, centered */
+  .home-discord-cta,
+  .random-home-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    max-width: min(980px, 94vw);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .home-discord-cta {
+    margin-top: 0.9rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .home-discord-cta .social-button {
+    font-size: 1.05rem;
+    padding: 11px 22px;
+    width: min(100%, 540px);
+    max-width: 540px;
+    justify-content: center;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  .random-home-cta {
+    margin: 0.25rem auto 0.85rem;
+  }
+
+  .random-home-button {
+    font-size: 1.05rem;
+    padding: 11px 22px;
+    border-width: 3px;
+    box-shadow: 0 0 16px var(--lime);
+    width: min(100%, 540px);
+    max-width: 540px;
+    margin: 0;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .home-page .rotator {
+    margin-top: 0.9rem;
+  }
 }
 
 .discord-button {
@@ -910,6 +1050,43 @@ h1 {
 
 .business-list li {
   margin: 0.5rem 0;
+}
+
+.legal-page .legal-content {
+  max-width: 980px;
+  margin: 0 auto;
+  padding-top: 3rem;
+}
+
+.legal-page .legal-content h1 {
+  margin-bottom: 1.5rem;
+}
+
+.legal-page .business-card {
+  margin-top: 1rem;
+  padding: 1.1rem 1.25rem;
+  border-width: 2px;
+  border-radius: 10px;
+  box-shadow: 0 0 14px rgba(57, 255, 20, 0.32);
+}
+
+.legal-page .business-card h2 {
+  margin: 0 0 0.55rem;
+  font-size: 1.2rem;
+  letter-spacing: 0.4px;
+}
+
+.legal-page .business-list {
+  margin: 0;
+}
+
+.legal-page .business-list li {
+  margin: 0.32rem 0;
+  line-height: 1.45;
+}
+
+.legal-page .legal-footer {
+  margin-top: 1.5rem;
 }
 
 @media (max-width: 1700px) {
@@ -1049,6 +1226,10 @@ h1 {
     height: 400px;
     margin: 2rem auto;
   }
+
+  .home-page .rotator {
+    margin: 0.9rem auto 1.6rem;
+  }
 }
 
 @media (max-width: 768px) {
@@ -1138,6 +1319,24 @@ h1 {
     padding: 2rem 4%;
   }
 
+  .legal-page .legal-content {
+    padding-top: 1.8rem;
+  }
+
+  .legal-page .business-card {
+    margin-top: 0.8rem;
+    padding: 0.95rem 1rem;
+  }
+
+  .legal-page .business-card h2 {
+    font-size: 1.05rem;
+  }
+
+  .legal-page .business-list li {
+    margin: 0.26rem 0;
+    line-height: 1.35;
+  }
+
   .vault-sticky-header {
     padding: 1.2rem 4%;
     border-bottom: 2px solid var(--lime);
@@ -1196,6 +1395,11 @@ h1 {
     height: 300px;
     margin: 1.5rem auto;
     border: 10px solid var(--lime);
+    box-shadow: 0 0 32px rgba(57, 255, 20, 0.55);
+  }
+
+  .home-page .rotator {
+    margin: 0.75rem auto 1.25rem;
   }
 
   .button {
@@ -1218,9 +1422,44 @@ h1 {
     gap: 2.2rem;
   }
 
+  .home-socials h2 {
+    font-size: 1.6rem;
+  }
+
+  .home-socials-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .home-socials-card .social-button {
+    min-width: 150px;
+    font-size: 1rem;
+    padding: 9px 16px;
+    margin: 0.22rem auto;
+  }
+
   .social-button {
     font-size: 1.25rem;
     padding: 14px 34px;
+  }
+
+  .home-discord-cta {
+    margin-top: 0.6rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .home-discord-cta .social-button {
+    font-size: 0.95rem;
+    padding: 8px 15px;
+  }
+
+  .random-home-cta {
+    margin: 0.2rem 0 0.65rem;
+  }
+
+  .random-home-button {
+    font-size: 1rem;
+    padding: 9px 18px;
   }
 
   .streamer-section h2 {
@@ -1418,6 +1657,11 @@ h1 {
     height: 220px;
     margin: 1rem auto;
     border: 8px solid var(--lime);
+    box-shadow: 0 0 20px rgba(57, 255, 20, 0.42);
+  }
+
+  .home-page .rotator {
+    margin: 0.6rem auto 1rem;
   }
 
   .button {
@@ -1430,6 +1674,19 @@ h1 {
     max-width: 300px;
     margin-left: auto;
     margin-right: auto;
+  }
+
+  .random-home-cta {
+    margin: 0.25rem 0 0.45rem;
+  }
+
+  .random-home-button {
+    font-size: 0.86rem;
+    padding: 6px 12px;
+    width: auto;
+    max-width: none;
+    border-width: 2px;
+    box-shadow: 0 0 8px rgba(57, 255, 20, 0.55);
   }
 
   .button:hover {
@@ -1446,6 +1703,40 @@ h1 {
     margin: 2rem 0 1.5rem;
   }
 
+  .home-socials {
+    margin-top: 1.6rem;
+  }
+
+  .home-socials h2 {
+    font-size: 1.15rem;
+    letter-spacing: 1px;
+    margin-bottom: 0.8rem;
+  }
+
+  .home-socials-card {
+    padding: 0.1rem 0.3rem 0.2rem;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+    border-radius: 0;
+  }
+
+  .home-socials-card h3 {
+    font-size: 0.88rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .home-socials-card .social-button {
+    min-width: 0;
+    width: 100%;
+    font-size: 0.74rem;
+    padding: 6px 7px;
+    margin: 0.15rem auto;
+    border-width: 2px;
+    box-shadow: 0 0 9px rgba(57, 255, 20, 0.5);
+    gap: 5px;
+  }
+
   .socials-grid {
     gap: 1rem;
     margin-top: 1.4rem;
@@ -1457,13 +1748,26 @@ h1 {
     gap: 8px;
   }
 
+  .home-discord-cta {
+    margin-top: 0.45rem;
+    margin-bottom: 0.15rem;
+  }
+
+  .home-discord-cta .social-button {
+    font-size: 0.82rem;
+    padding: 6px 11px;
+    border-width: 2px;
+    box-shadow: 0 0 8px rgba(88, 101, 242, 0.6);
+  }
+
   .streamer-section h2 {
     gap: 6px;
     flex-wrap: wrap;
     justify-content: center;
   }
 
-  .streamer-section .button {
+  /* Don't override tighter home-page social button spacing */
+  .streamer-section:not(.home-socials-card) .button {
     margin: 0.6rem auto;
   }
 
