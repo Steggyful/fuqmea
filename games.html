@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#39ff14">
+  <meta name="description" content="FuqMeA mini-games — coin flip, RPS, slots, and blackjack for fun FUQ coins">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
+  <title>fuqmea.com • GAMES</title>
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.14">
+</head>
+<body class="games-page">
+  <header>
+    <a href="index.html" class="logo">FUQMEA.COM</a>
+    <nav>
+      <ul>
+        <li><a href="index.html">HOME</a></li>
+        <li><a href="fifi.html">FiFi ZONE</a></li>
+        <li><a href="memes.html">MEME VAULT</a></li>
+        <li><a href="socials.html">SOCIALS</a></li>
+        <li><a href="giveaways.html">GIVEAWAYS</a></li>
+        <li><a href="games.html" aria-current="page">GAMES</a></li>
+      </ul>
+    </nav>
+
+    <a href="https://discord.com/invite/ZsFuQMEA" target="_blank" rel="noopener noreferrer" class="discord-icon-link" title="Join Discord">
+      <svg class="discord-icon-small" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path fill="currentColor" d="M20.2 4.6A16.6 16.6 0 0 0 16 3.3l-.2.5-.3.9c-2.3-.4-4.6-.4-6.9 0l-.3-.9-.2-.5A16.6 16.6 0 0 0 3.8 4.6C1.1 8.6.4 12.4.7 16.1a16.9 16.9 0 0 0 5.1 2.6l.4-.7.7-1.2a10.8 10.8 0 0 1-1.7-.8l.4-.3a12 12 0 0 0 10.8 0l.4.3c-.6.3-1.1.6-1.7.8l.7 1.2.4.7a16.9 16.9 0 0 0 5.1-2.6c.3-4.3-.6-8.1-3.3-11.5ZM9.5 13.8c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm5 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z"/>
+      </svg>
+    </a>
+
+    <div class="streamers">
+      <div class="streamer-btn" data-streamer="steggyful1">
+        <strong>Steggyful1</strong>
+        <a href="https://www.tiktok.com/@steggyful1" target="_blank" rel="noopener noreferrer">TikTok</a>
+        <a href="https://www.twitch.tv/steggyful1" target="_blank" rel="noopener noreferrer">Twitch</a>
+        <span class="live-dot" id="live-steggyful1"></span>
+        <span class="live-text" id="live-text-steggyful1">OFFLINE</span>
+      </div>
+      <div class="streamer-btn" data-streamer="ssgvivid">
+        <strong>SSGVivid</strong>
+        <a href="https://www.tiktok.com/@SSGVivid" target="_blank" rel="noopener noreferrer">TikTok</a>
+        <a href="https://www.twitch.tv/ssgvivid" target="_blank" rel="noopener noreferrer">Twitch</a>
+        <span class="live-dot" id="live-ssgvivid"></span>
+        <span class="live-text" id="live-text-ssgvivid">OFFLINE</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-content games-main">
+    <div class="games-hero">
+      <p class="games-hero-eyebrow" aria-hidden="true">/// FUQ ARCADE ///</p>
+      <h1 class="games-title">MINI GAMES</h1>
+      <p class="games-lead">Pick a machine with the tabs below. <strong>FUQ coins</strong> are just for fun and stay on this device. Not real money.</p>
+    </div>
+
+    <div class="games-layout">
+      <aside class="games-rail" aria-label="Recent runs log">
+        <details class="games-history-panel" id="games-history-details" aria-labelledby="games-history-title">
+          <summary class="games-history-summary">
+            <h2 id="games-history-title" class="games-history-heading games-history-summary-heading">RECENT RUNS</h2>
+            <span class="games-history-expand-hint">Tap to expand</span>
+          </summary>
+          <div class="games-history-details-body">
+            <div class="games-history-details-actions">
+              <button type="button" class="games-history-clear" id="games-history-clear">CLEAR LOG</button>
+            </div>
+            <p class="games-history-hint">Last 35 plays on this device.</p>
+            <div id="games-history-list" class="games-history-list"></div>
+          </div>
+        </details>
+      </aside>
+
+      <div class="games-stage-column">
+        <div class="games-stage-balance" aria-live="polite">
+          <div class="games-stage-balance-main">
+            <span class="games-stage-balance-label">FUQ Balance</span>
+            <span class="games-stage-balance-value js-games-balance" id="games-balance">100</span>
+          </div>
+          <button type="button" class="games-stage-reset" id="games-reset-btn" title="Reset your FUQ wallet balance on this device (starts again at 100 coins)" aria-label="Reset wallet balance to 100">Reset balance</button>
+        </div>
+
+        <div class="games-daily-stage-wrap" aria-label="Daily bonus">
+          <p class="games-daily-stage-hint"><strong>+25</strong> FUQ · daily</p>
+          <button type="button" class="button games-wallet-btn js-games-daily games-daily-stage-btn" id="games-daily-btn-stage">CLAIM +25 DAILY</button>
+        </div>
+
+        <div class="games-tablist" role="tablist" aria-label="Arcade machines">
+          <button type="button" class="games-tab games-tab--bj" role="tab" id="games-tab-bj" data-tab="bj" aria-controls="games-panel-bj" aria-selected="true" tabindex="0">BLACKJACK</button>
+          <button type="button" class="games-tab games-tab--coin" role="tab" id="games-tab-coin" data-tab="coin" aria-controls="games-panel-coin" aria-selected="false" tabindex="-1">COIN FLIP</button>
+          <button type="button" class="games-tab games-tab--rps" role="tab" id="games-tab-rps" data-tab="rps" aria-controls="games-panel-rps" aria-selected="false" tabindex="-1">RPS</button>
+          <button type="button" class="games-tab games-tab--slots" role="tab" id="games-tab-slots" data-tab="slots" aria-controls="games-panel-slots" aria-selected="false" tabindex="-1">SLOTS</button>
+        </div>
+
+        <div class="games-tab-panel" id="games-panel-bj" role="tabpanel" aria-labelledby="games-tab-bj" data-tab-panel="bj">
+          <section class="games-card games-card--bj" aria-labelledby="bj-title">
+            <h2 id="bj-title">FUQ BLACKJACK</h2>
+            <p class="games-rules">Fresh deck every hand. Dealer hits <strong>soft 17</strong>. Blackjack pays <strong>3:2</strong>. You can <strong>split</strong> one matching pair (same rank) once. Split aces get <strong>one card each</strong> and auto-stand. Double is allowed on any two-card hand except split aces.</p>
+            <div class="games-fieldset">
+              <span class="games-label">Bet</span>
+              <div class="games-bet-row games-bet-row--bj">
+                <label class="games-bet-active"><input type="radio" name="bj-bet" value="5" id="bj-bet-5" checked> 5</label>
+                <label><input type="radio" name="bj-bet" value="10" id="bj-bet-10"> 10</label>
+                <label><input type="radio" name="bj-bet" value="25" id="bj-bet-25"> 25</label>
+              </div>
+            </div>
+            <div class="games-bj-table" aria-label="Blackjack table">
+              <div class="games-bj-hand games-bj-hand--dealer">
+                <div class="games-bj-hand-head">
+                  <span class="games-bj-hand-title">Dealer</span>
+                  <span class="games-bj-hand-score" id="bj-dealer-score" aria-live="polite">—</span>
+                </div>
+                <div class="games-bj-cards" id="bj-dealer-cards" aria-live="polite"></div>
+              </div>
+              <div class="games-bj-hand games-bj-hand--player">
+                <div class="games-bj-hand-head">
+                  <span class="games-bj-hand-title">You</span>
+                </div>
+                <div id="bj-player-hands" class="games-bj-player-hands" aria-live="polite"></div>
+              </div>
+            </div>
+            <div class="games-bj-actions">
+              <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--deal" id="bj-deal-btn">DEAL</button>
+              <div class="games-bj-play-row games-bj-play-row--concealed" id="bj-play-buttons" hidden>
+                <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--hit" id="bj-hit-btn">HIT</button>
+                <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--stand" id="bj-stand-btn">STAND</button>
+                <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--double" id="bj-double-btn" title="Double this hand’s bet, take exactly one more card">DOUBLE</button>
+                <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--split" id="bj-split-btn" title="Split pair into two hands (costs another bet)">SPLIT</button>
+              </div>
+            </div>
+            <div id="bj-outcome" class="games-outcome games-outcome--pending" aria-live="polite">
+              <span class="games-outcome-badge" id="bj-outcome-badge">···</span>
+              <span class="games-outcome-sub" id="bj-outcome-sub">Pick a bet and deal</span>
+            </div>
+          </section>
+        </div>
+
+        <div class="games-tab-panel" id="games-panel-coin" role="tabpanel" aria-labelledby="games-tab-coin" data-tab-panel="coin" hidden>
+          <section class="games-card games-card--coin" aria-labelledby="coin-title">
+            <h2 id="coin-title">COIN FLIP</h2>
+            <div class="games-coin-streak-bar" aria-live="polite">
+              <div class="games-coin-streak-row">
+                <span class="games-coin-streak-label">Streak</span>
+                <span class="games-coin-streak-num" id="games-coin-streak">0</span>
+                <span class="games-coin-streak-suffix">wins in a row</span>
+              </div>
+              <p class="games-coin-streak-next">Your next win adds <strong id="games-streak-next-bonus">0</strong> bonus FUQ <span class="games-coin-streak-cap">(max +5)</span> on top of the normal 2× payout.</p>
+            </div>
+            <p class="games-rules">Call heads or tails, choose a bet, then flip. A win pays <strong>2× your bet</strong>, plus any streak bonus shown above.</p>
+            <div class="games-fieldset">
+              <span class="games-label">Call it</span>
+              <div class="games-choice-row">
+                <label><input type="radio" name="coin-side" value="heads" checked> HEADS</label>
+                <label><input type="radio" name="coin-side" value="tails"> TAILS</label>
+              </div>
+            </div>
+            <div class="games-fieldset">
+              <span class="games-label">Bet</span>
+              <div class="games-bet-row">
+                <label class="games-bet-active"><input type="radio" name="coin-bet" value="5" id="coin-bet-5" checked> 5</label>
+                <label><input type="radio" name="coin-bet" value="10" id="coin-bet-10"> 10</label>
+                <label><input type="radio" name="coin-bet" value="25" id="coin-bet-25"> 25</label>
+              </div>
+            </div>
+            <div class="games-display" id="coin-display" aria-hidden="true">—</div>
+            <button type="button" class="button games-action-btn" id="coin-flip-btn">FLIP</button>
+            <div id="coin-outcome" class="games-outcome games-outcome--pending" aria-live="polite">
+              <span class="games-outcome-badge" id="coin-outcome-badge">···</span>
+              <span class="games-outcome-sub" id="coin-outcome-sub">Flip for a result</span>
+            </div>
+          </section>
+        </div>
+
+        <div class="games-tab-panel" id="games-panel-rps" role="tabpanel" aria-labelledby="games-tab-rps" data-tab-panel="rps" hidden>
+          <section class="games-card games-card--rps" aria-labelledby="rps-title">
+            <h2 id="rps-title">ROCK PAPER SCISSORS</h2>
+            <p class="games-rules">Random house choice each round. Win <strong>doubles</strong> your bet, tie refunds it, loss costs the bet.</p>
+            <div class="games-fieldset">
+              <span class="games-label">You play</span>
+              <div class="games-choice-row games-rps-row">
+                <label><input type="radio" name="rps-choice" value="rock" checked> ✊</label>
+                <label><input type="radio" name="rps-choice" value="paper"> ✋</label>
+                <label><input type="radio" name="rps-choice" value="scissors"> ✌</label>
+              </div>
+            </div>
+            <div class="games-fieldset">
+              <span class="games-label">Bet</span>
+              <div class="games-bet-row">
+                <label class="games-bet-active"><input type="radio" name="rps-bet" value="5" id="rps-bet-5" checked> 5</label>
+                <label><input type="radio" name="rps-bet" value="10" id="rps-bet-10"> 10</label>
+                <label><input type="radio" name="rps-bet" value="25" id="rps-bet-25"> 25</label>
+              </div>
+            </div>
+            <p class="games-house" id="rps-house" aria-live="polite">House: —</p>
+            <button type="button" class="button games-action-btn" id="rps-play-btn">PLAY ROUND</button>
+            <div id="rps-outcome" class="games-outcome games-outcome--pending" aria-live="polite">
+              <span class="games-outcome-badge" id="rps-outcome-badge">···</span>
+              <span class="games-outcome-sub" id="rps-outcome-sub">Play a round to see win / lose / tie</span>
+            </div>
+          </section>
+        </div>
+
+        <div class="games-tab-panel" id="games-panel-slots" role="tabpanel" aria-labelledby="games-tab-slots" data-tab-panel="slots" hidden>
+          <section class="games-card games-card--slots" aria-labelledby="slots-title">
+            <h2 id="slots-title">FUQ SLOTS</h2>
+            <p class="games-rules">Three reels. A <strong>triple</strong> match pays <strong>8× your bet</strong>; matching the first two reels pays <strong>2× your bet</strong>.</p>
+            <div class="games-fieldset">
+              <span class="games-label">Bet</span>
+              <div class="games-bet-row">
+                <label class="games-bet-active"><input type="radio" name="slots-bet" value="5" id="slots-bet-5" checked> 5</label>
+                <label><input type="radio" name="slots-bet" value="10" id="slots-bet-10"> 10</label>
+                <label><input type="radio" name="slots-bet" value="25" id="slots-bet-25"> 25</label>
+              </div>
+            </div>
+            <div class="games-slots-machine" aria-label="Slot reels">
+              <div class="games-slot-reel" id="slot-reel-0">🎰</div>
+              <div class="games-slot-reel" id="slot-reel-1">🎰</div>
+              <div class="games-slot-reel" id="slot-reel-2">🎰</div>
+            </div>
+            <button type="button" class="button games-action-btn" id="slots-spin-btn">SPIN</button>
+            <div id="slots-outcome" class="games-outcome games-outcome--pending" aria-live="polite">
+              <span class="games-outcome-badge" id="slots-outcome-badge">···</span>
+              <span class="games-outcome-sub" id="slots-outcome-sub">Spin for a result</span>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <p class="credit">created by
+      <a href="https://www.tiktok.com/@steggyful1" target="_blank" rel="noopener noreferrer">@steggyful1</a>
+    </p>
+    <p class="legal-footer"><a href="legal.html">Legal</a></p>
+  </div>
+
+  <script src="assets/js/hub.js?v=2.1.5" defer></script>
+  <script src="assets/js/init.js?v=2.1.4" defer></script>
+  <script src="assets/js/games.js?v=2.2.14" defer></script>
+</body>
+</html>

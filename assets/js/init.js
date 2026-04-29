@@ -1,8 +1,8 @@
 // ====================== INITIALIZATION SCRIPT ======================
 
-window.addEventListener('load', () => {
-  // Performance optimizations first
-  preloadCriticalImages();
+window.addEventListener('load', async () => {
+  const memes = await loadGalleryList();
+  preloadCriticalImages(memes);
   setupMobileOptimizations();
 
   // Use requestIdleCallback for non-critical initialization
