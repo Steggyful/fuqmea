@@ -7,7 +7,7 @@
   <meta name="description" content="FuqMeA mini-games — coin flip, RPS, slots, and blackjack for fun FUQ coins">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com • GAMES</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.14">
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.20">
 </head>
 <body class="games-page">
   <header>
@@ -95,6 +95,11 @@
         <div class="games-tab-panel" id="games-panel-bj" role="tabpanel" aria-labelledby="games-tab-bj" data-tab-panel="bj">
           <section class="games-card games-card--bj" aria-labelledby="bj-title">
             <h2 id="bj-title">FUQ BLACKJACK</h2>
+            <div class="games-win-streak-bar games-win-streak-bar--bj" aria-label="Blackjack win streak">
+              <span class="games-win-streak-pair"><span class="games-win-streak-label">Win streak</span> <strong id="bj-win-streak-current" class="games-win-streak-val">0</strong></span>
+              <span class="games-win-streak-dot" aria-hidden="true">·</span>
+              <span class="games-win-streak-pair"><span class="games-win-streak-label">Best</span> <strong id="bj-win-streak-best" class="games-win-streak-val">0</strong></span>
+            </div>
             <p class="games-rules">Fresh deck every hand. Dealer hits <strong>soft 17</strong>. Blackjack pays <strong>3:2</strong>. You can <strong>split</strong> one matching pair (same rank) once. Split aces get <strong>one card each</strong> and auto-stand. Double is allowed on any two-card hand except split aces.</p>
             <div class="games-fieldset">
               <span class="games-label">Bet</span>
@@ -144,6 +149,10 @@
                 <span class="games-coin-streak-num" id="games-coin-streak">0</span>
                 <span class="games-coin-streak-suffix">wins in a row</span>
               </div>
+              <div class="games-coin-streak-row games-coin-streak-row--best">
+                <span class="games-coin-streak-label">Best win streak</span>
+                <span class="games-coin-streak-num games-coin-streak-num--best" id="games-coin-streak-best">0</span>
+              </div>
               <p class="games-coin-streak-next">Your next win adds <strong id="games-streak-next-bonus">0</strong> bonus FUQ <span class="games-coin-streak-cap">(max +5)</span> on top of the normal 2× payout.</p>
             </div>
             <p class="games-rules">Call heads or tails, choose a bet, then flip. A win pays <strong>2× your bet</strong>, plus any streak bonus shown above.</p>
@@ -174,6 +183,11 @@
         <div class="games-tab-panel" id="games-panel-rps" role="tabpanel" aria-labelledby="games-tab-rps" data-tab-panel="rps" hidden>
           <section class="games-card games-card--rps" aria-labelledby="rps-title">
             <h2 id="rps-title">ROCK PAPER SCISSORS</h2>
+            <div class="games-win-streak-bar games-win-streak-bar--rps" aria-label="RPS win streak">
+              <span class="games-win-streak-pair"><span class="games-win-streak-label">Win streak</span> <strong id="rps-win-streak-current" class="games-win-streak-val">0</strong></span>
+              <span class="games-win-streak-dot" aria-hidden="true">·</span>
+              <span class="games-win-streak-pair"><span class="games-win-streak-label">Best</span> <strong id="rps-win-streak-best" class="games-win-streak-val">0</strong></span>
+            </div>
             <p class="games-rules">Random house choice each round. Win <strong>doubles</strong> your bet, tie refunds it, loss costs the bet.</p>
             <div class="games-fieldset">
               <span class="games-label">You play</span>
@@ -203,6 +217,11 @@
         <div class="games-tab-panel" id="games-panel-slots" role="tabpanel" aria-labelledby="games-tab-slots" data-tab-panel="slots" hidden>
           <section class="games-card games-card--slots" aria-labelledby="slots-title">
             <h2 id="slots-title">FUQ SLOTS</h2>
+            <div class="games-win-streak-bar games-win-streak-bar--slots" aria-label="Slots win streak">
+              <span class="games-win-streak-pair"><span class="games-win-streak-label">Win streak</span> <strong id="slots-win-streak-current" class="games-win-streak-val">0</strong></span>
+              <span class="games-win-streak-dot" aria-hidden="true">·</span>
+              <span class="games-win-streak-pair"><span class="games-win-streak-label">Best</span> <strong id="slots-win-streak-best" class="games-win-streak-val">0</strong></span>
+            </div>
             <p class="games-rules">Three reels. A <strong>triple</strong> match pays <strong>8× your bet</strong>; matching the first two reels pays <strong>2× your bet</strong>.</p>
             <div class="games-fieldset">
               <span class="games-label">Bet</span>
@@ -235,6 +254,6 @@
 
   <script src="assets/js/hub.js?v=2.1.5" defer></script>
   <script src="assets/js/init.js?v=2.1.4" defer></script>
-  <script src="assets/js/games.js?v=2.2.14" defer></script>
+  <script src="assets/js/games.js?v=2.2.24" defer></script>
 </body>
 </html>

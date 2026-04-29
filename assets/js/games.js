@@ -5,6 +5,7 @@
 
   const STORAGE_KEY = 'fuqmea_fun_wallet_v1';
   const HISTORY_KEY = 'fuqmea_fun_history_v1';
+  const WIN_STREAK_KEY = 'fuqmea_game_win_streak_v1';
   const DEFAULT_TOKENS = 100;
   const DAILY_BONUS = 25;
   const MAX_COIN_STREAK_BONUS = 5;
@@ -24,6 +25,12 @@
 
   const BJ_RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
   const BJ_SUITS = ['\u2660', '\u2665', '\u2666', '\u2663'];
+  const BJ_DEALER_DRAW_DELAY_MS = 1050;
+  /** Pause with hole card still face-down before flip + dealer hits (after stand / all hands done). */
+  const BJ_DEALER_HOLE_REVEAL_MS = 720;
+  const BJ_OPENING_DEAL_DELAY_MS = 580;
+  const BJ_OPENING_SETTLE_MS = 520;
+  const BJ_PLAYER_HIT_DELAY_MS = 420;
 
   const bjState = {
     deck: [],
@@ -76,6 +83,30 @@
     return t;
   }
 
+  function bjHandLowValue(cards) {
+    let low = 0;
+    for (let i = 0; i < cards.length; i++) {
+      const c = cards[i];
+      if (c.r === 'A') low += 1;
+      else if ('TJQK'.includes(c.r)) low += 10;
+      else low += Number(c.r);
+    }
+    return low;
+  }
+
+  /** Soft total as hi/low only while that hand is still in play; after stand (or other hands) show locked best total. */
+  function bjPlayerHandScoreText(hand, handIndex) {
+    if (!hand.length) return '—';
+    const hi = bjHandValue(hand);
+    const low = bjHandLowValue(hand);
+    if (hi === low) return String(hi);
+    const ph = bjState.phase;
+    const isActive = handIndex === bjState.activeHand;
+    const showDual =
+      ph === 'dealing' || ((ph === 'player' || ph === 'hit') && isActive);
+    return showDual ? `${hi}/${low}` : String(hi);
+  }
+
   function bjIsSoftHand(cards) {
     if (!cards.some((c) => c.r === 'A')) return false;
     let low = 0;
@@ -110,6 +141,62 @@
       c = bjState.deck.pop();
     }
     return c;
+  }
+
+  function bjWait(ms) {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
+  }
+
+  function bjPrefersReducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function bjAnimateDealerCard(index) {
+    if (bjPrefersReducedMotion()) return;
+    const wrap = document.getElementById('bj-dealer-cards');
+    if (!wrap) return;
+    const cards = wrap.querySelectorAll('.games-bj-card');
+    if (!cards.length) return;
+    const ix = Number.isInteger(index) ? index : cards.length - 1;
+    const card = cards[ix];
+    if (!card) return;
+    card.classList.remove('games-bj-card--dealer-draw');
+    void card.offsetWidth;
+    card.classList.add('games-bj-card--dealer-draw');
+  }
+
+  function bjAnimateDealerLastCard() {
+    if (bjPrefersReducedMotion()) return;
+    const wrap = document.getElementById('bj-dealer-cards');
+    if (!wrap) return;
+    const cards = wrap.querySelectorAll('.games-bj-card');
+    if (!cards.length) return;
+    const card = cards[cards.length - 1];
+    card.classList.remove('games-bj-card--deal-in', 'games-bj-card--hit-in', 'games-bj-card--dealer-draw');
+    void card.offsetWidth;
+    card.classList.add('games-bj-card--deal-in');
+  }
+
+  function bjAnimatePlayerHandLastCard(handIndex, style) {
+    if (bjPrefersReducedMotion()) return;
+    const zone = document.getElementById('bj-player-hands');
+    if (!zone) return;
+    const rows = zone.querySelectorAll('.games-bj-split-hand');
+    const row = rows[handIndex];
+    if (!row) return;
+    const tray = row.querySelector('.games-bj-cards');
+    if (!tray) return;
+    const list = tray.querySelectorAll('.games-bj-card');
+    if (!list.length) return;
+    const card = list[list.length - 1];
+    const hit = style === 'hit';
+    const anim = hit ? 'games-bj-card--hit-in' : 'games-bj-card--deal-in';
+    const other = hit ? 'games-bj-card--deal-in' : 'games-bj-card--hit-in';
+    card.classList.remove('games-bj-card--dealer-draw', other, anim);
+    void card.offsetWidth;
+    card.classList.add(anim);
   }
 
   function bjCardEl(card, hidden) {
@@ -160,7 +247,7 @@
       lab.textContent = multi ? `Hand ${i + 1}` : 'Your cards';
       const sc = document.createElement('span');
       sc.className = 'games-bj-hand-score';
-      sc.textContent = hand.length ? String(bjHandValue(hand)) : '—';
+      sc.textContent = hand.length ? bjPlayerHandScoreText(hand, i) : '—';
       head.appendChild(lab);
       head.appendChild(sc);
       const cards = document.createElement('div');
@@ -271,9 +358,12 @@
     }
     const spl = document.getElementById('bj-split-btn');
     if (spl) spl.disabled = true;
+    const dbl = document.getElementById('bj-double-btn');
+    if (dbl) dbl.disabled = true;
   }
 
   function bjFinishRound(detail, mood, sub) {
+    applyArcadeWinStreak('bj', mood);
     const w = loadWallet();
     saveWallet(w);
     renderWallet(w);
@@ -328,14 +418,19 @@
     bjFinishRound(parts.join(' · '), mood, sub);
   }
 
-  function bjStartDealerPhase() {
+  async function bjStartDealerPhase() {
     bjState.phase = 'dealer';
-    bjState.holeHidden = false;
-    bjRenderHands();
     bjUiDealerTurn();
 
     const allBust = bjState.playerHands.every((h) => bjHandValue(h) > 21);
     if (allBust) {
+      const revealMs = bjPrefersReducedMotion() ? 0 : BJ_DEALER_HOLE_REVEAL_MS;
+      if (revealMs > 0) {
+        await bjWait(revealMs);
+      }
+      bjState.holeHidden = false;
+      bjRenderHands();
+      bjAnimateDealerCard(1);
       bjFinishRound(
         bjState.playerHands.map((h, i) => `H${i + 1} bust`).join(' · ') + ' · dealer shows',
         'lose',
@@ -344,10 +439,30 @@
       return;
     }
 
+    const revealMs = bjPrefersReducedMotion() ? 0 : BJ_DEALER_HOLE_REVEAL_MS;
+    if (revealMs > 0) {
+      await bjWait(revealMs);
+    }
+    bjState.holeHidden = false;
+    bjRenderHands();
+    bjAnimateDealerCard(1);
+
+    const drawDelay = bjPrefersReducedMotion() ? 0 : BJ_DEALER_DRAW_DELAY_MS;
+    if (drawDelay > 0) {
+      await bjWait(drawDelay);
+    }
+
     while (bjDealerShouldHit(bjState.dealer)) {
       bjState.dealer.push(bjDraw());
+      bjRenderHands();
+      bjAnimateDealerCard();
+      setGameOutcome('bj', 'pending', 'Dealer draws...');
+      if (drawDelay > 0) {
+        await bjWait(drawDelay);
+      }
     }
     bjRenderHands();
+    setGameOutcome('bj', 'pending', 'Dealer stands...');
     bjSettleRoundVsDealer();
   }
 
@@ -358,6 +473,7 @@
       if (h.length === 1) {
         h.push(bjDraw());
         bjRenderHands();
+        bjAnimatePlayerHandLastCard(bjState.activeHand, 'hit');
         const v = bjHandValue(h);
         if (v > 21 || v === 21) {
           bjFinishCurrentHandAndAdvance();
@@ -378,7 +494,7 @@
     bjStartDealerPhase();
   }
 
-  function bjDeal() {
+  async function bjDeal() {
     if (bjState.phase !== 'idle' && bjState.phase !== 'done') return;
 
     const bet = getBetAmount('bj-bet');
@@ -397,12 +513,52 @@
     bjState.splitAces = false;
     bjState.activeHand = 0;
     bjState.deck = bjShuffle(bjNewDeck());
-    bjState.playerHands = [[bjDraw(), bjDraw()]];
+    bjState.playerHands = [[]];
     bjState.handStakes = [bet];
     bjState.handDoubled = [false];
-    bjState.dealer = [bjDraw(), bjDraw()];
-    bjState.phase = 'player';
+    bjState.dealer = [];
+    bjState.phase = 'dealing';
     bjState.holeHidden = true;
+    bjRenderHands();
+    bjUiDealerTurn();
+    setGameOutcome('bj', 'pending', 'Dealing');
+    const openingDelay = bjPrefersReducedMotion() ? 0 : BJ_OPENING_DEAL_DELAY_MS;
+    const settleMs = bjPrefersReducedMotion() ? 0 : BJ_OPENING_SETTLE_MS;
+    const dealSteps = [
+      () => {
+        bjState.playerHands[0].push(bjDraw());
+        bjRenderHands();
+        bjAnimatePlayerHandLastCard(0, 'deal');
+      },
+      () => {
+        bjState.dealer.push(bjDraw());
+        bjRenderHands();
+        bjAnimateDealerLastCard();
+      },
+      () => {
+        bjState.playerHands[0].push(bjDraw());
+        bjRenderHands();
+        bjAnimatePlayerHandLastCard(0, 'deal');
+      },
+      () => {
+        bjState.dealer.push(bjDraw());
+        bjRenderHands();
+        bjAnimateDealerLastCard();
+      }
+    ];
+
+    for (let i = 0; i < dealSteps.length; i++) {
+      dealSteps[i]();
+      if (openingDelay > 0) {
+        await bjWait(openingDelay);
+      }
+    }
+
+    if (settleMs > 0) {
+      await bjWait(settleMs);
+    }
+
+    bjState.phase = 'player';
 
     const h0 = bjState.playerHands[0];
     const pBJ = bjState.playerHands.length === 1 && bjIsNaturalBj(h0);
@@ -436,16 +592,32 @@
     setGameOutcome('bj', 'pending', 'Hit, stand, double, or split a pair.');
   }
 
-  function bjHit() {
+  async function bjHit() {
     if (bjState.phase !== 'player') return;
-    const h = bjState.playerHands[bjState.activeHand];
+    const ah = bjState.activeHand;
+    const h = bjState.playerHands[ah];
+    const hitDelay = bjPrefersReducedMotion() ? 0 : BJ_PLAYER_HIT_DELAY_MS;
+    bjState.phase = 'hit';
     h.push(bjDraw());
     bjRenderHands();
+    bjAnimatePlayerHandLastCard(ah, 'hit');
+    setGameOutcome('bj', 'pending', 'You draw...');
+    bjUiPlayerTurn();
+
+    if (hitDelay > 0) {
+      await bjWait(hitDelay);
+    }
 
     if (bjHandValue(h) > 21) {
       bjFinishCurrentHandAndAdvance();
     } else {
+      bjState.phase = 'player';
       bjUiPlayerTurn();
+      setGameOutcome(
+        'bj',
+        'pending',
+        bjState.playerHands.length > 1 ? `Hand ${ah + 1} — hit, stand, or double.` : 'Hit, stand, or double?'
+      );
     }
   }
 
@@ -476,6 +648,7 @@
 
     h.push(bjDraw());
     bjRenderHands();
+    bjAnimatePlayerHandLastCard(ah, 'hit');
 
     if (bjHandValue(h) > 21) {
       bjFinishCurrentHandAndAdvance();
@@ -512,12 +685,15 @@
     if (bjState.splitAces) {
       bjState.playerHands[1].push(bjDraw());
       bjRenderHands();
+      bjAnimatePlayerHandLastCard(0, 'hit');
+      bjAnimatePlayerHandLastCard(1, 'hit');
       setGameOutcome('bj', 'pending', 'Split aces — one card each. Dealer plays.');
       bjStartDealerPhase();
       return;
     }
 
     bjRenderHands();
+    bjAnimatePlayerHandLastCard(0, 'hit');
     const v0 = bjHandValue(bjState.playerHands[0]);
     if (v0 > 21 || v0 === 21) {
       bjFinishCurrentHandAndAdvance();
@@ -566,6 +742,86 @@
     w.tokens = Math.max(0, Math.floor(w.tokens));
     w.coinStreak = Math.max(0, Math.floor(w.coinStreak));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
+  }
+
+  function defaultWinStreaks() {
+    return {
+      coin: { best: 0 },
+      rps: { current: 0, best: 0 },
+      slots: { current: 0, best: 0 },
+      bj: { current: 0, best: 0 }
+    };
+  }
+
+  function loadWinStreaks() {
+    try {
+      const raw = localStorage.getItem(WIN_STREAK_KEY);
+      const d = defaultWinStreaks();
+      if (!raw) return d;
+      const o = JSON.parse(raw);
+      const out = defaultWinStreaks();
+      out.coin.best = Math.max(0, Math.floor(Number(o.coin?.best)) || 0);
+      ['rps', 'slots', 'bj'].forEach((slug) => {
+        const row = o[slug] || {};
+        out[slug].current = Math.max(0, Math.floor(Number(row.current)) || 0);
+        out[slug].best = Math.max(0, Math.floor(Number(row.best)) || 0);
+      });
+      return out;
+    } catch {
+      return defaultWinStreaks();
+    }
+  }
+
+  function saveWinStreaks(s) {
+    localStorage.setItem(WIN_STREAK_KEY, JSON.stringify(s));
+  }
+
+  function syncCoinBestFromWallet(w) {
+    const s = loadWinStreaks();
+    s.coin.best = Math.max(s.coin.best || 0, w.coinStreak || 0);
+    saveWinStreaks(s);
+  }
+
+  function applyArcadeWinStreak(slug, mood) {
+    if (mood === 'pending') return;
+    if (slug !== 'bj' && slug !== 'rps' && slug !== 'slots') return;
+    const s = loadWinStreaks();
+    const row = s[slug];
+    if (!row) return;
+    if (mood === 'tie') {
+      renderWinStreakBars();
+      return;
+    }
+    if (mood === 'lose') {
+      row.current = 0;
+    } else {
+      row.current += 1;
+      row.best = Math.max(row.best, row.current);
+    }
+    saveWinStreaks(s);
+    renderWinStreakBars();
+  }
+
+  function renderWinStreakBars() {
+    const w = loadWallet();
+    const s = loadWinStreaks();
+    const coinBestEl = document.getElementById('games-coin-streak-best');
+    if (coinBestEl) {
+      coinBestEl.textContent = String(Math.max(s.coin.best || 0, w.coinStreak || 0));
+    }
+    const rows = [
+      ['bj', 'bj-win-streak-current', 'bj-win-streak-best'],
+      ['rps', 'rps-win-streak-current', 'rps-win-streak-best'],
+      ['slots', 'slots-win-streak-current', 'slots-win-streak-best']
+    ];
+    rows.forEach(([slug, idCur, idBest]) => {
+      const r = s[slug];
+      if (!r) return;
+      const curEl = document.getElementById(idCur);
+      const bestEl = document.getElementById(idBest);
+      if (curEl) curEl.textContent = String(r.current);
+      if (bestEl) bestEl.textContent = String(Math.max(r.best, r.current));
+    });
   }
 
   function loadHistory() {
@@ -732,7 +988,9 @@
 
   function initWalletUi() {
     const w = loadWallet();
+    syncCoinBestFromWallet(w);
     renderWallet(w);
+    renderWinStreakBars();
     renderHistory(loadHistory());
 
     function claimDailyBonus() {
@@ -753,9 +1011,11 @@
     document.getElementById('games-reset-btn')?.addEventListener('click', () => {
       if (!window.confirm('Reset your FUQ wallet balance on this device? Coins go back to 100.')) return;
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(WIN_STREAK_KEY);
       clearHistory();
       const fresh = loadWallet();
       renderWallet(fresh);
+      renderWinStreakBars();
       pushHistory('reset', 'Wallet cleared', 0, fresh.tokens);
     });
 
@@ -801,10 +1061,12 @@
     pushHistory('coin', detail, w.tokens - before, w.tokens);
     const net = w.tokens - before;
     if (win) {
+      syncCoinBestFromWallet(w);
       setGameOutcome('coin', 'win', `You called ${pick.toUpperCase()} · landed ${outcome.toUpperCase()} · ${net >= 0 ? '+' : ''}${net} coins`);
     } else {
       setGameOutcome('coin', 'lose', `Landed ${outcome.toUpperCase()} · ${net} coins · streak reset`);
     }
+    renderWinStreakBars();
   }
 
   function playRps() {
@@ -846,10 +1108,13 @@
     pushHistory('rps', detail, w.tokens - before, w.tokens);
     const net = w.tokens - before;
     if (pick === house) {
+      applyArcadeWinStreak('rps', 'tie');
       setGameOutcome('rps', 'tie', `Both played ${pick.toUpperCase()} · bet returned`);
     } else if (delta === bet * 2) {
+      applyArcadeWinStreak('rps', 'win');
       setGameOutcome('rps', 'win', `Beat ${house.toUpperCase()} · +${bet} profit (${net >= 0 ? '+' : ''}${net} coins)`);
     } else {
+      applyArcadeWinStreak('rps', 'lose');
       setGameOutcome('rps', 'lose', `Lost to ${house.toUpperCase()} · ${net} coins`);
     }
   }
@@ -909,10 +1174,13 @@
 
     const sub = `${final.map((s) => s.label).join(' / ')} · ${net >= 0 ? '+' : ''}${net} coins`;
     if (final[0].id === final[1].id && final[1].id === final[2].id) {
+      applyArcadeWinStreak('slots', 'win');
       setGameOutcome('slots', 'jackpot', `Triple ${final[0].label} · ${sub}`);
     } else if (final[0].id === final[1].id) {
+      applyArcadeWinStreak('slots', 'win');
       setGameOutcome('slots', 'win', `First two match · ${sub}`);
     } else {
+      applyArcadeWinStreak('slots', 'lose');
       setGameOutcome('slots', 'lose', `No line hit · ${sub}`);
     }
   }
