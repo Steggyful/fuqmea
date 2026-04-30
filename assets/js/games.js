@@ -6,9 +6,21 @@
   const STORAGE_KEY = 'fuqmea_fun_wallet_v1';
   const HISTORY_KEY = 'fuqmea_fun_history_v1';
   const WIN_STREAK_KEY = 'fuqmea_game_win_streak_v1';
-  const DEFAULT_TOKENS = 100;
-  const DAILY_BONUS = 25;
-  const MAX_COIN_STREAK_BONUS = 5;
+  const RAKEBACK_STATE_KEY = 'fuqmea_arcade_rakeback_v1';
+  const QUEST_UI_KEY = 'fuqmea_arcade_quest_ui_v1';
+  const DEFAULT_TOKENS = 200;
+  /** Picks economy so dailies + quests cover dry spells; synced to games-page hint text in renderWallet */
+  const DAILY_BONUS = 30;
+  const MAX_COIN_STREAK_BONUS = 3;
+  const COIN_FLIP_DURATION_MS = 1100;
+  let coinFlipYDeg = 0;
+  let coinFlipAnimating = false;
+  const RPS_SHUFFLE_TICK_MS = 86;
+  const RPS_SHUFFLE_STEPS = 13;
+  const RPS_LAND_POP_MS = 400;
+  const RPS_ORDER = ['rock', 'paper', 'scissors'];
+  const RPS_GLYPHS = { rock: '✊', paper: '✋', scissors: '✌' };
+  let rpsRoundBusy = false;
   const MAX_HISTORY = 35;
   const BET_CHOICES = [5, 10, 25];
   const SLOT_SYMBOLS = [
@@ -21,7 +33,356 @@
     { id: 'twin', label: 'TWIN', emoji: '👯', image: 'assets/images/slots/Twin.JPG' }
   ];
 
-  const GAME_LABEL = { coin: 'COIN', rps: 'RPS', slots: 'SLOTS', bj: 'BJ', daily: 'DAILY', reset: 'RESET' };
+  const GAME_LABEL = {
+    coin: 'COIN',
+    rps: 'RPS',
+    slots: 'SLOTS',
+    bj: 'BJ',
+    crash: 'AURA',
+    daily: 'DAILY',
+    rakeback: 'RAKEBACK',
+    reset: 'RESET',
+    quest: 'QUEST',
+    quest_weekly: 'WEEK'
+  };
+
+  const QUEST_STATE_KEY = 'fuqmea_arcade_quests_v1';
+  const WEEKLY_QUEST_STATE_KEY = 'fuqmea_arcade_weekly_quests_v1';
+
+  /** Surge + grind + flex + full-floor sampler — four dailies, RNG’d per bucket */
+  const QUEST_CAT_SURGE = [
+    'surge_play_3',
+    'surge_play_5',
+    'surge_cash_25',
+    'surge_cash_4',
+    'surge_first'
+  ];
+  const QUEST_CAT_GRIND = [
+    'bj_rounds_2',
+    'bj_rounds_4',
+    'coin_3',
+    'coin_5',
+    'rps_3',
+    'rps_5',
+    'slots_4',
+    'slots_5'
+  ];
+  const QUEST_CAT_FLEX = [
+    'wins_any_2',
+    'explorer',
+    'bj_win_1',
+    'bj_long_4',
+    'bj_long_5',
+    'bet_big',
+    'spree_8',
+    'slots_line_1',
+    'aura_profit_2',
+    'spree_12'
+  ];
+
+  /** “Play each machine once today” variants—same mechanic (uniqueGames → 5), different joke */
+  const QUEST_CAT_SAMPLER = [
+    'daily_tour_fuq',
+    'daily_grand_sampling',
+    'daily_cabinet_crawl',
+    'daily_stamp_rally',
+    'daily_five_stop_shuffle',
+    'daily_full_floor_pass'
+  ];
+
+  const QUEST_DEFS = {
+    surge_play_3: {
+      title: 'Aura hat trick',
+      flavor: 'Three aura rounds on the board. Ride the line three times.',
+      reward: 18,
+      target: 3,
+      progKey: 'crashRounds'
+    },
+    surge_play_5: {
+      title: 'Five alarm aura',
+      flavor: 'Stack five aura runs. The chart remembers.',
+      reward: 24,
+      target: 5,
+      progKey: 'crashRounds'
+    },
+    surge_cash_25: {
+      title: 'Lock at 2.5×',
+      flavor: 'Bank once at 2.5× aura or hotter.',
+      reward: 22,
+      target: 1,
+      progKey: 'surgeCashHigh'
+    },
+    surge_cash_4: {
+      title: 'Big aura energy',
+      flavor: 'Bank once at 4× aura or higher. Chef’s kiss.',
+      reward: 26,
+      target: 1,
+      progKey: 'surgeCash4'
+    },
+    surge_first: {
+      title: 'First aura stop',
+      flavor: 'Kick off one aura round. The line starts climbing as soon as you tap in.',
+      reward: 12,
+      target: 1,
+      progKey: 'crashRounds'
+    },
+    bj_rounds_2: {
+      title: 'Two seats at the table',
+      flavor: 'Finish two blackjack rounds. Deal, hit, stand, repeat.',
+      reward: 14,
+      target: 2,
+      progKey: 'bjRounds'
+    },
+    bj_rounds_4: {
+      title: 'Four-deal energy',
+      flavor: 'Four blackjack rounds. Same deck, different attitudes.',
+      reward: 19,
+      target: 4,
+      progKey: 'bjRounds'
+    },
+    coin_3: {
+      title: 'Three coin calls',
+      flavor: 'Pick a side and flip three times. No take-backs.',
+      reward: 12,
+      target: 3,
+      progKey: 'coinRounds'
+    },
+    coin_5: {
+      title: 'Coin flip crusade',
+      flavor: 'Five flips. You’re warmed up.',
+      reward: 15,
+      target: 5,
+      progKey: 'coinRounds'
+    },
+    rps_3: {
+      title: 'Triple throwdown',
+      flavor: 'Rock, paper, scissors ×3.',
+      reward: 12,
+      target: 3,
+      progKey: 'rpsRounds'
+    },
+    rps_5: {
+      title: 'Five throw sessions',
+      flavor: 'Rock, paper, scissors. Five full rounds. House picks random.',
+      reward: 16,
+      target: 5,
+      progKey: 'rpsRounds'
+    },
+    slots_4: {
+      title: 'Four pulls',
+      flavor: 'Four slot spins. The reels thirst.',
+      reward: 14,
+      target: 4,
+      progKey: 'slotsRounds'
+    },
+    slots_5: {
+      title: 'Jackpot warmup',
+      flavor: 'Five spins. Luck is a skill issue.',
+      reward: 16,
+      target: 5,
+      progKey: 'slotsRounds'
+    },
+    wins_any_2: {
+      title: 'Two trophies',
+      flavor: 'Win any games twice. RNG owes you.',
+      reward: 20,
+      target: 2,
+      progKey: 'winsAny'
+    },
+    explorer: {
+      title: 'Island hopper',
+      flavor: 'Play three different games today.',
+      reward: 26,
+      target: 3,
+      progKey: 'uniqueGames'
+    },
+    bj_win_1: {
+      title: 'Beat the dealer',
+      flavor: 'One clean blackjack dub.',
+      reward: 18,
+      target: 1,
+      progKey: 'bjWins'
+    },
+    bj_long_4: {
+      title: 'Long hand (4)',
+      flavor: 'Win blackjack with a four-card hand at least once.',
+      reward: 26,
+      target: 1,
+      progKey: 'bjLong4Wins'
+    },
+    bj_long_5: {
+      title: 'Long hand (5)',
+      flavor: 'Win blackjack with a five-card hand at least once.',
+      reward: 32,
+      target: 1,
+      progKey: 'bjLong5Wins'
+    },
+    bet_big: {
+      title: 'Whale alert',
+      flavor: 'Slap a 25 FUQ bet on anything once.',
+      reward: 16,
+      target: 1,
+      progKey: 'bet25'
+    },
+    spree_8: {
+      title: 'Eight-stop route',
+      flavor: 'Play eight rounds total. Bounce cabinets, stack progress.',
+      reward: 26,
+      target: 8,
+      progKey: 'totalRounds'
+    },
+    spree_12: {
+      title: 'Turbo dozen',
+      flavor: 'Twelve rounds mixed. Touch everything.',
+      reward: 30,
+      target: 12,
+      progKey: 'totalRounds'
+    },
+    slots_line_1: {
+      title: 'Line cook',
+      flavor: 'Hit a slots double or triple once.',
+      reward: 22,
+      target: 1,
+      progKey: 'slotsLineHits'
+    },
+    aura_profit_2: {
+      title: 'Pay the duck',
+      flavor: 'Bank aura twice with net profit on cash-out.',
+      reward: 24,
+      target: 2,
+      progKey: 'crashProfitBanks'
+    },
+    daily_tour_fuq: {
+      title: 'Tour de Fuq',
+      flavor: 'Play all five games once today.',
+      reward: 30,
+      target: 5,
+      progKey: 'uniqueGames'
+    },
+    daily_grand_sampling: {
+      title: 'Grand sampling menu',
+      flavor: 'Try each game one time today.',
+      reward: 30,
+      target: 5,
+      progKey: 'uniqueGames'
+    },
+    daily_cabinet_crawl: {
+      title: 'Cabinet crawl',
+      flavor: 'Run one round in every game.',
+      reward: 30,
+      target: 5,
+      progKey: 'uniqueGames'
+    },
+    daily_stamp_rally: {
+      title: 'Stamp rally survivor',
+      flavor: 'Get credit in all five game modes.',
+      reward: 30,
+      target: 5,
+      progKey: 'uniqueGames'
+    },
+    daily_five_stop_shuffle: {
+      title: 'Five-stop shuffle',
+      flavor: 'Complete one round in each game type.',
+      reward: 30,
+      target: 5,
+      progKey: 'uniqueGames'
+    },
+    daily_full_floor_pass: {
+      title: 'Whole-floor wristband',
+      flavor: 'Play blackjack, aura, coin, RPS, and slots once each.',
+      reward: 30,
+      target: 5,
+      progKey: 'uniqueGames'
+    }
+  };
+
+  /** Weekly: high round totals + cumulative FUQ won from arcade games (claims/daily excluded) */
+  const WEEKLY_CAT_ROUNDS = ['week_rounds_150', 'week_rounds_185', 'week_rounds_220'];
+  const WEEKLY_CAT_EARN = ['week_fuq_earn_850', 'week_fuq_earn_1150', 'week_fuq_earn_1450'];
+
+  const WEEKLY_QUEST_DEFS = {
+    week_rounds_150: {
+      title: 'One-fifty club',
+      flavor: '150 rounds before Monday’s reset hits. Every cabinet counts.',
+      reward: 76,
+      target: 150,
+      progKey: 'totalRounds'
+    },
+    week_rounds_185: {
+      title: '185-ticket week',
+      flavor: '185 rounds waiting for you. The floor’s wide open till Monday resets.',
+      reward: 84,
+      target: 185,
+      progKey: 'totalRounds'
+    },
+    week_rounds_220: {
+      title: 'Two-twenty ticket dump',
+      flavor: '220 rounds in one week. It is oversized on purpose. Slam tokens through every cabinet till you nail it.',
+      reward: 90,
+      target: 220,
+      progKey: 'totalRounds'
+    },
+    week_fuq_earn_850: {
+      title: 'Win column (850)',
+      flavor: '+850 net FUQ from games this week. Wins/settles only, not daily bonus or quest rewards.',
+      reward: 78,
+      target: 850,
+      progKey: 'fuqEarned'
+    },
+    week_fuq_earn_1150: {
+      title: 'Profit goblin (1.15k)',
+      flavor: '+1,150 net FUQ from the machines before the weekly clock resets.',
+      reward: 84,
+      target: 1150,
+      progKey: 'fuqEarned'
+    },
+    week_fuq_earn_1450: {
+      title: 'Whale-ish week (1.45k)',
+      flavor: '+1,450 net FUQ scraped from payouts. RNG rent is due.',
+      reward: 90,
+      target: 1450,
+      progKey: 'fuqEarned'
+    }
+  };
+
+  /** Fast enough updates + ramp that climbs so the surge feels urgent */
+  const CRASH_TICK_MS = 48;
+  /** Perceptual Y curve; slightly lower = punchier-looking climb (fill/glow removed) */
+  const CRASH_CHART_Y_CURVE = 0.53;
+  /** Long surges trim oldest samples only */
+  const CRASH_CHART_MAX_POINTS = 380;
+  const CRASH_CHART_MULT_VIS_MAX = 22;
+  const CRASH_CHART_X_LEFT = 2;
+  const CRASH_CHART_X_RIGHT_CAP = 95;
+  /** Curve ends at LEFT + span × ASYM × n/(n+H): approaches the right but never uses the full width */
+  const CRASH_CHART_X_ASYM = 0.9;
+  const CRASH_CHART_X_TAIL_PAD = 14;
+  /** <1 spreads early samples a bit farther on X → shallower slopes at the start */
+  const CRASH_CHART_X_EASE = 0.83;
+  /** Light sine squiggle on the trace (viewBox units); disabled when prefers-reduced-motion */
+  const CRASH_CHART_WOBBLE_AMP_Y1 = 0.62;
+  const CRASH_CHART_WOBBLE_AMP_Y2 = 0.24;
+  const CRASH_CHART_WOBBLE_AMP_X = 0.28;
+  /** Keeps curve + mascot off the top of the viewBox; nudged down for rider headroom */
+  const CRASH_CHART_Y_VIEW_TOP = 15.85;
+  /** Pull last vertex back (viewBox units) so the stroke reads as hitting the deck, not the torso. */
+  const CRASH_CHART_TAIL_TRIM = 3.45;
+  /** Sprite % anchor: tail-side of deck (see .games-crash-chart --crash-rider-ax/ay). */
+  const CRASH_RIDER_ANCHOR_AX = 43;
+  const CRASH_RIDER_ANCHOR_AY = 87;
+  const CRASH_CHART_WOBBLE_I1 = 0.69;
+  const CRASH_CHART_WOBBLE_I2 = 1.17;
+  const CRASH_CHART_WOBBLE_IX = 0.56;
+
+  /** While farming, swap to the fire board at/above this multiplier (only climbs, no flicker). */
+  const CRASH_RIDER_HOT_MULT = 6;
+
+  const CRASH_RIDER_ART = {
+    farm: encodeURI('assets/images/aura farm/Farming Board.png'),
+    farmHot: encodeURI('assets/images/aura farm/Farming Board High X.png'),
+    win: encodeURI('assets/images/aura farm/Fuq Yeah Board.png'),
+    lose: encodeURI('assets/images/aura farm/Aura Lost Board.png')
+  };
 
   const BJ_RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
   const BJ_SUITS = ['\u2660', '\u2665', '\u2666', '\u2663'];
@@ -37,11 +398,11 @@
     playerHands: [],
     handStakes: [],
     handDoubled: [],
+    handOutcomes: [],
     dealer: [],
     phase: 'idle',
     baseBet: 0,
     activeHand: 0,
-    splitAces: false,
     holeHidden: false,
     roundStartBalance: 0
   };
@@ -250,6 +611,13 @@
       sc.textContent = hand.length ? bjPlayerHandScoreText(hand, i) : '—';
       head.appendChild(lab);
       head.appendChild(sc);
+      const handOutcome = bjState.handOutcomes[i];
+      if (handOutcome) {
+        const tag = document.createElement('span');
+        tag.className = `games-bj-hand-outcome games-bj-hand-outcome--${handOutcome}`;
+        tag.textContent = handOutcome.toUpperCase();
+        head.appendChild(tag);
+      }
       const cards = document.createElement('div');
       cards.className = 'games-bj-cards';
       for (let j = 0; j < hand.length; j++) {
@@ -325,21 +693,19 @@
         h &&
         h.length === 2 &&
         !bjState.handDoubled[ah] &&
-        !bjState.splitAces &&
         w.tokens >= bjState.handStakes[ah];
       dbl.disabled = !ok;
     }
     const spl = document.getElementById('bj-split-btn');
     if (spl) {
-      const h0 = bjState.playerHands[0];
+      const hCur = bjState.playerHands[ah];
       const canSplit =
         bjState.phase === 'player' &&
-        bjState.playerHands.length === 1 &&
-        h0 &&
-        h0.length === 2 &&
-        h0[0].r === h0[1].r &&
-        w.tokens >= bjState.baseBet &&
-        !bjState.handDoubled[0];
+        hCur &&
+        hCur.length === 2 &&
+        hCur[0].r === hCur[1].r &&
+        !bjState.handDoubled[ah] &&
+        w.tokens >= bjState.handStakes[ah];
       spl.disabled = !canSplit;
     }
     const hit = document.getElementById('bj-hit-btn');
@@ -363,11 +729,19 @@
   }
 
   function bjFinishRound(detail, mood, sub) {
+    const maxStake =
+      bjState.handStakes && bjState.handStakes.length > 0
+        ? Math.max(...bjState.handStakes)
+        : bjState.baseBet || 0;
+    arcadeNoteBet(maxStake);
+    arcadeNoteRound('bj', maxStake);
+    if (mood === 'win' || mood === 'jackpot') arcadeNoteWin('bj');
     applyArcadeWinStreak('bj', mood);
     const w = loadWallet();
     saveWallet(w);
     renderWallet(w);
     const delta = w.tokens - bjState.roundStartBalance;
+    bumpWeeklyFuqEarnedFromGames(delta);
     pushHistory('bj', detail, delta, w.tokens);
     setGameOutcome('bj', mood, sub);
     bjState.phase = 'done';
@@ -381,6 +755,8 @@
     const dv = bjHandValue(bjState.dealer);
     const dealerBust = dv > 21;
     const parts = [];
+    let wonLong4 = false;
+    let wonLong5 = false;
 
     for (let i = 0; i < bjState.playerHands.length; i++) {
       const h = bjState.playerHands[i];
@@ -388,24 +764,34 @@
       const pv = bjHandValue(h);
       if (pv > 21) {
         parts.push(`H${i + 1} bust`);
+        bjState.handOutcomes[i] = 'bust';
         continue;
       }
       if (dealerBust) {
         w.tokens += 2 * stake;
         parts.push(`H${i + 1} win (${pv})`);
+        bjState.handOutcomes[i] = 'win';
+        if (h.length >= 4) wonLong4 = true;
+        if (h.length >= 5) wonLong5 = true;
       } else if (pv > dv) {
         w.tokens += 2 * stake;
         parts.push(`H${i + 1} ${pv}>${dv}`);
+        bjState.handOutcomes[i] = 'win';
+        if (h.length >= 4) wonLong4 = true;
+        if (h.length >= 5) wonLong5 = true;
       } else if (pv < dv) {
         parts.push(`H${i + 1} lose`);
+        bjState.handOutcomes[i] = 'lose';
       } else {
         w.tokens += stake;
         parts.push(`H${i + 1} push`);
+        bjState.handOutcomes[i] = 'push';
       }
     }
     saveWallet(w);
 
     const net = w.tokens - bjState.roundStartBalance;
+    addRakebackFromLoss(net);
     let mood = 'tie';
     if (net > 0) mood = 'win';
     else if (net < 0) mood = 'lose';
@@ -415,6 +801,7 @@
         : net < 0
           ? `Net ${net} FUQ. Dealer ${dv}.`
           : `Net even. Dealer ${dv}.`;
+    arcadeNoteBjLongWins(wonLong4, wonLong5);
     bjFinishRound(parts.join(' · '), mood, sub);
   }
 
@@ -429,6 +816,7 @@
         await bjWait(revealMs);
       }
       bjState.holeHidden = false;
+      bjState.handOutcomes = bjState.playerHands.map(() => 'bust');
       bjRenderHands();
       bjAnimateDealerCard(1);
       bjFinishRound(
@@ -510,12 +898,12 @@
     renderWallet(w);
 
     bjState.baseBet = bet;
-    bjState.splitAces = false;
     bjState.activeHand = 0;
     bjState.deck = bjShuffle(bjNewDeck());
     bjState.playerHands = [[]];
     bjState.handStakes = [bet];
     bjState.handDoubled = [false];
+    bjState.handOutcomes = [''];
     bjState.dealer = [];
     bjState.phase = 'dealing';
     bjState.holeHidden = true;
@@ -572,6 +960,7 @@
       if (pBJ && dBJ) {
         w.tokens += bet;
         saveWallet(w);
+        bjState.handOutcomes = ['push'];
         bjFinishRound('Blackjack push', 'tie', 'Both have blackjack. Push.');
         return;
       }
@@ -580,9 +969,11 @@
         const net = pay - bet;
         w.tokens += pay;
         saveWallet(w);
+        bjState.handOutcomes = ['blackjack'];
         bjFinishRound('Player blackjack 3:2', 'jackpot', `Blackjack pays 3:2. Net +${net} FUQ.`);
         return;
       }
+      bjState.handOutcomes = ['lose'];
       bjFinishRound('Dealer blackjack', 'lose', 'Dealer has blackjack.');
       return;
     }
@@ -608,7 +999,11 @@
       await bjWait(hitDelay);
     }
 
-    if (bjHandValue(h) > 21) {
+    const total = bjHandValue(h);
+    if (total > 21) {
+      bjFinishCurrentHandAndAdvance();
+    } else if (total === 21) {
+      setGameOutcome('bj', 'pending', '21 — standing.');
       bjFinishCurrentHandAndAdvance();
     } else {
       bjState.phase = 'player';
@@ -628,7 +1023,6 @@
 
   function bjDouble() {
     if (bjState.phase !== 'player') return;
-    if (bjState.splitAces) return;
     const ah = bjState.activeHand;
     const h = bjState.playerHands[ah];
     if (!h || h.length !== 2 || bjState.handDoubled[ah]) return;
@@ -659,48 +1053,40 @@
 
   function bjSplit() {
     if (bjState.phase !== 'player') return;
-    if (bjState.playerHands.length !== 1) return;
-    const h0 = bjState.playerHands[0];
-    if (!h0 || h0.length !== 2 || h0[0].r !== h0[1].r) return;
+    const ah = bjState.activeHand;
+    const h = bjState.playerHands[ah];
+    if (!h || h.length !== 2 || h[0].r !== h[1].r) return;
+    if (bjState.handDoubled[ah]) return;
 
     const w = loadWallet();
-    if (w.tokens < bjState.baseBet) {
+    const splitStake = bjState.handStakes[ah];
+    if (w.tokens < splitStake) {
       setGameOutcome('bj', 'pending', 'Not enough coins to split.');
       return;
     }
 
-    w.tokens -= bjState.baseBet;
+    w.tokens -= splitStake;
     saveWallet(w);
     renderWallet(w);
 
-    const c1 = h0[0];
-    const c2 = h0[1];
-    bjState.playerHands = [[c1], [c2]];
-    bjState.handStakes = [bjState.baseBet, bjState.baseBet];
-    bjState.handDoubled = [false, false];
-    bjState.splitAces = c1.r === 'A';
-    bjState.activeHand = 0;
+    const c1 = h[0];
+    const c2 = h[1];
+    bjState.playerHands.splice(ah, 1, [c1], [c2]);
+    bjState.handStakes.splice(ah, 1, splitStake, splitStake);
+    bjState.handDoubled.splice(ah, 1, false, false);
+    bjState.handOutcomes.splice(ah, 1, '', '');
+    bjState.activeHand = ah;
 
-    bjState.playerHands[0].push(bjDraw());
-    if (bjState.splitAces) {
-      bjState.playerHands[1].push(bjDraw());
-      bjRenderHands();
-      bjAnimatePlayerHandLastCard(0, 'hit');
-      bjAnimatePlayerHandLastCard(1, 'hit');
-      setGameOutcome('bj', 'pending', 'Split aces — one card each. Dealer plays.');
-      bjStartDealerPhase();
-      return;
-    }
-
+    bjState.playerHands[ah].push(bjDraw());
     bjRenderHands();
-    bjAnimatePlayerHandLastCard(0, 'hit');
-    const v0 = bjHandValue(bjState.playerHands[0]);
+    bjAnimatePlayerHandLastCard(ah, 'hit');
+    const v0 = bjHandValue(bjState.playerHands[ah]);
     if (v0 > 21 || v0 === 21) {
       bjFinishCurrentHandAndAdvance();
       return;
     }
     bjUiPlayerTurn();
-    setGameOutcome('bj', 'pending', 'Hand 1 — hit, stand, or double.');
+    setGameOutcome('bj', 'pending', `Hand ${ah + 1} split. Hit, stand, double, or split again.`);
   }
 
   function initBlackjack() {
@@ -719,6 +1105,1053 @@
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const d = String(now.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
+  }
+
+  /** ISO-like week ID (Monday start), local date—pairs with midnight daily reset messaging */
+  function weekKey() {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+    const isoYear = date.getFullYear();
+    const jan4 = new Date(isoYear, 0, 4);
+    jan4.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+    const weekNum =
+      Math.floor((date.getTime() - jan4.getTime()) / 604800000) + 1;
+    const wSafe = Number.isFinite(weekNum) && weekNum > 0 ? weekNum : 1;
+    return `${isoYear}-W${String(wSafe).padStart(2, '0')}`;
+  }
+
+  function hashDaySeed(day) {
+    let h = 2166136261;
+    for (let i = 0; i < day.length; i++) {
+      h ^= day.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function rng() {
+      a |= 0;
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), a | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), a | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function dailyQuestPicker(day) {
+    const rng = mulberry32(hashDaySeed(day));
+    const pick = (arr) => arr[Math.min(arr.length - 1, Math.floor(rng() * arr.length))];
+    return {
+      surge: pick(QUEST_CAT_SURGE),
+      grind: pick(QUEST_CAT_GRIND),
+      flex: pick(QUEST_CAT_FLEX),
+      sampler: pick(QUEST_CAT_SAMPLER)
+    };
+  }
+
+  /** Fourth daily slot ID only—burns RNG in same order as full pick so migrating 3-slot saves stays consistent */
+  function pickDailySamplerAppendOnly(day) {
+    const p = dailyQuestPicker(day);
+    return p.sampler;
+  }
+
+  function pickDailyQuestIds(day) {
+    const p = dailyQuestPicker(day);
+    return [p.surge, p.grind, p.flex, p.sampler];
+  }
+
+  function hashWeekSeed(week) {
+    return hashDaySeed(`${week}|arcadeWeekly`);
+  }
+
+  function pickWeeklyQuestIds(week) {
+    const rng = mulberry32(hashWeekSeed(week));
+    const pick = (arr) => arr[Math.min(arr.length - 1, Math.floor(rng() * arr.length))];
+    return [pick(WEEKLY_CAT_ROUNDS), pick(WEEKLY_CAT_EARN)];
+  }
+
+  function defaultWeeklyQuestProg() {
+    return {
+      totalRounds: 0,
+      fuqEarned: 0
+    };
+  }
+
+  function loadWeeklyQuestStateRaw() {
+    try {
+      const raw = localStorage.getItem(WEEKLY_QUEST_STATE_KEY);
+      if (!raw) return null;
+      const o = JSON.parse(raw);
+      if (!o || typeof o.week !== 'string' || !Array.isArray(o.ids)) return null;
+      return o;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveWeeklyQuestState(state) {
+    localStorage.setItem(WEEKLY_QUEST_STATE_KEY, JSON.stringify(state));
+  }
+
+  function loadWeeklyQuestState() {
+    const wk = weekKey();
+    let o = loadWeeklyQuestStateRaw();
+    if (!o || o.week !== wk) {
+      o = {
+        week: wk,
+        ids: pickWeeklyQuestIds(wk),
+        prog: defaultWeeklyQuestProg(),
+        claimed: []
+      };
+      saveWeeklyQuestState(o);
+    }
+    if (!o.prog || typeof o.prog !== 'object') o.prog = defaultWeeklyQuestProg();
+    if (typeof o.prog.totalRounds !== 'number') o.prog.totalRounds = 0;
+    if (typeof o.prog.fuqEarned !== 'number') o.prog.fuqEarned = Math.max(0, Math.floor(Number(o.prog.fuqEarned)) || 0);
+    delete o.prog.weeklyPlayedSlugs;
+    if (!Array.isArray(o.claimed)) o.claimed = [];
+
+    const needIds =
+      !Array.isArray(o.ids) ||
+      o.ids.length !== 2 ||
+      o.ids.some((qid) => !WEEKLY_QUEST_DEFS[qid]);
+    if (needIds) {
+      o.ids = pickWeeklyQuestIds(wk);
+      const next = new Set(o.ids);
+      o.claimed = o.claimed.filter((cid) => next.has(cid));
+      saveWeeklyQuestState(o);
+    }
+    return o;
+  }
+
+  function weeklyQuestProgressFor(id) {
+    const def = WEEKLY_QUEST_DEFS[id];
+    if (!def) return 0;
+    const st = loadWeeklyQuestState();
+    const k = def.progKey;
+    if (k === 'fuqEarned') {
+      return Math.max(0, Math.floor(Number(st.prog.fuqEarned)) || 0);
+    }
+    return Math.max(0, Number(st.prog[k]) || 0);
+  }
+
+  function weeklyQuestDisplayedProgress(id) {
+    const def = WEEKLY_QUEST_DEFS[id];
+    if (!def) return 0;
+    return Math.min(weeklyQuestProgressFor(id), def.target);
+  }
+
+  function bumpWeeklyQuestRound(/* slug kept for callers */) {
+    const o = loadWeeklyQuestState();
+    o.prog.totalRounds = Math.max(0, Math.floor(Number(o.prog.totalRounds) || 0)) + 1;
+    saveWeeklyQuestState(o);
+  }
+
+  /** Arcade games only: signed net FUQ toward weekly earn quests (omit daily/quest payouts). */
+  function bumpWeeklyFuqEarnedFromGames(netFuq) {
+    const net = Number(netFuq) || 0;
+    const delta = net >= 0 ? Math.floor(net) : Math.ceil(net);
+    if (delta === 0) return;
+    const o = loadWeeklyQuestState();
+    const cur = Math.max(0, Math.floor(Number(o.prog.fuqEarned) || 0));
+    o.prog.fuqEarned = Math.max(0, cur + delta);
+    saveWeeklyQuestState(o);
+    renderWeeklyQuests();
+  }
+
+  function defaultQuestProg() {
+    return {
+      crashRounds: 0,
+      surgeCashHigh: 0,
+      surgeCash4: 0,
+      bjRounds: 0,
+      coinRounds: 0,
+      rpsRounds: 0,
+      slotsRounds: 0,
+      slotsLineHits: 0,
+      winsAny: 0,
+      uniqueGames: 0,
+      playedSlugs: {},
+      bjWins: 0,
+      bjLong4Wins: 0,
+      bjLong5Wins: 0,
+      bet25: 0,
+      totalRounds: 0,
+      crashProfitBanks: 0
+    };
+  }
+
+  function loadQuestStateRaw() {
+    try {
+      const raw = localStorage.getItem(QUEST_STATE_KEY);
+      if (!raw) return null;
+      const o = JSON.parse(raw);
+      if (!o || typeof o.day !== 'string' || !Array.isArray(o.ids)) return null;
+      return o;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveQuestState(state) {
+    localStorage.setItem(QUEST_STATE_KEY, JSON.stringify(state));
+  }
+
+  function loadQuestState() {
+    const day = todayKey();
+    let o = loadQuestStateRaw();
+    if (!o || o.day !== day) {
+      o = {
+        day,
+        ids: pickDailyQuestIds(day),
+        prog: defaultQuestProg(),
+        claimed: []
+      };
+      saveQuestState(o);
+    } else if (o.day === day) {
+      const canon = pickDailyQuestIds(day);
+      let repaired = false;
+      if (!Array.isArray(o.ids)) {
+        o.ids = canon.slice();
+        o.claimed = [];
+        repaired = true;
+      } else if (o.ids.length === 3) {
+        o.ids.push(pickDailySamplerAppendOnly(day));
+        repaired = true;
+      } else if (o.ids.length !== 4 || o.ids.some((qid) => !QUEST_DEFS[qid])) {
+        const prev = new Set(o.ids);
+        o.ids = canon.slice();
+        if (Array.isArray(o.claimed)) {
+          o.claimed = o.claimed.filter((c) => prev.has(c) && o.ids.includes(c));
+        }
+        repaired = true;
+      }
+      if (repaired) saveQuestState(o);
+    }
+    if (!o.prog || typeof o.prog !== 'object') o.prog = defaultQuestProg();
+    if (!o.prog.playedSlugs || typeof o.prog.playedSlugs !== 'object') o.prog.playedSlugs = {};
+    const numKeys = ['surgeCash4', 'slotsLineHits', 'crashProfitBanks', 'bjLong4Wins', 'bjLong5Wins'];
+    for (let i = 0; i < numKeys.length; i++) {
+      const k = numKeys[i];
+      if (!(k in o.prog)) o.prog[k] = 0;
+    }
+    if (!Array.isArray(o.claimed)) o.claimed = [];
+    return o;
+  }
+
+  function questProgressFor(id) {
+    const def = QUEST_DEFS[id];
+    if (!def) return 0;
+    const st = loadQuestState();
+    if (def.progKey === 'uniqueGames') {
+      return Object.keys(st.prog.playedSlugs || {}).length;
+    }
+    return Math.max(0, Number(st.prog[def.progKey]) || 0);
+  }
+
+  function questDone(id) {
+    const def = QUEST_DEFS[id];
+    if (!def) return false;
+    return questProgressFor(id) >= def.target;
+  }
+
+  /** UI cap so progress never shows past the goal (e.g. 12/8) after you keep playing */
+  function questDisplayedProgress(id) {
+    const def = QUEST_DEFS[id];
+    if (!def) return 0;
+    return Math.min(questProgressFor(id), def.target);
+  }
+
+  function arcadeNoteBet(amount) {
+    const bet = Math.max(0, Math.floor(Number(amount)) || 0);
+    if (bet < 25) return;
+    const st = loadQuestState();
+    if (st.day !== todayKey()) return;
+    st.prog.bet25 = Math.max(st.prog.bet25, 1);
+    saveQuestState(st);
+    renderQuestPanels();
+  }
+
+  function arcadeNoteSlotsLineHit() {
+    const st = loadQuestState();
+    if (st.day !== todayKey()) return;
+    st.prog.slotsLineHits += 1;
+    saveQuestState(st);
+    renderQuestPanels();
+  }
+
+  function arcadeNoteCrashProfitBank() {
+    const st = loadQuestState();
+    if (st.day !== todayKey()) return;
+    st.prog.crashProfitBanks += 1;
+    saveQuestState(st);
+    renderQuestPanels();
+  }
+
+  function arcadeNoteRound(slug, betAmount) {
+    bumpWeeklyQuestRound();
+    const st = loadQuestState();
+    if (st.day !== todayKey()) return;
+    arcadeNoteBet(betAmount);
+    const p = st.prog;
+    const sk = `${slug}`;
+    if (!p.playedSlugs[sk]) {
+      p.playedSlugs[sk] = true;
+      p.uniqueGames = Object.keys(p.playedSlugs).length;
+    }
+    p.totalRounds += 1;
+    if (sk === 'bj') p.bjRounds += 1;
+    if (sk === 'coin') p.coinRounds += 1;
+    if (sk === 'rps') p.rpsRounds += 1;
+    if (sk === 'slots') p.slotsRounds += 1;
+    if (sk === 'crash') p.crashRounds += 1;
+    saveQuestState(st);
+    renderQuestPanels();
+  }
+
+  function arcadeNoteWin(slug) {
+    const st = loadQuestState();
+    if (st.day !== todayKey()) return;
+    st.prog.winsAny += 1;
+    if (slug === 'bj') st.prog.bjWins += 1;
+    saveQuestState(st);
+    renderQuestPanels();
+  }
+
+  function arcadeNoteSurgeCash(mult) {
+    const st = loadQuestState();
+    if (st.day !== todayKey()) return;
+    const m = Number(mult) || 0;
+    if (m >= 2.5) st.prog.surgeCashHigh = 1;
+    if (m >= 4) st.prog.surgeCash4 = 1;
+    saveQuestState(st);
+    renderQuestPanels();
+  }
+
+  function arcadeNoteBjLongWins(hasLong4, hasLong5) {
+    if (!hasLong4 && !hasLong5) return;
+    const st = loadQuestState();
+    if (st.day !== todayKey()) return;
+    if (hasLong4) st.prog.bjLong4Wins += 1;
+    if (hasLong5) st.prog.bjLong5Wins += 1;
+    saveQuestState(st);
+    renderQuestPanels();
+  }
+
+  function renderQuestPanels() {
+    renderDailyQuests();
+    renderWeeklyQuests();
+  }
+
+  function loadQuestUiState() {
+    try {
+      const raw = localStorage.getItem(QUEST_UI_KEY);
+      const o = raw ? JSON.parse(raw) : {};
+      return {
+        dailyCollapsed: !!o.dailyCollapsed,
+        weeklyCollapsed: !!o.weeklyCollapsed
+      };
+    } catch {
+      return { dailyCollapsed: false, weeklyCollapsed: false };
+    }
+  }
+
+  function saveQuestUiState(next) {
+    localStorage.setItem(
+      QUEST_UI_KEY,
+      JSON.stringify({
+        dailyCollapsed: !!next.dailyCollapsed,
+        weeklyCollapsed: !!next.weeklyCollapsed
+      })
+    );
+  }
+
+  function applyQuestCollapseState() {
+    const ui = loadQuestUiState();
+    const mapping = [
+      ['daily', ui.dailyCollapsed],
+      ['weekly', ui.weeklyCollapsed]
+    ];
+    mapping.forEach(([slug, collapsed]) => {
+      const sec = document.querySelector(`.games-${slug}-quests`);
+      const body = document.getElementById(`${slug}-quests-body`);
+      const btn = document.getElementById(`${slug}-quests-toggle`);
+      if (!sec || !body || !btn) return;
+      sec.classList.toggle('games-quest-panel--collapsed', collapsed);
+      body.hidden = collapsed;
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      btn.textContent = collapsed ? 'Expand' : 'Collapse';
+    });
+  }
+
+  function initQuestCollapseControls() {
+    applyQuestCollapseState();
+    const dailyBtn = document.getElementById('daily-quests-toggle');
+    const weeklyBtn = document.getElementById('weekly-quests-toggle');
+    if (dailyBtn) {
+      dailyBtn.addEventListener('click', () => {
+        const ui = loadQuestUiState();
+        ui.dailyCollapsed = !ui.dailyCollapsed;
+        saveQuestUiState(ui);
+        applyQuestCollapseState();
+      });
+    }
+    if (weeklyBtn) {
+      weeklyBtn.addEventListener('click', () => {
+        const ui = loadQuestUiState();
+        ui.weeklyCollapsed = !ui.weeklyCollapsed;
+        saveQuestUiState(ui);
+        applyQuestCollapseState();
+      });
+    }
+  }
+
+  function initGameRulesDisclosures() {
+    const desktopMq = window.matchMedia('(min-width: 960px)');
+    const openByDefault = desktopMq.matches;
+    document.querySelectorAll('.games-card > .games-rules').forEach((rulesP) => {
+      if (rulesP.parentElement?.classList.contains('games-rules-details')) return;
+      const wrap = document.createElement('details');
+      wrap.className = 'games-rules-details';
+      wrap.open = openByDefault;
+      const sum = document.createElement('summary');
+      sum.className = 'games-rules-summary';
+      sum.textContent = 'How it works';
+      rulesP.parentNode.insertBefore(wrap, rulesP);
+      wrap.appendChild(sum);
+      wrap.appendChild(rulesP);
+    });
+  }
+
+  function renderDailyQuests() {
+    const root = document.getElementById('games-daily-quests-list');
+    if (!root) return;
+    const st = loadQuestState();
+    root.innerHTML = '';
+    let doneCount = 0;
+    st.ids.forEach((qid) => {
+      const def = QUEST_DEFS[qid];
+      if (!def) return;
+      const cur = questProgressFor(qid);
+      const displayCur = questDisplayedProgress(qid);
+      const claimed = st.claimed.includes(qid);
+      const done = cur >= def.target;
+      if (claimed) doneCount += 1;
+      const pct = Math.min(100, (displayCur / def.target) * 100);
+      const li = document.createElement('li');
+      li.className = 'games-daily-quest-item';
+      if (claimed) li.classList.add('games-daily-quest-item--claimed');
+
+      const row = document.createElement('div');
+      row.className = 'games-daily-quest-top';
+      const text = document.createElement('div');
+      text.className = 'games-daily-quest-text';
+      const metaText = claimed
+        ? `Claimed · +${def.reward} FUQ`
+        : `${displayCur}/${def.target} · +${def.reward} FUQ`;
+      const flavor = def.flavor ? `<span class="games-daily-quest-flavor">${escapeHtml(def.flavor)}</span>` : '';
+      text.innerHTML = `
+        <span class="games-daily-quest-title">${escapeHtml(def.title)}</span>
+        ${flavor}
+        <span class="games-daily-quest-meta">${metaText}</span>
+      `;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'games-daily-quest-claim';
+      if (claimed) {
+        btn.disabled = true;
+        btn.textContent = 'DONE';
+      } else if (done) {
+        btn.textContent = 'CLAIM';
+        btn.addEventListener('click', () => claimDailyQuest(qid));
+      } else {
+        btn.disabled = true;
+        btn.textContent = '···';
+      }
+      row.appendChild(text);
+      row.appendChild(btn);
+
+      const track = document.createElement('div');
+      track.className = 'games-daily-quest-track';
+      track.setAttribute('aria-hidden', 'true');
+      track.innerHTML = `<span class="games-daily-quest-fill" style="width:${pct}%"></span>`;
+
+      li.appendChild(row);
+      li.appendChild(track);
+      root.appendChild(li);
+    });
+    const sum = document.getElementById('daily-quests-summary');
+    if (sum) sum.textContent = `${doneCount}/${st.ids.length}`;
+    const allClaimed = st.ids.length > 0 && doneCount >= st.ids.length;
+    const sec = document.querySelector('.games-daily-quests');
+    const body = document.getElementById('daily-quests-body');
+    const btn = document.getElementById('daily-quests-toggle');
+    const note = document.getElementById('daily-quests-closed-note');
+    if (allClaimed) {
+      const ui = loadQuestUiState();
+      if (!ui.dailyCollapsed) {
+        ui.dailyCollapsed = true;
+        saveQuestUiState(ui);
+      }
+      if (sec) sec.classList.add('games-quest-panel--collapsed');
+      if (body) body.hidden = true;
+      if (btn) {
+        btn.disabled = true;
+        btn.setAttribute('aria-expanded', 'false');
+        btn.textContent = 'Done today';
+      }
+      if (note) note.hidden = false;
+    } else {
+      if (btn) btn.disabled = false;
+      if (note) note.hidden = true;
+      applyQuestCollapseState();
+    }
+  }
+
+  function renderWeeklyQuests() {
+    const root = document.getElementById('games-weekly-quests-list');
+    if (!root) return;
+    const st = loadWeeklyQuestState();
+    root.innerHTML = '';
+    let doneCount = 0;
+    st.ids.forEach((qid) => {
+      const def = WEEKLY_QUEST_DEFS[qid];
+      if (!def) return;
+      const cur = weeklyQuestProgressFor(qid);
+      const displayCur = weeklyQuestDisplayedProgress(qid);
+      const claimed = st.claimed.includes(qid);
+      const done = cur >= def.target;
+      if (claimed) doneCount += 1;
+      const pct = Math.min(100, (displayCur / def.target) * 100);
+      const li = document.createElement('li');
+      li.className = 'games-weekly-quest-item';
+      if (claimed) li.classList.add('games-weekly-quest-item--claimed');
+
+      const row = document.createElement('div');
+      row.className = 'games-weekly-quest-top';
+      const text = document.createElement('div');
+      text.className = 'games-weekly-quest-text';
+      const metaText = claimed
+        ? `Claimed · +${def.reward} FUQ`
+        : def.progKey === 'fuqEarned'
+          ? `${displayCur.toLocaleString()} / ${def.target.toLocaleString()} net FUQ from games · +${def.reward} FUQ`
+          : `${displayCur}/${def.target} rounds · +${def.reward} FUQ`;
+      const flavor = def.flavor ? `<span class="games-weekly-quest-flavor">${escapeHtml(def.flavor)}</span>` : '';
+      text.innerHTML = `
+        <span class="games-weekly-quest-title">${escapeHtml(def.title)}</span>
+        ${flavor}
+        <span class="games-weekly-quest-meta">${metaText}</span>
+      `;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'games-weekly-quest-claim';
+      if (claimed) {
+        btn.disabled = true;
+        btn.textContent = 'DONE';
+      } else if (done) {
+        btn.textContent = 'CLAIM';
+        btn.addEventListener('click', () => claimWeeklyQuest(qid));
+      } else {
+        btn.disabled = true;
+        btn.textContent = '···';
+      }
+      row.appendChild(text);
+      row.appendChild(btn);
+
+      const track = document.createElement('div');
+      track.className = 'games-weekly-quest-track';
+      track.setAttribute('aria-hidden', 'true');
+      track.innerHTML = `<span class="games-weekly-quest-fill" style="width:${pct}%"></span>`;
+
+      li.appendChild(row);
+      li.appendChild(track);
+      root.appendChild(li);
+    });
+    const sum = document.getElementById('weekly-quests-summary');
+    if (sum) sum.textContent = `${doneCount}/${st.ids.length}`;
+  }
+
+  function claimWeeklyQuest(qid) {
+    const st = loadWeeklyQuestState();
+    if (st.week !== weekKey() || st.claimed.includes(qid)) return;
+    const def = WEEKLY_QUEST_DEFS[qid];
+    if (!def || weeklyQuestProgressFor(qid) < def.target) return;
+    st.claimed.push(qid);
+    saveWeeklyQuestState(st);
+    const w = loadWallet();
+    w.tokens += def.reward;
+    saveWallet(w);
+    renderWallet(w);
+    pushHistory('quest_weekly', `Weekly: ${def.title.slice(0, 36)}`, def.reward, w.tokens);
+    renderWeeklyQuests();
+  }
+
+  function claimDailyQuest(qid) {
+    const st = loadQuestState();
+    if (st.day !== todayKey() || st.claimed.includes(qid)) return;
+    const def = QUEST_DEFS[qid];
+    if (!def || questProgressFor(qid) < def.target) return;
+    st.claimed.push(qid);
+    saveQuestState(st);
+    const w = loadWallet();
+    w.tokens += def.reward;
+    saveWallet(w);
+    renderWallet(w);
+    pushHistory('quest', `Quest: ${def.title.slice(0, 40)}`, def.reward, w.tokens);
+    renderQuestPanels();
+  }
+
+  /** Nearest whole FUQ; .5 fractional parts round up (e.g. 12.5 → 13). */
+  function crashCashPayoutTokens(bet, mult) {
+    return Math.max(0, Math.round(bet * mult));
+  }
+
+  function crashFmtAura(mult) {
+    return `${mult.toFixed(2)}× aura`;
+  }
+
+  const crashRuntime = {
+    active: false,
+    timerId: null,
+    crashPoint: 2,
+    mult: 1,
+    bet: 0,
+    crashed: false,
+    multHistory: [],
+    wobblePhaseA: null,
+    wobblePhaseB: null,
+    riderCelebrate: false
+  };
+
+  function crashChartSetRunning(on) {
+    document.querySelector('.games-crash-chart')?.classList.toggle('games-crash-chart--running', !!on);
+  }
+
+  function crashRiderHide() {
+    const rider = document.getElementById('crash-rider');
+    if (rider) {
+      rider.hidden = true;
+      rider.removeAttribute('src');
+    }
+  }
+
+  /**
+   * @returns {boolean} true if rider visible (suppress SVG head dot).
+   */
+  function crashRiderSync(pts, lastXY) {
+    const chart = document.querySelector('.games-crash-chart');
+    const rider = document.getElementById('crash-rider');
+    if (!chart || !rider || !pts.length) {
+      crashRiderHide();
+      return false;
+    }
+
+    let tiltDeg = -10;
+    if (pts.length >= 2) {
+      const pa = pts[pts.length - 2].split(',').map(Number);
+      const pb = pts[pts.length - 1].split(',').map(Number);
+      const dx = pb[0] - pa[0];
+      const dy = pb[1] - pa[1];
+      if (Math.abs(dx) + Math.abs(dy) > 0.02) {
+        tiltDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+      }
+      const minHoriz = 0.52;
+      if (Math.abs(dx) < minHoriz && Math.abs(dx) + Math.abs(dy) > 0.04) {
+        const t = Math.abs(dx) / minHoriz;
+        tiltDeg = tiltDeg * t + -9 * (1 - t);
+      }
+      tiltDeg = Math.max(-28, Math.min(26, tiltDeg));
+    }
+
+    const riderYy = Math.min(50.65, lastXY[1] + 0.38);
+    chart.style.setProperty('--crash-rider-x', `${lastXY[0]}%`);
+    chart.style.setProperty('--crash-rider-y', `${(riderYy / 56) * 100}%`);
+    chart.style.setProperty('--crash-rider-tilt', `${tiltDeg}deg`);
+    chart.style.setProperty('--crash-rider-ax', String(CRASH_RIDER_ANCHOR_AX));
+    chart.style.setProperty('--crash-rider-ay', String(CRASH_RIDER_ANCHOR_AY));
+
+    let src = '';
+    let on = false;
+    if (crashRuntime.active && !crashRuntime.crashed) {
+      src =
+        crashRuntime.mult >= CRASH_RIDER_HOT_MULT ? CRASH_RIDER_ART.farmHot : CRASH_RIDER_ART.farm;
+      on = true;
+    } else if (crashRuntime.crashed) {
+      src = CRASH_RIDER_ART.lose;
+      on = true;
+    } else if (crashRuntime.riderCelebrate) {
+      src = CRASH_RIDER_ART.win;
+      on = true;
+    }
+
+    if (!on) {
+      crashRiderHide();
+      return false;
+    }
+
+    rider.hidden = false;
+    rider.src = src;
+    rider.alt = '';
+    return true;
+  }
+
+  /** Map multiplier → chart Y; multCap expands the vertical scale so the trace uses the panel. */
+  function crashChartYFromMult(mult, multCap) {
+    const cap = Math.min(
+      CRASH_CHART_MULT_VIS_MAX,
+      typeof multCap === 'number' && multCap > 1 ? multCap : CRASH_CHART_MULT_VIS_MAX
+    );
+    const yBottom = 52;
+    const ySpan = yBottom - CRASH_CHART_Y_VIEW_TOP;
+    const mx = cap - 1;
+    const clamped = Math.min(Math.max(mult, 1), cap);
+    const t = (clamped - 1) / mx;
+    const skew = Math.pow(t, CRASH_CHART_Y_CURVE);
+    return yBottom - skew * ySpan;
+  }
+
+  function crashChartMultCapForHist(hist) {
+    let run = 1;
+    for (let i = 0; i < hist.length; i++) {
+      if (hist[i] > run) run = hist[i];
+    }
+    const padded = Math.ceil(run * 118) / 100;
+    return Math.min(CRASH_CHART_MULT_VIS_MAX, Math.max(3.05, padded));
+  }
+
+  function crashChartClearDynamicGrids() {
+    const g = document.getElementById('crash-chart-hgrid');
+    if (!g) return;
+    while (g.firstChild) g.removeChild(g.firstChild);
+  }
+
+  function crashChartRebuildDynamicGrids(multCap) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const gH = document.getElementById('crash-chart-hgrid');
+    const yBottom = 52;
+    const yTopPlot = CRASH_CHART_Y_VIEW_TOP - 2;
+    const xPlotEnd = 97.5;
+
+    if (!gH) return;
+    while (gH.firstChild) gH.removeChild(gH.firstChild);
+    [0.22, 0.45, 0.68].forEach((u) => {
+      const mm = 1 + (multCap - 1) * u;
+      const y = crashChartYFromMult(mm, multCap);
+      if (y <= yTopPlot + 0.5 || y >= yBottom - 0.35) return;
+      const ln = document.createElementNS(svgNS, 'line');
+      ln.setAttribute('x1', '1.75');
+      ln.setAttribute('x2', String(xPlotEnd));
+      ln.setAttribute('y1', String(y));
+      ln.setAttribute('y2', String(y));
+      ln.setAttribute('class', 'games-crash-chart-dyn-grid games-crash-chart-dyn-grid--h');
+      gH.appendChild(ln);
+    });
+  }
+
+  function crashChartWobbleOff() {
+    try {
+      return (
+        typeof window !== 'undefined' &&
+        window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function crashChartTrimTrailEnd(pts, trim) {
+    if (!pts?.length || trim <= 0) return pts.slice();
+    if (pts.length < 2) return pts.slice();
+    const pb = pts[pts.length - 1].split(',').map(Number);
+    const pa = pts[pts.length - 2].split(',').map(Number);
+    let dx = pb[0] - pa[0];
+    let dy = pb[1] - pa[1];
+    const len = Math.hypot(dx, dy);
+    if (len < 0.015) return pts.slice();
+    const frac = trim / len;
+    if (frac >= 1) {
+      const rest = pts.slice(0, -1);
+      return rest.length >= 2 ? rest : pts.slice();
+    }
+    dx /= len;
+    dy /= len;
+    const nx = pb[0] - dx * trim;
+    const ny = pb[1] - dy * trim;
+    return [...pts.slice(0, -1), `${nx},${ny}`];
+  }
+
+  function crashChartSquiggleOffset(i) {
+    if (crashChartWobbleOff()) return { dx: 0, dy: 0 };
+    const a = crashRuntime.wobblePhaseA;
+    const b = crashRuntime.wobblePhaseB;
+    if (a == null || b == null) return { dx: 0, dy: 0 };
+    let dy =
+      Math.sin(i * CRASH_CHART_WOBBLE_I1 + a) * CRASH_CHART_WOBBLE_AMP_Y1 +
+      Math.sin(i * CRASH_CHART_WOBBLE_I2 + b) * CRASH_CHART_WOBBLE_AMP_Y2;
+    let dx = Math.cos(i * CRASH_CHART_WOBBLE_IX + a * 0.65) * CRASH_CHART_WOBBLE_AMP_X;
+    const damp = Math.min(1, 7 / (7 + Math.max(0, i)));
+    dx *= damp;
+    dy *= damp;
+    return { dx, dy };
+  }
+
+  function crashChartRender() {
+    const hist = crashRuntime.multHistory;
+    const line = document.getElementById('crash-chart-line');
+    const fill = document.getElementById('crash-chart-fill');
+    const head = document.getElementById('crash-chart-head');
+    if (!line || !head) return;
+    if (!hist.length) {
+      line.setAttribute('points', '');
+      fill?.setAttribute('points', '');
+      head.setAttribute('opacity', '0');
+      crashRiderHide();
+      crashChartClearDynamicGrids();
+      return;
+    }
+    const n = hist.length;
+    const yBottom = 52;
+    const span = CRASH_CHART_X_RIGHT_CAP - CRASH_CHART_X_LEFT;
+    const headX = CRASH_CHART_X_LEFT + span * CRASH_CHART_X_ASYM * (n / (n + CRASH_CHART_X_TAIL_PAD));
+    const multCap = crashChartMultCapForHist(hist);
+
+    const pts = hist.map((m, i) => {
+      let xFrac;
+      if (n === 1) xFrac = 0.14;
+      else {
+        const u = Math.max(i / (n - 1), 1e-9);
+        xFrac = Math.pow(u, CRASH_CHART_X_EASE);
+      }
+      let x = CRASH_CHART_X_LEFT + (headX - CRASH_CHART_X_LEFT) * xFrac;
+      let y = crashChartYFromMult(m, multCap);
+      const { dx, dy } = crashChartSquiggleOffset(i);
+      x += dx;
+      y += dy;
+      return `${x},${y}`;
+    });
+    const ptsDraw = crashChartTrimTrailEnd(pts, CRASH_CHART_TAIL_TRIM);
+    const pointsAttr = ptsDraw.join(' ');
+    line.setAttribute('points', pointsAttr);
+    if (fill && ptsDraw.length >= 2) {
+      const first = ptsDraw[0].split(',').map(Number);
+      const last = ptsDraw[ptsDraw.length - 1].split(',').map(Number);
+      fill.setAttribute(
+        'points',
+        `${pointsAttr} ${last[0]},${yBottom} ${first[0]},${yBottom}`
+      );
+    } else if (fill && ptsDraw.length === 1) {
+      const [sx, sy] = ptsDraw[0].split(',').map(Number);
+      fill.setAttribute('points', `${sx},${sy} ${sx},${yBottom} ${sx},${yBottom}`);
+    } else if (fill) {
+      fill.setAttribute('points', '');
+    }
+    const lastXY = ptsDraw[ptsDraw.length - 1].split(',').map(Number);
+    head.setAttribute('cx', String(lastXY[0]));
+    head.setAttribute('cy', String(lastXY[1]));
+    const riderOn = crashRiderSync(ptsDraw, lastXY);
+    head.setAttribute('opacity', riderOn ? '0' : '1');
+
+    crashChartRebuildDynamicGrids(multCap);
+  }
+
+  function crashChartInitRound() {
+    crashRuntime.multHistory = [1];
+    crashRuntime.wobblePhaseA = Math.random() * Math.PI * 2;
+    crashRuntime.wobblePhaseB = Math.random() * Math.PI * 2;
+    crashRuntime.riderCelebrate = false;
+    const wrap = document.querySelector('.games-crash-chart');
+    wrap?.classList.remove('games-crash-chart--bust');
+    crashChartSetRunning(true);
+    crashChartRender();
+  }
+
+  function crashChartSetBust() {
+    crashChartSetRunning(false);
+    document.querySelector('.games-crash-chart')?.classList.add('games-crash-chart--bust');
+  }
+
+  function sampleCrashPoint() {
+    const u = Math.max(1e-9, Math.random());
+    let m = 0.97 / Math.pow(u, 0.92);
+    m = Math.min(88, Math.max(1.02, m));
+    return Math.round(m * 100) / 100;
+  }
+
+  function crashTick() {
+    if (!crashRuntime.active || crashRuntime.crashed) return;
+    crashRuntime.mult += 0.012 + crashRuntime.mult * 0.0048 + Math.random() * 0.01;
+    crashRuntime.mult = Math.round(crashRuntime.mult * 100) / 100;
+    const el = document.getElementById('crash-mult-display');
+    if (el) el.textContent = crashFmtAura(crashRuntime.mult);
+    crashRuntime.multHistory.push(crashRuntime.mult);
+    while (crashRuntime.multHistory.length > CRASH_CHART_MAX_POINTS) {
+      crashRuntime.multHistory.shift();
+    }
+    crashChartRender();
+    if (crashRuntime.mult >= crashRuntime.crashPoint) {
+      crashBust();
+      return;
+    }
+    crashRuntime.timerId = window.setTimeout(crashTick, CRASH_TICK_MS);
+  }
+
+  function crashUpdatePrimaryBtn(running) {
+    const btn = document.getElementById('crash-main-btn');
+    if (!btn) return;
+    if (running) {
+      btn.textContent = 'BANK AURA';
+      btn.classList.add('games-crash-btn--cashout');
+      btn.removeAttribute('disabled');
+      btn.setAttribute('aria-pressed', 'true');
+      btn.setAttribute(
+        'aria-label',
+        'Bank your aura now at the current multiplier and lock in FUQ payout'
+      );
+    } else {
+      btn.textContent = 'FARM AURA';
+      btn.classList.remove('games-crash-btn--cashout');
+      btn.removeAttribute('disabled');
+      btn.setAttribute('aria-pressed', 'false');
+      btn.setAttribute('aria-label', 'Start aura farming with the selected stake');
+    }
+  }
+
+  function crashBust() {
+    crashRuntime.active = false;
+    crashRuntime.crashed = true;
+    if (crashRuntime.timerId) {
+      clearTimeout(crashRuntime.timerId);
+      crashRuntime.timerId = null;
+    }
+    crashUpdatePrimaryBtn(false);
+    applyArcadeWinStreak('crash', 'lose');
+    const wBust = loadWallet();
+    const bustAt = crashRuntime.crashPoint.toFixed(2);
+    const stacked = crashRuntime.mult.toFixed(2);
+    pushHistory(
+      'crash',
+      `Aura Check @ ${bustAt}× — stacked ${stacked}×`,
+      -crashRuntime.bet,
+      wBust.tokens
+    );
+    setGameOutcome(
+      'crash',
+      'lose',
+      `Aura Check hit at ${bustAt}× - you had ${stacked}× aura stacked`
+    );
+    addRakebackFromLoss(-crashRuntime.bet);
+    arcadeNoteRound('crash', crashRuntime.bet);
+    crashChartSetBust();
+    const el = document.getElementById('crash-mult-display');
+    if (el) el.textContent = 'RIP AURA';
+    crashRuntime.riderCelebrate = false;
+    crashChartRender();
+    wireBetRadiosState('crash-bet', !crashRuntime.active);
+  }
+
+  function crashCashOut() {
+    if (!crashRuntime.active || crashRuntime.crashed) return;
+    const bet = crashRuntime.bet;
+    const mult = crashRuntime.mult;
+    crashRuntime.active = false;
+    if (crashRuntime.timerId) {
+      clearTimeout(crashRuntime.timerId);
+      crashRuntime.timerId = null;
+    }
+    crashUpdatePrimaryBtn(false);
+    crashChartSetRunning(false);
+    wireBetRadiosState('crash-bet', true);
+    const payout = crashCashPayoutTokens(bet, mult);
+    const w = loadWallet();
+    w.tokens += payout;
+    saveWallet(w);
+    renderWallet(w);
+    const net = payout - bet;
+    arcadeNoteSurgeCash(mult);
+    arcadeNoteRound('crash', bet);
+    bumpWeeklyFuqEarnedFromGames(net);
+    if (net > 0) {
+      arcadeNoteCrashProfitBank();
+      arcadeNoteWin('crash');
+    }
+    const mood = net > 0 ? 'win' : net < 0 ? 'lose' : 'tie';
+    {
+      const st = loadWinStreaks();
+      if (st.crash) {
+        st.crash.peakBankMult = Math.max(Number(st.crash.peakBankMult) || 0, mult);
+        saveWinStreaks(st);
+      }
+    }
+    applyArcadeWinStreak('crash', mood === 'tie' ? 'tie' : mood);
+    pushHistory(
+      'crash',
+      net > 0
+        ? `Farmed ${mult.toFixed(2)}× · +${net} FUQ (paid ${payout})`
+        : net < 0
+          ? `Farmed ${mult.toFixed(2)}× · ${net} FUQ (paid ${payout})`
+          : `Farmed ${mult.toFixed(2)}× · even (paid ${payout})`,
+      net,
+      w.tokens
+    );
+    setGameOutcome(
+      'crash',
+      mood,
+      net > 0
+        ? `Farmed ${mult.toFixed(2)}× aura. +${net} FUQ (paid ${payout})`
+        : net < 0
+          ? `Farmed ${mult.toFixed(2)}× aura. ${net} FUQ (paid ${payout})`
+          : `Farmed ${mult.toFixed(2)}× aura. break-even (${payout} FUQ)`
+    );
+    const el = document.getElementById('crash-mult-display');
+    if (el) el.textContent = crashFmtAura(mult);
+    crashRuntime.riderCelebrate = net >= 0;
+    crashChartRender();
+  }
+
+  function wireBetRadiosState(name, enabled) {
+    document.querySelectorAll(`input[name="${name}"]`).forEach((inp) => {
+      inp.disabled = !enabled;
+    });
+  }
+
+  function crashStartRound() {
+    if (crashRuntime.active) return;
+    crashRuntime.riderCelebrate = false;
+    const bet = getBetAmount('crash-bet');
+    const w = loadWallet();
+    if (w.tokens < bet) {
+      setGameOutcome('crash', 'pending', 'Need more FUQ to farm aura.');
+      return;
+    }
+    w.tokens -= bet;
+    saveWallet(w);
+    renderWallet(w);
+    arcadeNoteBet(bet);
+    crashRuntime.bet = bet;
+    crashRuntime.crashPoint = sampleCrashPoint();
+    crashRuntime.mult = 1;
+    crashRuntime.crashed = false;
+    crashRuntime.active = true;
+    crashUpdatePrimaryBtn(true);
+    wireBetRadiosState('crash-bet', false);
+    setGameOutcome('crash', 'pending', 'Aura climbing… farm carefully.');
+    const el = document.getElementById('crash-mult-display');
+    if (el) el.textContent = crashFmtAura(1);
+    crashChartInitRound();
+    crashRuntime.timerId = window.setTimeout(crashTick, CRASH_TICK_MS);
+  }
+
+  function initCrashGame() {
+    document.getElementById('crash-main-btn')?.addEventListener('click', () => {
+      if (crashRuntime.active && !crashRuntime.crashed) crashCashOut();
+      else crashStartRound();
+    });
+    wireBetRadios('crash-bet', 'crash');
+    crashUpdatePrimaryBtn(false);
   }
 
   function loadWallet() {
@@ -744,12 +2177,68 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
   }
 
+  function defaultRakebackState() {
+    return { pool: 0, claimedTotal: 0 };
+  }
+
+  function loadRakebackState() {
+    try {
+      const raw = localStorage.getItem(RAKEBACK_STATE_KEY);
+      if (!raw) return defaultRakebackState();
+      const o = JSON.parse(raw);
+      const poolNum = Number(o.pool);
+      return {
+        // Keep fractional accrual so small losses still build toward claimable rakeback.
+        pool: Number.isFinite(poolNum) ? Math.max(0, Math.round(poolNum * 100) / 100) : 0,
+        claimedTotal: Math.max(0, Math.floor(Number(o.claimedTotal)) || 0)
+      };
+    } catch {
+      return defaultRakebackState();
+    }
+  }
+
+  function saveRakebackState(s) {
+    const poolNum = Number(s.pool);
+    const out = {
+      pool: Number.isFinite(poolNum) ? Math.max(0, Math.round(poolNum * 100) / 100) : 0,
+      claimedTotal: Math.max(0, Math.floor(Number(s.claimedTotal)) || 0)
+    };
+    localStorage.setItem(RAKEBACK_STATE_KEY, JSON.stringify(out));
+  }
+
+  /** Rakeback = 10% of net losses with fractional carry; claims are whole FUQ only. */
+  function addRakebackFromLoss(net) {
+    const n = Number(net) || 0;
+    if (n >= 0) return;
+    const add = Math.abs(n) * 0.1;
+    if (add <= 0) return;
+    const st = loadRakebackState();
+    st.pool = Math.max(0, Math.round((st.pool + add) * 100) / 100);
+    saveRakebackState(st);
+    renderRakeback(st);
+  }
+
+  function claimRakeback() {
+    const st = loadRakebackState();
+    const amount = Math.max(0, Math.floor(Number(st.pool) || 0));
+    if (amount < 1) return null;
+    const w = loadWallet();
+    w.tokens += amount;
+    saveWallet(w);
+    st.pool = Math.max(0, Math.round((st.pool - amount) * 100) / 100);
+    st.claimedTotal += amount;
+    saveRakebackState(st);
+    return { amount, wallet: w, rakeback: st };
+  }
+
   function defaultWinStreaks() {
     return {
       coin: { best: 0 },
       rps: { current: 0, best: 0 },
       slots: { current: 0, best: 0 },
-      bj: { current: 0, best: 0 }
+      bj: { current: 0, best: 0 },
+      /** best = longest streak of profitable banks; peakBankMult = best multiplier locked by BANK */
+      crash: { current: 0, best: 0, peakBankMult: 0 }
     };
   }
 
@@ -766,6 +2255,13 @@
         out[slug].current = Math.max(0, Math.floor(Number(row.current)) || 0);
         out[slug].best = Math.max(0, Math.floor(Number(row.best)) || 0);
       });
+      {
+        const row = o.crash || {};
+        out.crash.current = Math.max(0, Math.floor(Number(row.current)) || 0);
+        out.crash.best = Math.max(0, Math.floor(Number(row.best)) || 0);
+        const pm = Number(row.peakBankMult);
+        out.crash.peakBankMult = Number.isFinite(pm) && pm > 0 ? Math.round(pm * 100) / 100 : 0;
+      }
       return out;
     } catch {
       return defaultWinStreaks();
@@ -784,7 +2280,7 @@
 
   function applyArcadeWinStreak(slug, mood) {
     if (mood === 'pending') return;
-    if (slug !== 'bj' && slug !== 'rps' && slug !== 'slots') return;
+    if (slug !== 'bj' && slug !== 'rps' && slug !== 'slots' && slug !== 'crash') return;
     const s = loadWinStreaks();
     const row = s[slug];
     if (!row) return;
@@ -809,6 +2305,14 @@
     if (coinBestEl) {
       coinBestEl.textContent = String(Math.max(s.coin.best || 0, w.coinStreak || 0));
     }
+    const peakMultEl = document.getElementById('crash-peak-bank-mult');
+    if (peakMultEl) {
+      const pm = Number(s.crash?.peakBankMult) || 0;
+      peakMultEl.textContent = pm > 0 ? `${pm.toFixed(2)}×` : '—';
+    }
+    const curCrash = document.getElementById('crash-win-streak-current');
+    if (curCrash && s.crash) curCrash.textContent = String(s.crash.current);
+
     const rows = [
       ['bj', 'bj-win-streak-current', 'bj-win-streak-best'],
       ['rps', 'rps-win-streak-current', 'rps-win-streak-best'],
@@ -876,7 +2380,17 @@
       container.appendChild(p);
       return;
     }
-    const HISTORY_GAME_CLASS = { coin: 'coin', rps: 'rps', slots: 'slots', bj: 'bj', daily: 'daily' };
+    const HISTORY_GAME_CLASS = {
+      coin: 'coin',
+      rps: 'rps',
+      slots: 'slots',
+      bj: 'bj',
+      crash: 'crash',
+      daily: 'daily',
+      rakeback: 'daily',
+      quest: 'quest',
+      quest_weekly: 'quest'
+    };
 
     list.forEach((row) => {
       const d = document.createElement('div');
@@ -930,6 +2444,10 @@
     };
     if (slug === 'coin' && mood === 'lose') {
       badge.textContent = 'MISS';
+    } else if (slug === 'crash' && mood === 'win') {
+      badge.textContent = 'Fuq Yeah';
+    } else if (slug === 'crash' && mood === 'lose') {
+      badge.textContent = 'RIP';
     } else {
       badge.textContent = labels[mood] || '···';
     }
@@ -954,6 +2472,33 @@
     }
   }
 
+  function renderRakeback(st) {
+    const state = st || loadRakebackState();
+    const poolRaw = Number(state.pool) || 0;
+    const pool = Math.max(0, Math.floor(poolRaw));
+    const poolDisplay =
+      poolRaw > 0 && poolRaw < 1
+        ? poolRaw.toFixed(1)
+        : Number.isInteger(poolRaw)
+          ? pool.toLocaleString()
+          : poolRaw.toFixed(1);
+    const claimed = Math.max(0, Math.floor(Number(state.claimedTotal)) || 0);
+    const hasPool = pool > 0;
+    document.querySelectorAll('.js-rakeback-pool').forEach((el) => {
+      el.textContent = poolDisplay;
+    });
+    document.querySelectorAll('.js-rakeback-claimed').forEach((el) => {
+      el.textContent = claimed.toLocaleString();
+    });
+    const panel = document.querySelector('.games-rakeback-stage');
+    if (panel) panel.classList.toggle('games-rakeback-stage--active', hasPool);
+    const btn = document.getElementById('games-rakeback-claim');
+    if (btn) {
+      btn.disabled = !hasPool;
+      btn.textContent = hasPool ? `CLAIM ${pool} RAKEBACK` : 'NO RAKEBACK YET';
+    }
+  }
+
   function renderWallet(w) {
     const text = String(w.tokens);
     document.querySelectorAll('.js-games-balance').forEach((el) => {
@@ -966,10 +2511,14 @@
       nextBonus.textContent = String(Math.min(w.coinStreak, MAX_COIN_STREAK_BONUS));
     }
     const claimed = w.lastDaily === todayKey();
+    document.querySelectorAll('.js-daily-bonus-display').forEach((el) => {
+      el.textContent = String(DAILY_BONUS);
+    });
     document.querySelectorAll('.js-games-daily').forEach((btn) => {
       btn.disabled = claimed;
       btn.textContent = claimed ? 'DAILY BONUS CLAIMED' : `CLAIM +${DAILY_BONUS} DAILY`;
     });
+    renderRakeback();
   }
 
   function wireBetRadios(name, prefix) {
@@ -1008,24 +2557,81 @@
       btn.addEventListener('click', claimDailyBonus);
     });
 
+    document.getElementById('games-rakeback-claim')?.addEventListener('click', () => {
+      const out = claimRakeback();
+      if (!out) return;
+      renderWallet(out.wallet);
+      pushHistory('rakeback', `Claimed ${out.amount} FUQ`, out.amount, out.wallet.tokens);
+    });
+
     document.getElementById('games-reset-btn')?.addEventListener('click', () => {
-      if (!window.confirm('Reset your FUQ wallet balance on this device? Coins go back to 100.')) return;
+      if (!window.confirm('Reset balance, streaks, and all quest progress on this device? You will restart at 200 FUQ.')) return;
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(WIN_STREAK_KEY);
+      localStorage.removeItem(QUEST_STATE_KEY);
+      localStorage.removeItem(WEEKLY_QUEST_STATE_KEY);
+      localStorage.removeItem(RAKEBACK_STATE_KEY);
       clearHistory();
       const fresh = loadWallet();
       renderWallet(fresh);
       renderWinStreakBars();
-      pushHistory('reset', 'Wallet cleared', 0, fresh.tokens);
+      renderQuestPanels();
+      pushHistory('reset', 'Balance, streaks, quests, and rakeback reset', 0, fresh.tokens);
     });
 
     document.getElementById('games-history-clear')?.addEventListener('click', () => {
       if (!window.confirm('Clear play history log only? (coins stay.)')) return;
       clearHistory();
     });
+
+    renderQuestPanels();
+  }
+
+  function coinNormRotateYDeg(deg) {
+    let n = deg % 360;
+    if (n < 0) n += 360;
+    return n;
+  }
+
+  function gamesPrefersReducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  function coinFlipReducedMotion() {
+    return gamesPrefersReducedMotion();
+  }
+
+  function setRpsControlsDisabled(disabled) {
+    const btn = document.getElementById('rps-play-btn');
+    if (btn) {
+      btn.disabled = disabled;
+      btn.setAttribute('aria-busy', disabled ? 'true' : 'false');
+    }
+    document.querySelectorAll('#games-panel-rps input[type="radio"]').forEach((inp) => {
+      inp.disabled = disabled;
+    });
+  }
+
+  function syncRpsBattlePlayerGlyph() {
+    const pickEl = document.querySelector('input[name="rps-choice"]:checked');
+    const pick = pickEl ? pickEl.value : 'rock';
+    const pl = document.getElementById('rps-battle-player');
+    if (pl && RPS_GLYPHS[pick]) pl.textContent = RPS_GLYPHS[pick];
+  }
+
+  function setCoinFlipControlsDisabled(disabled) {
+    const flipBtn = document.getElementById('coin-flip-btn');
+    if (flipBtn) {
+      flipBtn.disabled = disabled;
+      flipBtn.setAttribute('aria-busy', disabled ? 'true' : 'false');
+    }
+    document.querySelectorAll('#games-panel-coin input[type="radio"]').forEach((inp) => {
+      inp.disabled = disabled;
+    });
   }
 
   function playCoinFlip() {
+    if (coinFlipAnimating) return;
     const pickEl = document.querySelector('input[name="coin-side"]:checked');
     const pick = pickEl ? pickEl.value : 'heads';
     const bet = getBetAmount('coin-bet');
@@ -1036,56 +2642,106 @@
       return;
     }
     w.tokens -= bet;
-    const outcome = Math.random() < 0.5 ? 'heads' : 'tails';
-    const win = outcome === pick;
-    const display = document.getElementById('coin-display');
-    if (display) {
-      display.textContent = outcome === 'heads' ? '● HEADS' : '○ TAILS';
-      display.classList.remove('games-flash');
-      void display.offsetWidth;
-      display.classList.add('games-flash');
-    }
-    let detail = `${pick.toUpperCase()} vs ${outcome.toUpperCase()} · bet ${bet}`;
-    if (win) {
-      const streakBonus = Math.min(w.coinStreak, MAX_COIN_STREAK_BONUS);
-      w.coinStreak += 1;
-      const payout = bet * 2 + streakBonus;
-      w.tokens += payout;
-      detail += ` · WIN +${payout - bet} net`;
-    } else {
-      w.coinStreak = 0;
-      detail += ' · MISS';
-    }
     saveWallet(w);
     renderWallet(w);
-    pushHistory('coin', detail, w.tokens - before, w.tokens);
-    const net = w.tokens - before;
-    if (win) {
-      syncCoinBestFromWallet(w);
-      setGameOutcome('coin', 'win', `You called ${pick.toUpperCase()} · landed ${outcome.toUpperCase()} · ${net >= 0 ? '+' : ''}${net} coins`);
-    } else {
-      setGameOutcome('coin', 'lose', `Landed ${outcome.toUpperCase()} · ${net} coins · streak reset`);
-    }
-    renderWinStreakBars();
-  }
+    const outcome = Math.random() < 0.5 ? 'heads' : 'tails';
+    const win = outcome === pick;
 
-  function playRps() {
-    const pickEl = document.querySelector('input[name="rps-choice"]:checked');
-    const pick = pickEl ? pickEl.value : 'rock';
-    const bet = getBetAmount('rps-bet');
-    const w = loadWallet();
-    const before = w.tokens;
-    if (w.tokens < bet) {
-      setGameOutcome('rps', 'pending', 'Need more FUQ coins for that bet.');
+    const shell = document.getElementById('coin-display');
+    const coin3d = document.getElementById('games-coin-3d');
+
+    function settleCoinResult() {
+      let detail = `${pick.toUpperCase()} vs ${outcome.toUpperCase()} · bet ${bet}`;
+      if (win) {
+        const streakBonus = Math.min(w.coinStreak, MAX_COIN_STREAK_BONUS);
+        w.coinStreak += 1;
+        const payout = bet * 2 + streakBonus;
+        w.tokens += payout;
+        detail += ` · WIN +${payout - bet} net`;
+      } else {
+        w.coinStreak = 0;
+        detail += ' · MISS';
+      }
+      saveWallet(w);
+      renderWallet(w);
+      arcadeNoteBet(bet);
+      arcadeNoteRound('coin', bet);
+      if (win) arcadeNoteWin('coin');
+      const net = w.tokens - before;
+      addRakebackFromLoss(net);
+      bumpWeeklyFuqEarnedFromGames(net);
+      pushHistory('coin', detail, net, w.tokens);
+      if (win) {
+        syncCoinBestFromWallet(w);
+        setGameOutcome('coin', 'win', `You called ${pick.toUpperCase()} · landed ${outcome.toUpperCase()} · ${net >= 0 ? '+' : ''}${net} coins`);
+      } else {
+        setGameOutcome('coin', 'lose', `Landed ${outcome.toUpperCase()} · ${net} coins · streak reset`);
+      }
+      renderWinStreakBars();
+      coinFlipAnimating = false;
+      setCoinFlipControlsDisabled(false);
+    }
+
+    function flashCoinShell() {
+      if (!shell) return;
+      shell.classList.remove('games-flash');
+      void shell.offsetWidth;
+      shell.classList.add('games-flash');
+    }
+
+    if (!coin3d || coinFlipReducedMotion()) {
+      flashCoinShell();
+      settleCoinResult();
       return;
     }
-    w.tokens -= bet;
-    const choices = ['rock', 'paper', 'scissors'];
-    const house = choices[Math.floor(Math.random() * 3)];
+
+    coinFlipAnimating = true;
+    setCoinFlipControlsDisabled(true);
+
+    const landingY = outcome === 'heads' ? 0 : 180;
+    const prevTotal = coinFlipYDeg;
+    const currNorm = coinNormRotateYDeg(prevTotal);
+    const spins = 5 + Math.floor(Math.random() * 4);
+    const align = (landingY - currNorm + 360) % 360;
+    const delta = spins * 360 + align;
+    coinFlipYDeg = prevTotal + delta;
+
+    const ease = 'cubic-bezier(0.2, 0.65, 0.25, 1)';
+    let finished = false;
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      flashCoinShell();
+      settleCoinResult();
+    };
+
+    coin3d.style.transition = 'none';
+    coin3d.style.transform = `rotateY(${prevTotal}deg)`;
+    coin3d.getBoundingClientRect();
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        coin3d.style.transition = `transform ${COIN_FLIP_DURATION_MS}ms ${ease}`;
+        coin3d.style.transform = `rotateY(${coinFlipYDeg}deg)`;
+      });
+    });
+
+    const timer = window.setTimeout(cleanup, COIN_FLIP_DURATION_MS + 120);
+
+    function onTransitionEnd(ev) {
+      if (ev.target !== coin3d || ev.propertyName !== 'transform') return;
+      coin3d.removeEventListener('transitionend', onTransitionEnd);
+      window.clearTimeout(timer);
+      cleanup();
+    }
+    coin3d.addEventListener('transitionend', onTransitionEnd);
+  }
+
+  function finalizeRpsRound(w, before, pick, house, bet) {
     const labels = { rock: '✊ ROCK', paper: '✋ PAPER', scissors: '✌ SCISSORS' };
     const short = { rock: 'R', paper: 'P', scissors: 'S' };
     const houseEl = document.getElementById('rps-house');
-    if (houseEl) houseEl.textContent = labels[house];
+    const houseEmojiEl = document.getElementById('rps-battle-house');
 
     let delta = 0;
     let detail = `${short[pick]} vs ${short[house]} · ${bet}`;
@@ -1103,10 +2759,18 @@
       detail += ' · LOSE';
     }
     w.tokens += delta;
+    if (houseEl) houseEl.textContent = `House plays ${labels[house]}`;
+    if (houseEmojiEl) houseEmojiEl.textContent = RPS_GLYPHS[house];
+
     saveWallet(w);
     renderWallet(w);
-    pushHistory('rps', detail, w.tokens - before, w.tokens);
+    arcadeNoteBet(bet);
+    arcadeNoteRound('rps', bet);
+    if (delta === bet * 2) arcadeNoteWin('rps');
     const net = w.tokens - before;
+    addRakebackFromLoss(net);
+    bumpWeeklyFuqEarnedFromGames(net);
+    pushHistory('rps', detail, net, w.tokens);
     if (pick === house) {
       applyArcadeWinStreak('rps', 'tie');
       setGameOutcome('rps', 'tie', `Both played ${pick.toUpperCase()} · bet returned`);
@@ -1117,6 +2781,79 @@
       applyArcadeWinStreak('rps', 'lose');
       setGameOutcome('rps', 'lose', `Lost to ${house.toUpperCase()} · ${net} coins`);
     }
+    rpsRoundBusy = false;
+    setRpsControlsDisabled(false);
+    if (houseEmojiEl && houseEmojiEl.classList.contains('games-rps-battle-house-land')) {
+      window.setTimeout(() => {
+        houseEmojiEl.classList.remove('games-rps-battle-house-land');
+      }, 340);
+    }
+  }
+
+  function playRps() {
+    if (rpsRoundBusy) return;
+    const pickEl = document.querySelector('input[name="rps-choice"]:checked');
+    const pick = pickEl ? pickEl.value : 'rock';
+    const bet = getBetAmount('rps-bet');
+    const w = loadWallet();
+    const before = w.tokens;
+    if (w.tokens < bet) {
+      setGameOutcome('rps', 'pending', 'Need more FUQ coins for that bet.');
+      return;
+    }
+    const houseEmojiEl = document.getElementById('rps-battle-house');
+    const houseTxtEl = document.getElementById('rps-house');
+    if (houseEmojiEl) {
+      houseEmojiEl.classList.remove('games-rps-battle-house-land');
+      houseEmojiEl.textContent = '⋯';
+    }
+    syncRpsBattlePlayerGlyph();
+
+    w.tokens -= bet;
+    saveWallet(w);
+    renderWallet(w);
+
+    const house = RPS_ORDER[Math.floor(Math.random() * RPS_ORDER.length)];
+
+    rpsRoundBusy = true;
+    setRpsControlsDisabled(true);
+    setGameOutcome('rps', 'pending', `Throwing · bet ${bet} FUQ on the table…`);
+
+    function landAndPay() {
+      if (houseEmojiEl) houseEmojiEl.textContent = RPS_GLYPHS[house];
+      if (gamesPrefersReducedMotion()) {
+        if (houseTxtEl) houseTxtEl.textContent = `House picks…`;
+        finalizeRpsRound(w, before, pick, house, bet);
+        return;
+      }
+      if (houseEmojiEl) {
+        void houseEmojiEl.offsetWidth;
+        houseEmojiEl.classList.add('games-rps-battle-house-land');
+      }
+      window.setTimeout(() => finalizeRpsRound(w, before, pick, house, bet), RPS_LAND_POP_MS);
+    }
+
+    if (gamesPrefersReducedMotion()) {
+      landAndPay();
+      return;
+    }
+
+    let step = 0;
+    const shuffleId = window.setInterval(() => {
+      step += 1;
+      if (!houseEmojiEl) {
+        window.clearInterval(shuffleId);
+        landAndPay();
+        return;
+      }
+      const decoy = RPS_ORDER[step % 3];
+      houseEmojiEl.textContent = RPS_GLYPHS[decoy];
+      if (houseTxtEl) houseTxtEl.textContent = `House: ${houseEmojiEl.textContent} …`;
+      if (step >= RPS_SHUFFLE_STEPS) {
+        window.clearInterval(shuffleId);
+        landAndPay();
+      }
+    }, RPS_SHUFFLE_TICK_MS);
   }
 
   function renderSlotSymbol(el, symbol) {
@@ -1155,18 +2892,24 @@
     let prize = 0;
     let line = '';
     if (final[0].id === final[1].id && final[1].id === final[2].id) {
-      prize = bet * 8;
+      prize = bet * 10;
       line = `Bet ${bet} · ${formatSlotsLineSymbols(final)} · TRIPLE`;
     } else if (final[0].id === final[1].id) {
-      prize = bet * 2;
+      prize = bet * 3;
       line = `Bet ${bet} · ${formatSlotsLineSymbols(final)} · DOUBLE`;
     } else {
       line = `Bet ${bet} · ${formatSlotsLineSymbols(final)} · MISS`;
     }
     const net = prize - bet;
+    addRakebackFromLoss(net);
     cur.tokens += prize;
     saveWallet(cur);
     renderWallet(cur);
+    arcadeNoteBet(bet);
+    arcadeNoteRound('slots', bet);
+    if (prize > bet) arcadeNoteSlotsLineHit();
+    bumpWeeklyFuqEarnedFromGames(net);
+    if (net > 0) arcadeNoteWin('slots');
     line += ` (${net >= 0 ? '+' : ''}${net})`;
     pushHistory('slots', line, net, cur.tokens);
     const spinBtn = document.getElementById('slots-spin-btn');
@@ -1246,7 +2989,7 @@
     const panels = document.querySelectorAll('.games-tab-panel');
     if (!tabs.length || !panels.length) return;
 
-    const order = ['bj', 'coin', 'rps', 'slots'];
+    const order = ['bj', 'crash', 'coin', 'rps', 'slots'];
 
     function selectTab(id) {
       const next = order.includes(id) ? id : 'bj';
@@ -1291,7 +3034,7 @@
     }
 
     const g = new URLSearchParams(window.location.search).get('game');
-    if (g === 'rps' || g === 'slots' || g === 'coin' || g === 'bj') selectTab(g);
+    if (g === 'rps' || g === 'slots' || g === 'coin' || g === 'bj' || g === 'crash') selectTab(g);
     else selectTab('bj');
   }
 
@@ -1308,8 +3051,13 @@
 
   wireBetRadios('coin-bet', 'coin');
   wireBetRadios('rps-bet', 'rps');
+  document.querySelectorAll('input[name="rps-choice"]').forEach((inp) => {
+    inp.addEventListener('change', syncRpsBattlePlayerGlyph);
+  });
+  syncRpsBattlePlayerGlyph();
   wireBetRadios('slots-bet', 'slots');
   wireBetRadios('bj-bet', 'bj');
+  wireBetRadios('crash-bet', 'crash');
 
   function initHistoryDetailsOpen() {
     const el = document.getElementById('games-history-details');
@@ -1323,7 +3071,10 @@
   }
 
   initWalletUi();
+  initQuestCollapseControls();
+  initGameRulesDisclosures();
   initHistoryDetailsOpen();
   initBlackjack();
+  initCrashGame();
   initGameTabs();
 })();

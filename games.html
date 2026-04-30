@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#39ff14">
-  <meta name="description" content="FuqMeA mini-games — coin flip, RPS, slots, and blackjack for fun FUQ coins">
+  <meta name="description" content="FuqMeA arcade — aura farm (crash-style), blackjack, coin flip, RPS & slots · fun FUQ tokens">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com • GAMES</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.20">
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.37">
 </head>
 <body class="games-page">
   <header>
@@ -75,18 +75,54 @@
         <div class="games-stage-balance" aria-live="polite">
           <div class="games-stage-balance-main">
             <span class="games-stage-balance-label">FUQ Balance</span>
-            <span class="games-stage-balance-value js-games-balance" id="games-balance">100</span>
+            <span class="games-stage-balance-value js-games-balance" id="games-balance">200</span>
           </div>
-          <button type="button" class="games-stage-reset" id="games-reset-btn" title="Reset your FUQ wallet balance on this device (starts again at 100 coins)" aria-label="Reset wallet balance to 100">Reset balance</button>
+          <button type="button" class="games-stage-reset" id="games-reset-btn" title="Reset balance, streaks, and quest progress on this device (starts again at 200 FUQ)" aria-label="Reset balance, streaks, and challenge progress">Reset all progress</button>
         </div>
 
         <div class="games-daily-stage-wrap" aria-label="Daily bonus">
-          <p class="games-daily-stage-hint"><strong>+25</strong> FUQ · daily</p>
-          <button type="button" class="button games-wallet-btn js-games-daily games-daily-stage-btn" id="games-daily-btn-stage">CLAIM +25 DAILY</button>
+          <p class="games-daily-stage-hint"><strong>+<span class="js-daily-bonus-display">—</span></strong> FUQ · daily</p>
+          <button type="button" class="button games-wallet-btn js-games-daily games-daily-stage-btn" id="games-daily-btn-stage">CLAIM DAILY</button>
         </div>
+
+        <section class="games-rakeback-stage" aria-label="Rakeback">
+          <div class="games-rakeback-row">
+            <span class="games-rakeback-label">Rakeback pool</span>
+            <strong class="games-rakeback-val"><span class="js-rakeback-pool">0</span> FUQ</strong>
+          </div>
+          <div class="games-rakeback-row games-rakeback-row--sub">
+            <span class="games-rakeback-label">Claimed total</span>
+            <span class="games-rakeback-sub"><span class="js-rakeback-claimed">0</span> FUQ</span>
+          </div>
+          <button type="button" class="button games-wallet-btn games-rakeback-btn" id="games-rakeback-claim" disabled>NO RAKEBACK YET</button>
+        </section>
+
+        <section class="games-daily-quests" aria-labelledby="daily-quests-title">
+          <div class="games-quest-panel-head">
+            <h2 id="daily-quests-title" class="games-daily-quests-heading">DAILY QUESTS <span id="daily-quests-summary" class="games-quest-summary">0/0</span></h2>
+            <button type="button" class="games-quest-toggle" id="daily-quests-toggle" aria-controls="daily-quests-body" aria-expanded="true">Collapse</button>
+          </div>
+          <div id="daily-quests-body" class="games-quest-body">
+            <p class="games-daily-quests-sub">Four daily quests rotate every day. Midnight reset · device time.</p>
+            <ul id="games-daily-quests-list" class="games-daily-quests-list"></ul>
+          </div>
+          <p id="daily-quests-closed-note" class="games-quest-closed-note" hidden>Come back tomorrow for more.</p>
+        </section>
+
+        <section class="games-weekly-quests" aria-labelledby="weekly-quests-title">
+          <div class="games-quest-panel-head">
+            <h2 id="weekly-quests-title" class="games-weekly-quests-heading">WEEKLY QUESTS <span id="weekly-quests-summary" class="games-quest-summary">0/0</span></h2>
+            <button type="button" class="games-quest-toggle" id="weekly-quests-toggle" aria-controls="weekly-quests-body" aria-expanded="true">Collapse</button>
+          </div>
+          <div id="weekly-quests-body" class="games-quest-body">
+            <p class="games-weekly-quests-sub">Two goals each week (starts Monday locally): stack a big round count, and rack up net FUQ winnings from machines only. Daily bonus / quest payouts don’t count.</p>
+            <ul id="games-weekly-quests-list" class="games-weekly-quests-list"></ul>
+          </div>
+        </section>
 
         <div class="games-tablist" role="tablist" aria-label="Arcade machines">
           <button type="button" class="games-tab games-tab--bj" role="tab" id="games-tab-bj" data-tab="bj" aria-controls="games-panel-bj" aria-selected="true" tabindex="0">BLACKJACK</button>
+          <button type="button" class="games-tab games-tab--crash" role="tab" id="games-tab-crash" data-tab="crash" aria-controls="games-panel-crash" aria-selected="false" tabindex="-1">AURA FARM</button>
           <button type="button" class="games-tab games-tab--coin" role="tab" id="games-tab-coin" data-tab="coin" aria-controls="games-panel-coin" aria-selected="false" tabindex="-1">COIN FLIP</button>
           <button type="button" class="games-tab games-tab--rps" role="tab" id="games-tab-rps" data-tab="rps" aria-controls="games-panel-rps" aria-selected="false" tabindex="-1">RPS</button>
           <button type="button" class="games-tab games-tab--slots" role="tab" id="games-tab-slots" data-tab="slots" aria-controls="games-panel-slots" aria-selected="false" tabindex="-1">SLOTS</button>
@@ -100,7 +136,7 @@
               <span class="games-win-streak-dot" aria-hidden="true">·</span>
               <span class="games-win-streak-pair"><span class="games-win-streak-label">Best</span> <strong id="bj-win-streak-best" class="games-win-streak-val">0</strong></span>
             </div>
-            <p class="games-rules">Fresh deck every hand. Dealer hits <strong>soft 17</strong>. Blackjack pays <strong>3:2</strong>. You can <strong>split</strong> one matching pair (same rank) once. Split aces get <strong>one card each</strong> and auto-stand. Double is allowed on any two-card hand except split aces.</p>
+            <p class="games-rules">Fresh deck every hand. Dealer hits <strong>soft 17</strong>. Blackjack pays <strong>3:2</strong>. You can <strong>split</strong> any active pair repeatedly as long as you keep matching pairs and can cover the stake. <strong>Double</strong> is allowed on split hands too.</p>
             <div class="games-fieldset">
               <span class="games-label">Bet</span>
               <div class="games-bet-row games-bet-row--bj">
@@ -133,9 +169,103 @@
                 <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--split" id="bj-split-btn" title="Split pair into two hands (costs another bet)">SPLIT</button>
               </div>
             </div>
-            <div id="bj-outcome" class="games-outcome games-outcome--pending" aria-live="polite">
-              <span class="games-outcome-badge" id="bj-outcome-badge">···</span>
-              <span class="games-outcome-sub" id="bj-outcome-sub">Pick a bet and deal</span>
+            <div class="games-result-dock">
+              <div id="bj-outcome" class="games-outcome games-outcome--pending games-outcome--dock" aria-live="polite">
+                <span class="games-outcome-badge" id="bj-outcome-badge">···</span>
+                <span class="games-outcome-sub" id="bj-outcome-sub">Pick a bet and deal</span>
+              </div>
+              <div class="games-result-dock-balance" aria-hidden="true">
+                <span class="games-result-dock-balance-label">Balance</span>
+                <span class="games-result-dock-balance-value js-games-balance">200</span>
+                <span class="games-result-dock-balance-unit">FUQ</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="games-tab-panel" id="games-panel-crash" role="tabpanel" aria-labelledby="games-tab-crash" data-tab-panel="crash" hidden>
+          <section class="games-card games-card--crash" aria-labelledby="crash-title">
+            <h2 id="crash-title">AURA FARM</h2>
+            <div class="games-win-streak-bar games-win-streak-bar--crash" aria-label="Aura Farm win streak and highest bank multiplier">
+              <span class="games-win-streak-pair"><span class="games-win-streak-label">Win streak</span> <strong id="crash-win-streak-current" class="games-win-streak-val">0</strong></span>
+              <span class="games-win-streak-dot" aria-hidden="true">·</span>
+              <span class="games-win-streak-pair"><span class="games-win-streak-label">Highest multiplier</span> <strong id="crash-peak-bank-mult" class="games-win-streak-val">—</strong></span>
+            </div>
+            <p class="games-rules">
+              Ride the <strong>aura wave</strong>, king! The longer you surf, the higher the multiplier climbs and the more aura you farm.
+              Hit <strong>BANK AURA</strong> anytime to <strong>lock in</strong> your FUQs (<strong>bet × current multiplier</strong>).
+              Get too greedy and the huzz gets bored — no FUQs for you.
+            </p>
+            <div class="games-fieldset">
+              <span class="games-label">Bet</span>
+              <div class="games-bet-row games-bet-row--crash">
+                <label class="games-bet-active"><input type="radio" name="crash-bet" value="5" id="crash-bet-5" checked> 5</label>
+                <label><input type="radio" name="crash-bet" value="10" id="crash-bet-10"> 10</label>
+                <label><input type="radio" name="crash-bet" value="25" id="crash-bet-25"> 25</label>
+              </div>
+            </div>
+            <div class="games-crash-stage" aria-live="polite">
+              <div class="games-crash-chart" aria-hidden="true">
+                <svg class="games-crash-chart-svg" viewBox="0 0 100 56" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="crash-chart-line-grad" x1="0%" y1="100%" x2="88%" y2="6%" gradientUnits="objectBoundingBox">
+                      <stop offset="0%" stop-color="#ff2a00" />
+                      <stop offset="38%" stop-color="#ff7a28" />
+                      <stop offset="72%" stop-color="#ffc14a" />
+                      <stop offset="100%" stop-color="#fffce6" />
+                    </linearGradient>
+                    <linearGradient id="crash-chart-area-grad" x1="0%" y1="100%" x2="0%" y2="0%">
+                      <stop offset="0%" stop-color="rgba(255,75,38,0.52)" />
+                      <stop offset="55%" stop-color="rgba(255,125,52,0.14)" />
+                      <stop offset="100%" stop-color="rgba(255,55,20,0)" />
+                    </linearGradient>
+                    <radialGradient id="crash-chart-bg-grad" cx="52%" cy="102%" r="95%">
+                      <stop offset="0%" stop-color="rgba(55,22,12,0.55)" />
+                      <stop offset="55%" stop-color="rgba(12,8,14,0.92)" />
+                      <stop offset="100%" stop-color="rgba(4,4,8,0.98)" />
+                    </radialGradient>
+                    <clipPath id="crash-chart-plot-clip" clipPathUnits="userSpaceOnUse">
+                      <rect x="1.5" y="5" width="97" height="48" rx="2" ry="2" />
+                    </clipPath>
+                  </defs>
+                  <rect width="100" height="56" fill="url(#crash-chart-bg-grad)" />
+                  <line class="games-crash-chart-grid-base" x1="0" y1="52" x2="100" y2="52" vector-effect="non-scaling-stroke" />
+                  <g class="games-crash-chart-plot-clip" clip-path="url(#crash-chart-plot-clip)">
+                    <g id="crash-chart-hgrid" class="games-crash-chart-dyn-grids"></g>
+                    <polygon id="crash-chart-fill" class="games-crash-chart-area" points="" fill="url(#crash-chart-area-grad)" />
+                    <polyline id="crash-chart-line" class="games-crash-chart-line" fill="none" stroke="url(#crash-chart-line-grad)" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" points="" />
+                    <circle id="crash-chart-head" class="games-crash-chart-head" r="2.35" cx="2" cy="52" opacity="0" />
+                  </g>
+                </svg>
+                <img
+                  id="crash-rider"
+                  class="games-crash-rider"
+                  src=""
+                  alt=""
+                  width="112"
+                  height="112"
+                  decoding="async"
+                  hidden=""
+                >
+              </div>
+              <div id="crash-mult-display" class="games-crash-mult">1.00× aura</div>
+              <p class="games-crash-hint">
+                <strong>FARM AURA</strong> = impress the huzz • <strong>BANK AURA</strong> = lock in your FUQs before the huzz gets bored
+              </p>
+              <div class="games-crash-actions">
+                <button type="button" class="button games-action-btn games-crash-btn-main" id="crash-main-btn" aria-pressed="false">FARM AURA</button>
+              </div>
+            </div>
+            <div class="games-result-dock">
+              <div id="crash-outcome" class="games-outcome games-outcome--pending games-outcome--dock" aria-live="polite">
+                <span class="games-outcome-badge" id="crash-outcome-badge">···</span>
+                <span class="games-outcome-sub" id="crash-outcome-sub">Pick a stake and farm</span>
+              </div>
+              <div class="games-result-dock-balance" aria-hidden="true">
+                <span class="games-result-dock-balance-label">Balance</span>
+                <span class="games-result-dock-balance-value js-games-balance">200</span>
+                <span class="games-result-dock-balance-unit">FUQ</span>
+              </div>
             </div>
           </section>
         </div>
@@ -153,7 +283,7 @@
                 <span class="games-coin-streak-label">Best win streak</span>
                 <span class="games-coin-streak-num games-coin-streak-num--best" id="games-coin-streak-best">0</span>
               </div>
-              <p class="games-coin-streak-next">Your next win adds <strong id="games-streak-next-bonus">0</strong> bonus FUQ <span class="games-coin-streak-cap">(max +5)</span> on top of the normal 2× payout.</p>
+              <p class="games-coin-streak-next">Your next win adds <strong id="games-streak-next-bonus">0</strong> bonus FUQ <span class="games-coin-streak-cap">(max +3)</span> on top of the normal 2× payout.</p>
             </div>
             <p class="games-rules">Call heads or tails, choose a bet, then flip. A win pays <strong>2× your bet</strong>, plus any streak bonus shown above.</p>
             <div class="games-fieldset">
@@ -171,11 +301,29 @@
                 <label><input type="radio" name="coin-bet" value="25" id="coin-bet-25"> 25</label>
               </div>
             </div>
-            <div class="games-display" id="coin-display" aria-hidden="true">—</div>
+            <div class="games-display games-coin-flip-shell" id="coin-display" aria-hidden="true">
+              <div class="games-coin-flip-stage">
+                <div class="games-coin-3d" id="games-coin-3d">
+                  <div class="games-coin-face games-coin-face--heads" aria-hidden="true">
+                    <span class="games-coin-face-inner"><span class="games-coin-mark games-coin-mark--heads" aria-hidden="true"></span><span class="games-coin-label">HEADS</span></span>
+                  </div>
+                  <div class="games-coin-face games-coin-face--tails" aria-hidden="true">
+                    <span class="games-coin-face-inner"><span class="games-coin-mark games-coin-mark--tails" aria-hidden="true"></span><span class="games-coin-label">TAILS</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
             <button type="button" class="button games-action-btn" id="coin-flip-btn">FLIP</button>
-            <div id="coin-outcome" class="games-outcome games-outcome--pending" aria-live="polite">
-              <span class="games-outcome-badge" id="coin-outcome-badge">···</span>
-              <span class="games-outcome-sub" id="coin-outcome-sub">Flip for a result</span>
+            <div class="games-result-dock">
+              <div id="coin-outcome" class="games-outcome games-outcome--pending games-outcome--dock" aria-live="polite">
+                <span class="games-outcome-badge" id="coin-outcome-badge">···</span>
+                <span class="games-outcome-sub" id="coin-outcome-sub">Flip for a result</span>
+              </div>
+              <div class="games-result-dock-balance" aria-hidden="true">
+                <span class="games-result-dock-balance-label">Balance</span>
+                <span class="games-result-dock-balance-value js-games-balance">200</span>
+                <span class="games-result-dock-balance-unit">FUQ</span>
+              </div>
             </div>
           </section>
         </div>
@@ -205,11 +353,29 @@
                 <label><input type="radio" name="rps-bet" value="25" id="rps-bet-25"> 25</label>
               </div>
             </div>
+            <div class="games-rps-battle" id="games-rps-battle" aria-hidden="true">
+              <div class="games-rps-battle-card games-rps-battle-card--you">
+                <span class="games-rps-battle-label">YOU</span>
+                <span class="games-rps-battle-emoji" id="rps-battle-player">✊</span>
+              </div>
+              <span class="games-rps-battle-vs" aria-hidden="true">VS</span>
+              <div class="games-rps-battle-card games-rps-battle-card--house">
+                <span class="games-rps-battle-label">HOUSE</span>
+                <span class="games-rps-battle-emoji games-rps-battle-emoji-house" id="rps-battle-house">⋯</span>
+              </div>
+            </div>
             <p class="games-house" id="rps-house" aria-live="polite">House: —</p>
             <button type="button" class="button games-action-btn" id="rps-play-btn">PLAY ROUND</button>
-            <div id="rps-outcome" class="games-outcome games-outcome--pending" aria-live="polite">
-              <span class="games-outcome-badge" id="rps-outcome-badge">···</span>
-              <span class="games-outcome-sub" id="rps-outcome-sub">Play a round to see win / lose / tie</span>
+            <div class="games-result-dock">
+              <div id="rps-outcome" class="games-outcome games-outcome--pending games-outcome--dock" aria-live="polite">
+                <span class="games-outcome-badge" id="rps-outcome-badge">···</span>
+                <span class="games-outcome-sub" id="rps-outcome-sub">Play a round to see win / lose / tie</span>
+              </div>
+              <div class="games-result-dock-balance" aria-hidden="true">
+                <span class="games-result-dock-balance-label">Balance</span>
+                <span class="games-result-dock-balance-value js-games-balance">200</span>
+                <span class="games-result-dock-balance-unit">FUQ</span>
+              </div>
             </div>
           </section>
         </div>
@@ -222,7 +388,7 @@
               <span class="games-win-streak-dot" aria-hidden="true">·</span>
               <span class="games-win-streak-pair"><span class="games-win-streak-label">Best</span> <strong id="slots-win-streak-best" class="games-win-streak-val">0</strong></span>
             </div>
-            <p class="games-rules">Three reels. A <strong>triple</strong> match pays <strong>8× your bet</strong>; matching the first two reels pays <strong>2× your bet</strong>.</p>
+            <p class="games-rules">Three reels. A <strong>triple</strong> match pays <strong>10× your bet</strong>; matching the first two reels pays <strong>3× your bet</strong>.</p>
             <div class="games-fieldset">
               <span class="games-label">Bet</span>
               <div class="games-bet-row">
@@ -237,9 +403,16 @@
               <div class="games-slot-reel" id="slot-reel-2">🎰</div>
             </div>
             <button type="button" class="button games-action-btn" id="slots-spin-btn">SPIN</button>
-            <div id="slots-outcome" class="games-outcome games-outcome--pending" aria-live="polite">
-              <span class="games-outcome-badge" id="slots-outcome-badge">···</span>
-              <span class="games-outcome-sub" id="slots-outcome-sub">Spin for a result</span>
+            <div class="games-result-dock">
+              <div id="slots-outcome" class="games-outcome games-outcome--pending games-outcome--dock" aria-live="polite">
+                <span class="games-outcome-badge" id="slots-outcome-badge">···</span>
+                <span class="games-outcome-sub" id="slots-outcome-sub">Spin for a result</span>
+              </div>
+              <div class="games-result-dock-balance" aria-hidden="true">
+                <span class="games-result-dock-balance-label">Balance</span>
+                <span class="games-result-dock-balance-value js-games-balance">200</span>
+                <span class="games-result-dock-balance-unit">FUQ</span>
+              </div>
             </div>
           </section>
         </div>
@@ -252,8 +425,8 @@
     <p class="legal-footer"><a href="legal.html">Legal</a></p>
   </div>
 
-  <script src="assets/js/hub.js?v=2.1.5" defer></script>
-  <script src="assets/js/init.js?v=2.1.4" defer></script>
-  <script src="assets/js/games.js?v=2.2.24" defer></script>
+  <script src="assets/js/hub.js?v=2.1.7" defer></script>
+  <script src="assets/js/init.js?v=2.1.6" defer></script>
+  <script src="assets/js/games.js?v=2.4.7" defer></script>
 </body>
 </html>

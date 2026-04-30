@@ -137,6 +137,10 @@ async function loadGalleryList() {
   return galleryListLoadPromise;
 }
 
+/** Above-fold-ish thumbnails load eagerly; rest stay lazy so mobile bandwidth isn't flooded. */
+const GALLERY_FIRST_EAGER = 12;
+const GALLERY_FETCH_PRIORITY_HIGH = 4;
+
 function renderGallery(memes) {
   const container = document.getElementById('gallery');
   if (!container) return;
@@ -153,7 +157,16 @@ function renderGallery(memes) {
     const img = document.createElement('img');
     img.src = src;
     img.alt = 'FuqMeA Meme';
-    img.loading = 'lazy';
+    if (index < GALLERY_FIRST_EAGER) {
+      img.loading = 'eager';
+      img.decoding = index === 0 ? 'sync' : 'async';
+      if (index < GALLERY_FETCH_PRIORITY_HIGH && 'fetchPriority' in img) {
+        img.fetchPriority = 'high';
+      }
+    } else {
+      img.loading = 'lazy';
+      img.decoding = 'async';
+    }
     img.addEventListener('click', function() { toggleSelect(this); });
 
     const viewBtn = document.createElement('button');
@@ -210,8 +223,29 @@ async function initGallery() {
 }
 
 // ====================== ROTATOR (Home Page) ======================
+/** Tiny transparent GIF — placeholder so slides without a URL yet don't show a broken icon */
+const ROTATOR_PLACEHOLDER =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
 let current = 0;
 let rotatorStarted = false;
+
+function getMaxRotatorSlides() {
+  const conn = typeof navigator !== 'undefined' ? navigator.connection : null;
+  if (!conn) return 24;
+  if (conn.saveData) return 6;
+  const t = conn.effectiveType;
+  if (t === 'slow-2g' || t === '2g') return 6;
+  if (t === '3g') return 12;
+  return 24;
+}
+
+function ensureRotatorSlideSrc(img) {
+  const path = img.dataset.src;
+  if (!path || img.dataset.loaded === '1') return;
+  img.src = path;
+  img.dataset.loaded = '1';
+}
 
 async function startRotator() {
   const container = document.getElementById('meme-rotator');
@@ -226,20 +260,23 @@ async function startRotator() {
   const randomPool = uniqueSources.filter(src => src !== firstImage);
   shuffleArray(randomPool);
 
-  const maxRandomSlides = 24;
+  const maxRandomSlides = getMaxRotatorSlides();
   const rotatorList = [firstImage, ...randomPool.slice(0, maxRandomSlides)];
-
-  rotatorList.forEach(src => {
-    const img = new Image();
-    img.src = src;
-  });
 
   rotatorList.forEach((src, i) => {
     const img = document.createElement('img');
-    img.src = src;
     img.alt = 'Featured meme preview';
-    img.loading = 'lazy';
     img.dataset.src = src;
+    if (i === 0) {
+      img.src = src;
+      img.dataset.loaded = '1';
+      if ('fetchPriority' in img) img.fetchPriority = 'high';
+      img.decoding = 'sync';
+    } else {
+      img.src = ROTATOR_PLACEHOLDER;
+      img.loading = 'lazy';
+      img.decoding = 'async';
+    }
     if (i === 0) img.classList.add('active');
     container.appendChild(img);
   });
@@ -248,16 +285,19 @@ async function startRotator() {
     const activeImg = container.querySelector('img.active');
     if (!activeImg) return;
     const src = activeImg.dataset.src || activeImg.getAttribute('src');
-    if (!src) return;
+    if (!src || src === ROTATOR_PLACEHOLDER) return;
     const target = `memes.html?openMeme=${encodeURIComponent(src)}`;
     window.location.href = target;
   });
 
+  const len = rotatorList.length;
   setInterval(() => {
     const imgs = container.querySelectorAll('img');
     if (imgs.length === 0) return;
+    const next = (current + 1) % len;
+    ensureRotatorSlideSrc(imgs[next]);
     imgs[current].classList.remove('active');
-    current = (current + 1) % rotatorList.length;
+    current = next;
     imgs[current].classList.add('active');
   }, 3000);
 }
@@ -365,6 +405,8 @@ function syncLightbox() {
   if (!img || !toggleBtn || !lightboxMemes.length) return;
   const src = lightboxMemes[lightboxIndex];
   const isSelected = selected.has(src);
+  img.decoding = 'async';
+  if ('fetchPriority' in img) img.fetchPriority = 'high';
   img.src = src;
   img.alt = `FuqMeA Meme ${lightboxIndex + 1}`;
   toggleBtn.textContent = isSelected ? 'REMOVE FROM DOWNLOADS' : 'ADD TO DOWNLOADS';
