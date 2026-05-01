@@ -215,6 +215,8 @@ Open **`assets/js/cloud-config.js`** in this repo:
 
 Commit and deploy to GitHub Pages as usual. After deploy, bump the `?v=` on scripts in **`games.html`** if you suspect cached old config.
 
+8. **`games.html` script order (do not reorder):** **`cloud-config.js`** → **`assets/js/vendor/supabase.umd.min.js`** (**`@supabase/supabase-js` UMD, vendored for CSP `script-src 'self'`**) → **`cloud-sync.js`** → **`games.js`**. Cloud sync will not run PKCE / magic-link exchange if the vendor file is missing or loads after **`cloud-sync.js`**.
+
 ---
 
 ## Leaderboard freshness
