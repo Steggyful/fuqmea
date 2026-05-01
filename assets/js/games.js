@@ -2193,8 +2193,9 @@
         ? serverW
         : { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '' };
     const localNow = loadWallet();
+    const sTok = Math.max(0, Math.floor(Number(st.tokens)) || 0);
     const merged = {
-      tokens: Math.max(0, Math.floor(Number(st.tokens)) || 0),
+      tokens: Math.max(localNow.tokens || 0, sTok),
       coinStreak: Math.max(localNow.coinStreak || 0, Math.max(0, Math.floor(Number(st.coinStreak)) || 0)),
       lastDaily: mergeLastDailyStr(localNow.lastDaily, st.lastDaily)
     };

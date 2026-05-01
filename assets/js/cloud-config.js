@@ -12,6 +12,8 @@
  *   importDeviceWalletEndpoint → optional; unset → derive …/import-device-wallet from settleEndpoint
  *   leaderboardEndpoint     → optional; unset → derive …/leaderboard (server-side leaderboard; avoids flaky REST reads)
  *
+ * AUTH BUNDLE: games.html loads `assets/js/vendor/supabase.umd.min.js` before `cloud-sync.js` (PKCE + magic link exchange).
+ *
  * LOGIN: Enable after you turn on each provider in Supabase (Authentication → Providers):
  *   loginGoogle   → "Continue with Google" (configure Google OAuth + Supabase; see README)
  *   loginDiscord  → "Continue with Discord" (optional)

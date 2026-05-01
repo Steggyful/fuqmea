@@ -255,6 +255,8 @@ The database function **`import_initial_device_wallet`** (in [`schema.sql`](sche
 | Leaderboard names OK but scores/balances wrong or missing | Run **`wallets_public_read`** policy (see Part D migration note above); redeploy not required |
 | Balance does not persist | `settleEndpoint` missing/wrong; function logs show errors |
 | CSP blocks fetch | **`games.html`** must allow `https://*.supabase.co` (already configured) |
+| Auth works but settles never sync (session missing) | Use current games page scripts: **`assets/js/vendor/supabase.umd.min.js`** loads before **`assets/js/cloud-sync.js`** — PKCE `?code=` exchanges require **`@supabase/supabase-js`**; older hash-only parsers are removed. Bump `?v=` on scripts after deploy. |
+| Leaderboard still wrong after client update | Paste full current **`supabase/schema.sql`** if **`wallets_public_read`** / RPCs missing; deploy **`leaderboard`** Edge (`…/leaderboard`). |
 
 ---
 

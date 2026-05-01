@@ -1,11 +1,49 @@
 (function () {
   'use strict';
 
-  const SESSION_KEY = 'fuqmea_cloud_session_v1';
   /** Same key as games.js — must stay in sync for offline→cloud one-time merge. */
   const FUN_WALLET_KEY = 'fuqmea_fun_wallet_v1';
+
+  /** Migrate once from legacy hand-rolled session storage (implicit / old boot). */
+  const LEGACY_SESSION_KEY = 'fuqmea_cloud_session_v1';
+
+  /** Implicit-grant redirects use URL fragments; stash before stripping so async init can setSession(). */
+  const IMPLICIT_FRAG_PENDING_KEY = 'fuqmea_auth_implicit_frag_pending_v1';
+
   const CONFIG = window.FUQ_CLOUD_CONFIG || {};
+  /** Defer singleton until bootstrap (vendor script runs before this file). */
+  let supabaseClient = null;
+
   let leaderboardScope = 'alltime';
+
+  captureImplicitFragmentIfNeeded();
+
+  function captureImplicitFragmentIfNeeded() {
+    try {
+      if (!isEnabledBasics()) return;
+      const h = typeof window !== 'undefined' ? window.location.hash || '' : '';
+      if (!h.includes('access_token=')) return;
+      const params = new URLSearchParams(h.replace(/^#/, ''));
+      const access_token = params.get('access_token');
+      const refresh_token = params.get('refresh_token');
+      if (!access_token || !refresh_token) return;
+      localStorage.setItem(
+        IMPLICIT_FRAG_PENDING_KEY,
+        JSON.stringify({
+          access_token,
+          refresh_token,
+          expires_in: Number(params.get('expires_in') || '3600')
+        })
+      );
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    } catch (_) {
+      /**/
+    }
+  }
+
+  function isEnabledBasics() {
+    return Boolean(CONFIG.enabled && CONFIG.supabaseUrl && CONFIG.supabaseAnonKey);
+  }
 
   function wantGoogle() {
     return Boolean(CONFIG.loginGoogle);
@@ -17,6 +55,10 @@
 
   function wantEmail() {
     return CONFIG.loginEmail !== false;
+  }
+
+  function gamesAuthRedirectPath() {
+    return `${window.location.origin}${window.location.pathname}`;
   }
 
   function handlePrefixFromUser(me) {
@@ -47,10 +89,129 @@
   }
 
   function isEnabled() {
-    return Boolean(CONFIG.enabled && CONFIG.supabaseUrl && CONFIG.supabaseAnonKey);
+    return Boolean(
+      CONFIG.enabled &&
+        CONFIG.supabaseUrl &&
+        CONFIG.supabaseAnonKey &&
+        typeof window.supabase !== 'undefined' &&
+        typeof window.supabase.createClient === 'function'
+    );
   }
 
-  /** Browser cannot reliably call PostgREST /rpc from fuqmea.com (CORS preflight); use Edge Function instead. */
+  function getSupabase() {
+    if (!supabaseClient && typeof window.supabase !== 'undefined' && isEnabledBasics()) {
+      try {
+        supabaseClient = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: false,
+            flowType: 'pkce',
+            storage: window.localStorage
+          }
+        });
+      } catch (_) {
+        supabaseClient = null;
+      }
+    }
+    return supabaseClient;
+  }
+
+  function hasOAuthCallbackCode() {
+    try {
+      const code = new URLSearchParams(window.location.search).get('code');
+      if (code) return true;
+    } catch (_) {
+      /**/
+    }
+    const h = window.location.hash || '';
+    return h.includes('code=');
+  }
+
+  /** PKCE/code + legacy implicit + migrated fuqmea_cloud_session → Supabase persisted session. */
+  async function bootstrapAuthSession(sb) {
+    if (!sb) return;
+    try {
+      const pend = localStorage.getItem(IMPLICIT_FRAG_PENDING_KEY);
+      if (pend) {
+        localStorage.removeItem(IMPLICIT_FRAG_PENDING_KEY);
+        const p = JSON.parse(pend);
+        if (p?.access_token && p?.refresh_token) {
+          const { error } = await sb.auth.setSession({
+            access_token: p.access_token,
+            refresh_token: p.refresh_token
+          });
+          if (error) {
+            /** fall through — user may PKCE-exchange instead */
+          }
+        }
+      }
+
+      const leg = localStorage.getItem(LEGACY_SESSION_KEY);
+      if (leg) {
+        localStorage.removeItem(LEGACY_SESSION_KEY);
+        try {
+          const p = JSON.parse(leg);
+          if (p?.accessToken && p?.refreshToken) {
+            await sb.auth.setSession({
+              access_token: p.accessToken,
+              refresh_token: p.refreshToken
+            });
+          }
+        } catch (_) {
+          /**/
+        }
+      }
+
+      if (hasOAuthCallbackCode()) {
+        await sb.auth.exchangeCodeForSession(window.location.href);
+      }
+
+      await sb.auth.getSession();
+    } catch (_) {
+      /**/
+    }
+  }
+
+  /** Prefer supabase.auth.refreshSession (no stray Bearer on the token endpoint). */
+  async function maybeRefreshToken() {
+    const sb = getSupabase();
+    if (!sb) return;
+    try {
+      const { data } = await sb.auth.getSession();
+      const sess = data.session;
+      if (!sess || !sess.refresh_token) return;
+      const expiresAtMs = sess.expires_at ? Number(sess.expires_at) * 1000 : 0;
+      if (expiresAtMs > Date.now() + 120000) return;
+      await sb.auth.refreshSession();
+    } catch (_) {
+      /**/
+    }
+  }
+
+  async function authFetch(path, options) {
+    await maybeRefreshToken();
+    const sb = getSupabase();
+    if (!sb) throw new Error('Supabase client unavailable');
+    const { data } = await sb.auth.getSession();
+    const sess = data.session;
+    const headers = {
+      apikey: CONFIG.supabaseAnonKey,
+      ...(options?.headers || {})
+    };
+    if (sess?.access_token) headers.Authorization = `Bearer ${sess.access_token}`;
+    const res = await fetch(`${CONFIG.supabaseUrl}${path}`, {
+      ...options,
+      headers
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(body || `Request failed: ${res.status}`);
+    }
+    const ct = res.headers.get('content-type') || '';
+    return ct.includes('application/json') ? res.json() : res.text();
+  }
+
   function deriveImportDeviceWalletEndpoint() {
     const explicit =
       typeof CONFIG.importDeviceWalletEndpoint === 'string' ? CONFIG.importDeviceWalletEndpoint.trim() : '';
@@ -77,43 +238,26 @@
     return document.getElementById(id);
   }
 
-  function readSession() {
+  async function getAccessToken() {
+    await maybeRefreshToken();
+    const sb = getSupabase();
+    if (!sb) return null;
+    const { data } = await sb.auth.getSession();
+    return data.session?.access_token || null;
+  }
+
+  async function clearAuthSessionEverywhere() {
     try {
-      const raw = localStorage.getItem(SESSION_KEY);
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (!parsed?.accessToken) return null;
-      return parsed;
-    } catch {
-      return null;
+      const sb = getSupabase();
+      if (sb) await sb.auth.signOut();
+    } catch (_) {
+      /**/
     }
-  }
-
-  function writeSession(session) {
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  }
-
-  function clearSession() {
-    localStorage.removeItem(SESSION_KEY);
-  }
-
-  async function authFetch(path, options) {
-    const session = readSession();
-    const headers = {
-      apikey: CONFIG.supabaseAnonKey,
-      ...(options?.headers || {})
-    };
-    if (session?.accessToken) headers.Authorization = `Bearer ${session.accessToken}`;
-    const res = await fetch(`${CONFIG.supabaseUrl}${path}`, {
-      ...options,
-      headers
-    });
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(body || `Request failed: ${res.status}`);
+    try {
+      localStorage.removeItem(LEGACY_SESSION_KEY);
+    } catch (_) {
+      /**/
     }
-    const ct = res.headers.get('content-type') || '';
-    return ct.includes('application/json') ? res.json() : res.text();
   }
 
   function updateCloudBadge(text, isOn) {
@@ -147,7 +291,25 @@
       leaderboardScope === 'weekly'
         ? 'leaderboard_name,weekly_net_delta,weekly_rounds'
         : 'leaderboard_name,current_balance,total_rounds,net_delta';
-    return authFetch(`/rest/v1/${view}?select=${selectCols}&order=${metric}&limit=${limit}`, { method: 'GET' });
+    const headers = { apikey: CONFIG.supabaseAnonKey };
+    const sb = getSupabase();
+    if (sb) {
+      try {
+        await maybeRefreshToken();
+        const { data } = await sb.auth.getSession();
+        if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+      } catch (_) {
+        /**/
+      }
+    }
+    const path = `/rest/v1/${view}?select=${selectCols}&order=${metric}&limit=${limit}`;
+    const res = await fetch(`${CONFIG.supabaseUrl}${path}`, { method: 'GET', headers });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(body || `Request failed: ${res.status}`);
+    }
+    const ct = res.headers.get('content-type') || '';
+    return ct.includes('application/json') ? res.json() : res.text();
   }
 
   async function fetchLeaderboardRows(limit) {
@@ -168,7 +330,7 @@
         const j = res.ok ? await res.json().catch(() => null) : null;
         if (j && typeof j === 'object' && Array.isArray(j.rows)) return j.rows;
       } catch (_) {
-        /* try REST fallback */
+        /* REST fallback */
       }
     }
     return fetchLeaderboardViaRest(limit);
@@ -235,45 +397,6 @@
     }
   }
 
-  function parseHashTokens() {
-    const hash = window.location.hash || '';
-    if (!hash.includes('access_token=')) return null;
-    const params = new URLSearchParams(hash.replace(/^#/, ''));
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-    const expiresIn = Number(params.get('expires_in') || '3600');
-    if (!accessToken) return null;
-    const session = {
-      accessToken,
-      refreshToken,
-      expiresAt: Date.now() + expiresIn * 1000
-    };
-    history.replaceState({}, document.title, window.location.pathname + window.location.search);
-    return session;
-  }
-
-  /** Run before games.js bootstraps wallet: OAuth redirect uses #access_token in the URL. */
-  if (isEnabled()) {
-    const fromHash = parseHashTokens();
-    if (fromHash) writeSession(fromHash);
-  }
-
-  async function maybeRefreshToken() {
-    const session = readSession();
-    if (!session?.refreshToken) return;
-    if ((session.expiresAt || 0) > Date.now() + 120000) return;
-    const res = await authFetch('/auth/v1/token?grant_type=refresh_token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: session.refreshToken })
-    });
-    writeSession({
-      accessToken: res.access_token,
-      refreshToken: res.refresh_token || session.refreshToken,
-      expiresAt: Date.now() + (Number(res.expires_in) || 3600) * 1000
-    });
-  }
-
   async function getMe() {
     return authFetch('/auth/v1/user', { method: 'GET' });
   }
@@ -282,9 +405,12 @@
     const u = me && me.id ? me : await getMe();
     const uid = u?.id;
     if (!uid) return null;
-    const existing = await authFetch(`/rest/v1/profiles?id=eq.${encodeURIComponent(uid)}&select=id,handle,display_name&limit=1`, {
-      method: 'GET'
-    });
+    const existing = await authFetch(
+      `/rest/v1/profiles?id=eq.${encodeURIComponent(uid)}&select=id,handle,display_name&limit=1`,
+      {
+        method: 'GET'
+      }
+    );
     if (existing?.length) return existing[0];
     const handleBase = (handlePrefixFromUser(u) || 'fuq_player').slice(0, 20);
     const handle = `${handleBase}_${Math.floor(Math.random() * 9000 + 1000)}`.slice(0, 24);
@@ -300,15 +426,12 @@
     return { id: uid, handle, display_name: null };
   }
 
-  function startOAuth(provider) {
-    if (!isEnabled() || !CONFIG.supabaseUrl || !CONFIG.supabaseAnonKey) return;
-    const redirectTo = window.location.href.split('#')[0].split('?')[0];
-    const base = String(CONFIG.supabaseUrl).replace(/\/$/, '');
-    const u = new URL(`${base}/auth/v1/authorize`);
-    u.searchParams.set('provider', provider);
-    u.searchParams.set('redirect_to', redirectTo);
-    u.searchParams.set('apikey', CONFIG.supabaseAnonKey);
-    window.location.assign(u.toString());
+  async function startOAuth(provider) {
+    if (!isEnabled()) return;
+    const sb = getSupabase();
+    if (!sb) return;
+    const redirectTo = gamesAuthRedirectPath();
+    await sb.auth.signInWithOAuth({ provider, options: { redirectTo } });
   }
 
   async function ensureWallet() {
@@ -364,7 +487,6 @@
     window.dispatchEvent(new CustomEvent('fuqmea-wallet-hydrated'));
   }
 
-  /** Prefer later ISO yyyy-mm-dd for daily claimed flag (lex compare works). */
   function mergeLastDaily(localD, remoteD) {
     const l = normalizeLastDailyForStorage(localD);
     const r = normalizeLastDailyForStorage(remoteD);
@@ -373,10 +495,6 @@
     return l >= r ? l : r;
   }
 
-  /**
-   * Never drop local totals below what the browser already had on reload.
-   * Cloud can still be ahead (other device); stale cloud after a failed settle won't wipe progress.
-   */
   function reconcileLocalWithCloudRow(localSnap, cloudRow) {
     if (!cloudRow || typeof cloudRow !== 'object') {
       return {
@@ -396,15 +514,11 @@
     };
   }
 
-  /**
-   * After profile exists: pull cloud wallet, run one-time device import RPC if allowed, mirror into localStorage.
-   * Dispatches fuqmea-wallet-hydrated so games.js refresh UI (runs after OAuth hash + session restore).
-   */
   async function hydrateWalletAfterLogin() {
     if (!isEnabled()) return;
     try {
-      await maybeRefreshToken().catch(() => {});
-      if (!readSession()?.accessToken) return;
+      const token = await getAccessToken();
+      if (!token) return;
 
       let row = null;
       try {
@@ -416,10 +530,9 @@
 
       let cloudLike = row;
       try {
-        const sess = readSession();
         const snap = readFunWalletSnapshot();
         const ep = deriveImportDeviceWalletEndpoint();
-        if (!sess?.accessToken || !ep) {
+        if (!ep) {
           writeFunWalletLocal(reconcileLocalWithCloudRow(readFunWalletSnapshot(), row));
           return;
         }
@@ -428,7 +541,7 @@
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sess.accessToken}`,
+            Authorization: `Bearer ${token}`,
             apikey: CONFIG.supabaseAnonKey
           },
           body: JSON.stringify({
@@ -450,42 +563,48 @@
   }
 
   async function requestMagicLink(email) {
-    await authFetch('/auth/v1/otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email,
-        create_user: true,
-        email_redirect_to: window.location.href.split('#')[0]
-      })
+    const sb = getSupabase();
+    if (!sb) throw new Error('Supabase client unavailable');
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: gamesAuthRedirectPath(),
+        shouldCreateUser: true
+      }
     });
+    if (error) throw error;
   }
 
   async function recordSettlement(evt) {
     if (!isEnabled() || !CONFIG.settleEndpoint) return null;
     await maybeRefreshToken();
-    const session = readSession();
-    if (!session?.accessToken) return null;
-    const res = await fetch(CONFIG.settleEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.accessToken}`,
-        apikey: CONFIG.supabaseAnonKey
-      },
-      body: JSON.stringify({
-        game: evt.game,
-        detail: evt.detail,
-        delta: evt.delta
-      })
-    });
+    const accessToken = await getAccessToken();
+    if (!accessToken) return null;
+    let res;
+    try {
+      res = await fetch(CONFIG.settleEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+          apikey: CONFIG.supabaseAnonKey
+        },
+        body: JSON.stringify({
+          game: evt.game,
+          detail: evt.detail,
+          delta: evt.delta
+        })
+      });
+    } catch (_) {
+      return null;
+    }
     if (!res.ok) return null;
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     return data?.wallet || null;
   }
 
   async function loadLeaderboard() {
-    if (!isEnabled()) return;
+    if (!isEnabledBasics()) return;
     const tbody = byId('games-leaderboard-body');
     if (!tbody) return;
     updateLeaderboardTableHeadLabels();
@@ -500,8 +619,12 @@
       }
       tbody.innerHTML = rows
         .map((row, idx) => {
-          const score = leaderboardScope === 'weekly' ? Number(row.weekly_net_delta || 0) : Number(row.current_balance || 0);
-          const rounds = leaderboardScope === 'weekly' ? Number(row.weekly_rounds || 0) : Number(row.total_rounds || 0);
+          const score =
+            leaderboardScope === 'weekly'
+              ? Number(row.weekly_net_delta || 0)
+              : Number(row.current_balance || 0);
+          const rounds =
+            leaderboardScope === 'weekly' ? Number(row.weekly_rounds || 0) : Number(row.total_rounds || 0);
           const name = String(row.leaderboard_name || row.handle || 'player');
           return `<tr>
             <td>${idx + 1}</td>
@@ -513,7 +636,7 @@
         .join('');
     } catch {
       tbody.innerHTML =
-        '<tr><td colspan="4">Leaderboard unavailable. Deploy Edge <code>leaderboard</code> or run latest <code>schema.sql</code> (RPC).</td></tr>';
+        '<tr><td colspan="4">Leaderboard unavailable. Deploy Edge <code>leaderboard</code> or run latest <code>schema.sql</code> (RPC); load <code>assets/js/vendor/supabase.umd.min.js</code>.</td></tr>';
     }
   }
 
@@ -545,7 +668,8 @@
 
   async function syncProgressNow() {
     const msg = byId('games-cloud-msg');
-    if (!readSession()?.accessToken) {
+    const token = await getAccessToken();
+    if (!token) {
       if (msg) msg.textContent = 'Sign in first — then Sync now pulls your cloud balance.';
       return false;
     }
@@ -568,8 +692,12 @@
     const logoutBtn = byId('games-cloud-logout-btn');
     if (!logoutBtn) return;
 
-    byId('games-oauth-google')?.addEventListener('click', () => startOAuth('google'));
-    byId('games-oauth-discord')?.addEventListener('click', () => startOAuth('discord'));
+    byId('games-oauth-google')?.addEventListener('click', () => {
+      void startOAuth('google');
+    });
+    byId('games-oauth-discord')?.addEventListener('click', () => {
+      void startOAuth('discord');
+    });
     byId('games-display-name-save')?.addEventListener('click', () => {
       saveDisplayName();
     });
@@ -578,26 +706,26 @@
     });
 
     if (loginForm) {
-    loginForm.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const emailInput = byId('games-cloud-email');
-      const msg = byId('games-cloud-msg');
-      const email = String(emailInput?.value || '').trim();
-      if (!email || !email.includes('@')) {
-        if (msg) msg.textContent = 'Enter a valid email.';
-        return;
-      }
-      try {
-        await requestMagicLink(email);
-        if (msg) msg.textContent = 'Magic link sent. Open your email to finish login.';
-      } catch {
-        if (msg) msg.textContent = 'Could not send magic link right now.';
-      }
-    });
+      loginForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const emailInput = byId('games-cloud-email');
+        const msg = byId('games-cloud-msg');
+        const email = String(emailInput?.value || '').trim();
+        if (!email || !email.includes('@')) {
+          if (msg) msg.textContent = 'Enter a valid email.';
+          return;
+        }
+        try {
+          await requestMagicLink(email);
+          if (msg) msg.textContent = 'Magic link sent. Open your email to finish login.';
+        } catch {
+          if (msg) msg.textContent = 'Could not send magic link right now.';
+        }
+      });
     }
 
     logoutBtn.addEventListener('click', async () => {
-      clearSession();
+      await clearAuthSessionEverywhere();
       setProfileBlockVisible(false);
       setGuestLoginAreaVisible(true);
       setAccountToolbarVisible(false);
@@ -618,13 +746,53 @@
     });
   }
 
+  function isAuthRevokedError(txt) {
+    return (
+      /\b401\b/.test(txt) ||
+      /JWT expired/i.test(txt) ||
+      /invalid_grant/i.test(txt) ||
+      /invalid refresh token/i.test(txt) ||
+      /refresh_token_not_found/i.test(txt) ||
+      /invalid jwt/i.test(txt) ||
+      /session (?:expired|missing|not found)/i.test(txt)
+    );
+  }
+
+  async function refreshSignedInChrome() {
+    setGuestLoginAreaVisible(false);
+    setAccountToolbarVisible(true);
+    try {
+      await maybeRefreshToken().catch(() => {});
+      const me = await getMe();
+      const prof = await ensureProfile(me);
+      await hydrateWalletAfterLogin().catch(() => {});
+      syncProfileForm(prof);
+      updateCloudBadge('Cloud ON', true);
+      const m2 = byId('games-cloud-msg');
+      if (m2) {
+        m2.textContent =
+          'Signed in. Progress saves after each cloud round — use Sync now if you play on multiple devices.';
+      }
+    } catch (err) {
+      const txt = String(err?.message || err || '');
+      if (isAuthRevokedError(txt)) {
+        await clearAuthSessionEverywhere();
+        setProfileBlockVisible(false);
+        setGuestLoginAreaVisible(true);
+        setAccountToolbarVisible(false);
+        updateCloudBadge('Cloud OFF', false);
+      }
+    }
+    await loadLeaderboard().catch(() => {});
+  }
+
   async function init() {
     const signalInitDone = () => {
       window.dispatchEvent(new CustomEvent('fuqmea-cloud-init-complete'));
     };
 
     try {
-      if (!isEnabled()) {
+      if (!isEnabledBasics()) {
         updateCloudBadge('Cloud OFF', false);
         setProfileBlockVisible(false);
         setGuestLoginAreaVisible(true);
@@ -634,51 +802,39 @@
 
       await initAuthUi();
 
-      const session = readSession();
-      if (!session?.accessToken) {
+      if (!isEnabled()) {
+        updateCloudBadge('OFF — vendor supabase.umd.min.js missing', false);
+        setProfileBlockVisible(false);
+        setGuestLoginAreaVisible(true);
+        setAccountToolbarVisible(false);
+        await loadLeaderboard().catch(() => {});
+        return;
+      }
+
+      const sb = getSupabase();
+      if (!sb) {
+        signalInitDone();
+        return;
+      }
+
+      await bootstrapAuthSession(sb);
+
+      const { data: sessWrap } = await sb.auth.getSession();
+
+      if (!sessWrap.session?.access_token) {
         updateCloudBadge('Cloud ready (login needed)', false);
         setProfileBlockVisible(false);
         setGuestLoginAreaVisible(true);
         setAccountToolbarVisible(false);
         const m = byId('games-cloud-msg');
-        if (m) m.textContent = 'Sign in to save progress on this device. While signed in, each round settles to the cloud automatically.';
+        if (m)
+          m.textContent =
+            'Sign in to save progress on this device. While signed in, each round settles to the cloud automatically.';
         await loadLeaderboard().catch(() => {});
         return;
       }
 
-      setGuestLoginAreaVisible(false);
-      setAccountToolbarVisible(true);
-      try {
-        await maybeRefreshToken().catch(() => {});
-        const me = await getMe();
-        const prof = await ensureProfile(me);
-        await hydrateWalletAfterLogin().catch(() => {});
-        syncProfileForm(prof);
-        updateCloudBadge('Cloud ON', true);
-        const m2 = byId('games-cloud-msg');
-        if (m2) {
-          m2.textContent =
-            'Signed in. Progress saves after each cloud round — use Sync now if you play on multiple devices.';
-        }
-      } catch (err) {
-        const txt = String(err?.message || err || '');
-        const revoke =
-          /\b401\b/.test(txt) ||
-          /JWT expired/i.test(txt) ||
-          /invalid_grant/i.test(txt) ||
-          /invalid refresh token/i.test(txt) ||
-          /refresh_token_not_found/i.test(txt) ||
-          /invalid jwt/i.test(txt);
-        if (revoke) {
-          clearSession();
-          setProfileBlockVisible(false);
-          setGuestLoginAreaVisible(true);
-          setAccountToolbarVisible(false);
-          updateCloudBadge('Cloud OFF', false);
-        }
-      }
-
-      await loadLeaderboard().catch(() => {});
+      await refreshSignedInChrome();
     } finally {
       signalInitDone();
     }
@@ -693,8 +849,8 @@
   };
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => void init());
   } else {
-    init();
+    void init();
   }
 })();
