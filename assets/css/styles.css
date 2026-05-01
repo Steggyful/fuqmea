@@ -19,15 +19,37 @@
   opacity: 0.9;
 }
 
-.games-oauth-row {
+.games-oauth-row:not([hidden]) {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   margin-bottom: 0.65rem;
 }
 
+.games-oauth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+}
+
+.games-oauth-btn .games-oauth-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+}
+
 .games-oauth-btn--google {
   border-color: rgba(66, 133, 244, 0.55);
+}
+
+.games-oauth-btn--google .games-oauth-icon {
+  background: #fff;
+  border-radius: 999px;
+  padding: 2px;
 }
 
 .games-oauth-btn--discord {
@@ -87,7 +109,8 @@
   color: rgba(255, 255, 255, 0.88);
 }
 
-.games-account-toolbar {
+/* :not([hidden]) so the hidden HTML attribute beats display:flex (UA [hidden]{display:none} is lower-specificity). */
+.games-account-toolbar:not([hidden]) {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
@@ -95,7 +118,7 @@
   margin: 0.65rem 0 0;
 }
 
-.games-account-toolbar--guest {
+.games-account-toolbar--guest:not([hidden]) {
   flex-direction: column;
   align-items: stretch;
 }

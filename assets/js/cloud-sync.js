@@ -2,7 +2,7 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.18.0';
+  const BUILD = '1.18.1';
 
   /** Same key as games.js — must stay in sync for offline→cloud one-time merge. */
   const FUN_WALLET_KEY = 'fuqmea_fun_wallet_v1';
@@ -375,13 +375,25 @@
   }
 
   /** Reset every signed-in surface back to the guest layout. Avoids the chip-says-Not-signed-in
-   *  but Sign-out-button-still-showing half-state we hit when an auth callback fails. */
+   *  but Sign-out-button-still-showing half-state we hit when an auth callback fails.
+   *  Also collapses the email <details> and clears email/code inputs so a returning logged-out
+   *  user starts from a closed "Sign in with email code" summary, not an already-expanded form. */
   function applyGuestChrome(statusNote) {
     setProfileBlockVisible(false);
     setGuestLoginAreaVisible(true);
     setAccountToolbarVisible(false);
     setOtpBlockVisible(false);
     pendingOtpEmail = '';
+    try {
+      const details = byId('games-cloud-email-details');
+      if (details) details.open = false;
+      const emailInput = byId('games-cloud-email');
+      if (emailInput) emailInput.value = '';
+      const codeInput = byId('games-cloud-otp-code');
+      if (codeInput) codeInput.value = '';
+    } catch (_) {
+      /**/
+    }
     updateCloudBadge('Not signed in', false);
     setCloudAccountPanelMode({ signedIn: false, statusNote: statusNote || '' });
   }
