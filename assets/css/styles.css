@@ -1291,15 +1291,21 @@ h1 {
   }
 }
 
-.credit a {
+.credit a,
+.legal-footer a,
+.games-cloud-legal-hint a {
   color: var(--lime);
   text-decoration: underline;
   font-weight: bold;
+  font-size: 0.95rem;
+  letter-spacing: 0.5px;
   transition: all 0.3s;
 }
 
 @media (hover: hover) {
-  .credit a:hover {
+  .credit a:hover,
+  .legal-footer a:hover,
+  .games-cloud-legal-hint a:hover {
     color: var(--yellow);
     text-shadow: 0 0 15px var(--yellow);
   }
@@ -1308,19 +1314,6 @@ h1 {
 .legal-footer {
   margin-top: 2.5rem;
   opacity: 0.85;
-}
-
-.legal-footer a {
-  color: var(--lime);
-  text-decoration: underline;
-  font-size: 0.95rem;
-  letter-spacing: 0.5px;
-}
-
-@media (hover: hover) {
-  .legal-footer a:hover {
-    color: var(--yellow);
-  }
 }
 
 /* Press feedback on touch — :active when the primary pointer can’t hover */
@@ -1397,7 +1390,8 @@ h1 {
 
   .social-link:active,
   .credit a:active,
-  .legal-footer a:active {
+  .legal-footer a:active,
+  .games-cloud-legal-hint a:active {
     color: var(--yellow);
     text-shadow: 0 0 12px rgba(255, 255, 0, 0.45);
   }

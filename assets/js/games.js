@@ -2628,6 +2628,16 @@
     });
   }
 
+  /** Signed-in cloud users shouldn’t see a “reset device” affordance—it only wipes localStorage
+   * and is misleading once the authoritative wallet lives on Supabase (next hydrate restores it). */
+  function syncGamesResetButtonVisibility() {
+    const btn = document.getElementById('games-reset-btn');
+    if (!btn) return;
+    const cloudOn = !!(cloudClient && cloudClient.enabled && cloudClient.enabled());
+    const signedIn = !!(cloudClient && cloudClient.isSignedIn && cloudClient.isSignedIn());
+    btn.hidden = !!(cloudOn && signedIn);
+  }
+
   function initWalletUi() {
     function paintWalletFromStorage() {
       const nw = loadWallet();
@@ -2638,8 +2648,12 @@
 
     window.addEventListener('fuqmea-wallet-hydrated', paintWalletFromStorage);
     window.addEventListener('fuqmea-cloud-init-complete', paintWalletFromStorage, { once: true });
+    window.addEventListener('fuqmea-cloud-init-complete', () => syncGamesResetButtonVisibility(), { once: true });
     // Auth state flips the rakeback panel between "Sign in to earn" and live pool readout.
-    window.addEventListener('fuqmea-cloud-auth-state', () => renderRakeback());
+    window.addEventListener('fuqmea-cloud-auth-state', () => {
+      renderRakeback();
+      syncGamesResetButtonVisibility();
+    });
 
     window.addEventListener('fuqmea-aura-cloud-peak', (ev) => {
       const pk = ev && ev.detail && Number(ev.detail.peak);
@@ -2656,6 +2670,7 @@
     renderWallet(w);
     renderWinStreakBars();
     renderHistory(loadHistory());
+    syncGamesResetButtonVisibility();
 
     function claimDailyBonus() {
       const cur = loadWallet();
@@ -2704,7 +2719,12 @@
     });
 
     document.getElementById('games-reset-btn')?.addEventListener('click', () => {
-      if (!window.confirm('Reset balance, streaks, and all quest progress on this device? You will restart at 200 FUQ.')) return;
+      if (
+        !window.confirm(
+          'Clear local guest stats only: FUQ balance snapshot, arcade win-streaks, daily / weekly quests, and the Recent runs log on this device? Does not delete or change a signed-in cloud account. Restart guest play at 200 FUQ.'
+        )
+      )
+        return;
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(WIN_STREAK_KEY);
       localStorage.removeItem(QUEST_STATE_KEY);
@@ -2716,7 +2736,12 @@
       renderWallet(fresh);
       renderWinStreakBars();
       renderQuestPanels();
-      pushHistory('reset', 'Balance, streaks, quests, and rakeback reset', 0, fresh.tokens);
+      pushHistory(
+        'reset',
+        'Local guest stats cleared (quests, streaks, log)',
+        0,
+        fresh.tokens
+      );
     });
 
     document.getElementById('games-history-clear')?.addEventListener('click', () => {
