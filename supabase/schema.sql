@@ -1,5 +1,6 @@
 -- FUQ Arcade cloud persistence schema (Supabase Postgres)
--- Run in Supabase SQL editor.
+-- Run in Supabase SQL editor (canonical full install).
+-- Incremental CLI patches that mirror this file: see supabase/migrations/*.sql (keep in sync when editing).
 
 create extension if not exists pgcrypto;
 

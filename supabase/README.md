@@ -111,6 +111,18 @@ Magic-link senders are often `noreply@...` or Supabase-branded until you configu
 
 You should see no errors. This creates profiles, wallets, game events, leaderboard views, and security rules.
 
+### Migrations vs `schema.sql` (keep server state aligned)
+
+Canonical definitions live in **[`schema.sql`](schema.sql)** end-to-end. **[`supabase/migrations/`](migrations/)** holds **incremental** SQL meant to match that file when applied in order (e.g. `supabase db push`):
+
+| Migration | Matches `schema.sql` section |
+|-----------|----------------------------|
+| [`20260430120000_leaderboard_views_security.sql`](migrations/20260430120000_leaderboard_views_security.sql) | `leaderboard_all_time` / `leaderboard_weekly` views with `security_invoker = false` |
+| [`20260430153000_leaderboard_rpc.sql`](migrations/20260430153000_leaderboard_rpc.sql) | `leaderboard_all_time_rows` / `leaderboard_weekly_rows` + `EXECUTE` for `anon`, `authenticated` |
+| [`20260430210000_wallets_public_read_and_leaderboard_grants.sql`](migrations/20260430210000_wallets_public_read_and_leaderboard_grants.sql) | `wallets_public_read` policy + `SELECT` grants on both leaderboard views |
+
+**SQL Editor workflow:** one full paste of **`schema.sql`** is sufficient. **CLI-only migrations** do not create the base tables/RPCs from scratch — run **`schema.sql`** once on a new project, then use migrations for small follow-ups, or keep re-pasting the full **`schema.sql`** when you change it.
+
 **If you already ran an older schema** and something fails, screenshot the error in the SQL editor — you may need a small follow-up migration (ask in Cursor with the message text).
 
 **Existing project — leaderboard balance wrong but names OK:** older RLS only allowed each user to read their own `wallets` row, so the leaderboard view could not see other players’ balances. Run the **`wallets_public_read`** policy block from the current [`schema.sql`](schema.sql) (search for `wallets_public_read`), or paste:
@@ -214,8 +226,6 @@ Open **`assets/js/cloud-config.js`** in this repo:
 `leaderboardLimit` can stay **25** or increase if you like.
 
 Commit and deploy to GitHub Pages as usual. After deploy, bump the `?v=` on scripts in **`games.html`** if you suspect cached old config.
-
-8. **`games.html` script order (do not reorder):** **`cloud-config.js`** → **`assets/js/vendor/supabase.umd.min.js`** (**`@supabase/supabase-js` UMD, vendored for CSP `script-src 'self'`**) → **`cloud-sync.js`** → **`games.js`**. Cloud sync will not run PKCE / magic-link exchange if the vendor file is missing or loads after **`cloud-sync.js`**.
 
 ---
 
