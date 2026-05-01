@@ -2,7 +2,7 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.18.1';
+  const BUILD = '1.18.2';
 
   /** Same key as games.js — must stay in sync for offline→cloud one-time merge. */
   const FUN_WALLET_KEY = 'fuqmea_fun_wallet_v1';
@@ -962,7 +962,7 @@
       else det.removeAttribute('open');
     }
     if (sum) {
-      sum.textContent = wantGoogle() || wantDiscord() ? 'Or sign in with email' : 'Sign in with email';
+      sum.textContent = wantGoogle() || wantDiscord() ? 'Or sign in with email code' : 'Sign in with email code';
     }
   }
 

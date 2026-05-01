@@ -33,8 +33,8 @@ window.FUQ_CLOUD_CONFIG = {
   leaderboardEndpoint: '',
   leaderboardLimit: 25,
   /** Show primary OAuth buttons (configure provider in Supabase first). */
-  loginGoogle: false,
-  loginDiscord: false,
+  loginGoogle: true,
+  loginDiscord: true,
   /** Magic-link email — keep true if you want a fallback when OAuth is on. */
   loginEmail: true
 };

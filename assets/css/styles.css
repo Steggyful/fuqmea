@@ -26,7 +26,7 @@
   margin-bottom: 0.65rem;
 }
 
-.games-oauth-btn {
+.games-oauth-btn:not([hidden]) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -151,7 +151,7 @@
   margin-top: 0.6rem;
 }
 
-.games-cloud-otp-block {
+.games-cloud-otp-block:not([hidden]) {
   display: grid;
   gap: 0.4rem;
   margin-top: 0.65rem;
