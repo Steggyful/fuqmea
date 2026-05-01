@@ -50,6 +50,18 @@
     return Boolean(CONFIG.enabled && CONFIG.supabaseUrl && CONFIG.supabaseAnonKey);
   }
 
+  /** Browser cannot reliably call PostgREST /rpc from fuqmea.com (CORS preflight); use Edge Function instead. */
+  function deriveImportDeviceWalletEndpoint() {
+    const explicit =
+      typeof CONFIG.importDeviceWalletEndpoint === 'string' ? CONFIG.importDeviceWalletEndpoint.trim() : '';
+    if (explicit) return explicit;
+    const se = typeof CONFIG.settleEndpoint === 'string' ? CONFIG.settleEndpoint.trim() : '';
+    if (se && /settle-game/i.test(se)) {
+      return se.replace(/\/settle-game\/?$/i, '/import-device-wallet');
+    }
+    return '';
+  }
+
   function byId(id) {
     return document.getElementById(id);
   }
@@ -332,11 +344,19 @@
 
       let cloudLike = row;
       try {
-        const rows = await authFetch('/rpc/import_initial_device_wallet', {
+        const sess = readSession();
+        const ep = deriveImportDeviceWalletEndpoint();
+        if (!sess?.accessToken || !ep) {
+          writeFunWalletLocal(reconcileLocalWithCloudRow(snap, row));
+          return;
+        }
+
+        const ir = await fetch(ep, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Prefer: 'return=representation'
+            Authorization: `Bearer ${sess.accessToken}`,
+            apikey: CONFIG.supabaseAnonKey
           },
           body: JSON.stringify({
             p_tokens: snap.tokens,
@@ -344,8 +364,8 @@
             p_last_daily: snap.lastDaily
           })
         });
-        const first = Array.isArray(rows) ? rows[0] : rows;
-        if (first) cloudLike = first;
+        const j = ir.ok ? await ir.json().catch(() => null) : null;
+        if (j && typeof j === 'object' && j.wallet) cloudLike = j.wallet;
       } catch (_) {
         cloudLike = row;
       }

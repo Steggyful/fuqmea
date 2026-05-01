@@ -158,15 +158,18 @@ Replace `YOUR_PROJECT_REF` with the ref from Part B (`app.supabase.com/project/<
 
 If the CLI asks to initialize Supabase locally, allow it (`supabase init`). That creates lightweight config beside this folder — local-only and safe to gitignore via `.supabase/` (already ignored).
 
-### Deploy the function
+### Deploy the functions
 
 ```powershell
 npx supabase functions deploy settle-game
+npx supabase functions deploy import-device-wallet
 ```
+
+**Why `import-device-wallet`:** the browser must not call PostgREST **`/rpc/import_initial_device_wallet`** directly from your custom domain — the preflight often fails CORS. The Edge Function runs the same RPC **server-side** and returns `Access-Control-Allow-Origin: *` (same pattern as `settle-game`).
 
 ### Secrets (usually automatic)
 
-Deployed Edge Functions receive **`SUPABASE_URL`** automatically. Your API key may be exposed as **`SUPABASE_ANON_KEY`** (legacy) or inside **`SUPABASE_PUBLISHABLE_KEYS`** (JSON) after dashboard key migrations ([Secrets docs](https://supabase.com/docs/guides/functions/secrets)). Repo **`settle-game`** reads either.
+Deployed Edge Functions receive **`SUPABASE_URL`** automatically. Your API key may be exposed as **`SUPABASE_ANON_KEY`** (legacy) or inside **`SUPABASE_PUBLISHABLE_KEYS`** (JSON) after dashboard key migrations ([Secrets docs](https://supabase.com/docs/guides/functions/secrets)). Repo **`settle-game`** and **`import-device-wallet`** read either pattern.
 
 If logs still show **`Missing Supabase env vars`** after **`npx supabase functions deploy settle-game`**:
 
@@ -174,11 +177,10 @@ If logs still show **`Missing Supabase env vars`** after **`npx supabase functio
 2. Add **`SUPABASE_URL`** — base URL only: **`https://<project-ref>.supabase.co`** (strip **`/rest/v1/`** if you copied Data API URL)
 3. Add **`SUPABASE_ANON_KEY`** — **anon / default publishable** from **Project Settings → API Keys** (not **`service_role`**)
 
-### Your function URL (for cloud-config)
+### Your function URLs (for cloud-config)
 
-It will look like:
-
-`https://YOUR_PROJECT_REF.functions.supabase.co/settle-game`
+- Settle: `https://YOUR_PROJECT_REF.functions.supabase.co/settle-game`
+- Device import: `…/import-device-wallet` — if you leave **`importDeviceWalletEndpoint`** empty in `cloud-config.js`, it is derived from **`settleEndpoint`** automatically.
 
 You can confirm under **Edge Functions** → **settle-game** in the dashboard.
 
@@ -192,7 +194,8 @@ Open **`assets/js/cloud-config.js`** in this repo:
 2. Paste **`supabaseUrl`** — same as Project URL (no trailing slash).
 3. Paste **`supabaseAnonKey`** — the anon/public key only.
 4. Paste **`settleEndpoint`** — the full **`settle-game`** function URL from Part E.
-5. After Part C, set which buttons appear: **`loginGoogle`**, **`loginDiscord`**, **`loginEmail`** (see comments in the file; only turn on providers you actually configured in the dashboard).
+5. Optionally set **`importDeviceWalletEndpoint`**; if empty, **`…/import-device-wallet`** is derived from **`settleEndpoint`** (recommended).
+6. After Part C, set which buttons appear: **`loginGoogle`**, **`loginDiscord`**, **`loginEmail`** (see comments in the file; only turn on providers you actually configured in the dashboard).
 
 `leaderboardLimit` can stay **25** or increase if you like.
 
