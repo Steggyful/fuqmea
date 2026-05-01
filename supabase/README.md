@@ -231,6 +231,7 @@ Commit and deploy to GitHub Pages as usual. After deploy, bump the `?v=` on scri
 
 ## Leaderboard freshness
 
+- Deploy SQL first when upgrading: **`supabase/migrations/20260502130000_wallet_aura_peak_leaderboard.sql`** (or rerun full [`schema.sql`](schema.sql)), then **`supabase functions deploy settle-game leaderboard import-device-wallet`** so Aura peak columns and **`apply_settlement(..., p_crash_peak)`** stay in sync with the Edge handler.
 - Each **cloud** round triggers `settle-game` → Postgres updates **`wallets`** + **`game_events`**.
 - Right after each local round, **`refreshLeaderboard()`** runs once for **your** browser, so **your** open games page usually pulls new rows automatically.
 - **Other players** (or you after a reload) still need **Reload** / **leaderboard Refresh** unless you build polling—they read from Postgres at request time, not live websocket.

@@ -6,6 +6,8 @@ type SettlePayload = {
   delta?: number;
   coin_streak?: number;
   last_daily?: string;
+  /** Client-reported Aura Farm multiplier this round (clamped server-side). */
+  crash_peak_mult?: number;
 };
 
 const corsHeaders = {
@@ -120,7 +122,14 @@ Deno.serve(async (req) => {
   const gKey = game.toLowerCase();
 
   /** Optional wallet fields — validated per game before RPC */
-  type RpcArgs = { p_game: string; p_detail: string; p_delta: number; p_coin_streak?: number; p_last_daily?: string };
+  type RpcArgs = {
+    p_game: string;
+    p_detail: string;
+    p_delta: number;
+    p_coin_streak?: number;
+    p_last_daily?: string;
+    p_crash_peak?: number;
+  };
   const rpcArgs: RpcArgs = { p_game: game, p_detail: detail, p_delta: delta };
 
   if (gKey === 'coin' && payload.coin_streak != null && Number.isFinite(Number(payload.coin_streak))) {
@@ -131,6 +140,15 @@ Deno.serve(async (req) => {
   if (gKey === 'daily' && typeof payload.last_daily === 'string') {
     const ld = payload.last_daily.trim().slice(0, 10);
     if (/^\d{4}-\d{2}-\d{2}$/.test(ld)) rpcArgs.p_last_daily = ld;
+  }
+
+  if (
+    gKey === 'crash' &&
+    payload.crash_peak_mult != null &&
+    Number.isFinite(Number(payload.crash_peak_mult))
+  ) {
+    const pm = Number(payload.crash_peak_mult);
+    rpcArgs.p_crash_peak = Math.round(Math.min(Math.max(pm, 1), 89) * 100) / 100;
   }
 
   const { data, error } = await client.rpc('apply_settlement', rpcArgs);

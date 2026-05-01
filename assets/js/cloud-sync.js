@@ -289,8 +289,8 @@
     const metric = leaderboardScope === 'weekly' ? 'weekly_net_delta.desc' : 'current_balance.desc';
     const selectCols =
       leaderboardScope === 'weekly'
-        ? 'leaderboard_name,weekly_net_delta,weekly_rounds'
-        : 'leaderboard_name,current_balance,total_rounds,net_delta';
+        ? 'leaderboard_name,weekly_net_delta,weekly_rounds,aura_peak'
+        : 'leaderboard_name,current_balance,total_rounds,net_delta,aura_peak';
     const headers = { apikey: CONFIG.supabaseAnonKey };
     const sb = getSupabase();
     if (sb) {
@@ -344,6 +344,11 @@
     const rndCol = byId('games-lb-head-rounds');
     if (rndCol) {
       rndCol.textContent = leaderboardScope === 'weekly' ? 'Week rounds' : 'Rounds';
+    }
+    const auraHead = byId('games-lb-head-aura');
+    if (auraHead) {
+      auraHead.textContent =
+        leaderboardScope === 'weekly' ? 'Aura peak (all-time)' : 'Aura peak';
     }
   }
 
@@ -440,7 +445,7 @@
     if (!uid) return null;
     const q = encodeURIComponent(uid);
     let rows = await authFetch(
-      `/rest/v1/wallets?select=tokens,coin_streak,last_daily&user_id=eq.${q}&limit=1`,
+      `/rest/v1/wallets?select=tokens,coin_streak,last_daily,aura_peak_multiplier&user_id=eq.${q}&limit=1`,
       { method: 'GET' }
     );
     if (rows?.length) return rows[0];
@@ -450,7 +455,7 @@
       body: JSON.stringify([{}])
     });
     rows = await authFetch(
-      `/rest/v1/wallets?select=tokens,coin_streak,last_daily&user_id=eq.${q}&limit=1`,
+      `/rest/v1/wallets?select=tokens,coin_streak,last_daily,aura_peak_multiplier&user_id=eq.${q}&limit=1`,
       { method: 'GET' }
     );
     return rows?.[0] || null;
@@ -495,6 +500,15 @@
     return l >= r ? l : r;
   }
 
+  function emitAuraCloudPeak(walletRow) {
+    if (!walletRow || typeof walletRow !== 'object') return;
+    const ap = walletRow.aura_peak_multiplier ?? walletRow.auraPeakMultiplier;
+    const pk = typeof ap === 'number' ? ap : parseFloat(ap);
+    if (!Number.isFinite(pk) || pk <= 0) return;
+    window.dispatchEvent(new CustomEvent('fuqmea-aura-cloud-peak', { detail: { peak: pk } }));
+  }
+
+  /** Cloud `tokens` are authoritative once we have a server row — server applies deltas; max(local,cloud) caused UI desync. */
   function reconcileLocalWithCloudRow(localSnap, cloudRow) {
     if (!cloudRow || typeof cloudRow !== 'object') {
       return {
@@ -508,7 +522,7 @@
     const cStreak = Math.max(0, Math.floor(Number(streakSrc) || 0));
     const ldRemote = cloudRow.last_daily ?? cloudRow.lastDaily;
     return {
-      tokens: Math.max(cTok, localSnap.tokens),
+      tokens: cTok,
       coinStreak: Math.max(cStreak, localSnap.coinStreak),
       lastDaily: mergeLastDaily(localSnap.lastDaily, ldRemote)
     };
@@ -534,6 +548,7 @@
         const ep = deriveImportDeviceWalletEndpoint();
         if (!ep) {
           writeFunWalletLocal(reconcileLocalWithCloudRow(readFunWalletSnapshot(), row));
+          emitAuraCloudPeak(row);
           return;
         }
 
@@ -557,6 +572,7 @@
       }
 
       writeFunWalletLocal(reconcileLocalWithCloudRow(readFunWalletSnapshot(), cloudLike));
+      emitAuraCloudPeak(cloudLike);
     } catch (_) {
       writeFunWalletLocal(readFunWalletSnapshot());
     }
@@ -617,6 +633,16 @@
     if (typeof cs === 'number' && Number.isFinite(cs)) body.coin_streak = Math.trunc(cs);
     const ld = evt.last_daily != null ? evt.last_daily : evt.lastDaily;
     if (typeof ld === 'string' && ld.trim()) body.last_daily = ld.trim().slice(0, 10);
+
+    const gKey = typeof evt.game === 'string' ? evt.game.trim().toLowerCase() : '';
+    if (
+      gKey === 'crash' &&
+      evt.crash_peak_mult != null &&
+      Number.isFinite(Number(evt.crash_peak_mult))
+    ) {
+      const pm = Number(evt.crash_peak_mult);
+      body.crash_peak_mult = Math.round(Math.min(Math.max(pm, 1), 89) * 100) / 100;
+    }
 
     let res;
     try {
@@ -699,12 +725,12 @@
     if (!tbody) return;
     updateLeaderboardTableHeadLabels();
     syncLeaderboardScopeButtons();
-    tbody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
     try {
       const lim = Number(CONFIG.leaderboardLimit || 25);
       const rows = await fetchLeaderboardRows(lim);
       if (!rows?.length) {
-        tbody.innerHTML = '<tr><td colspan="4">No players yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5">No players yet.</td></tr>';
         return;
       }
       tbody.innerHTML = rows
@@ -715,18 +741,21 @@
               : Number(row.current_balance || 0);
           const rounds =
             leaderboardScope === 'weekly' ? Number(row.weekly_rounds || 0) : Number(row.total_rounds || 0);
+          const apRaw = Number(row.aura_peak ?? row.aura_peak_multiplier ?? 0);
+          const apCell = Number.isFinite(apRaw) && apRaw > 0 ? `${apRaw.toFixed(2)}×` : '—';
           const name = String(row.leaderboard_name || row.handle || 'player');
           return `<tr>
             <td>${idx + 1}</td>
             <td>${name}</td>
             <td>${score}</td>
             <td>${rounds}</td>
+            <td>${apCell}</td>
           </tr>`;
         })
         .join('');
     } catch {
       tbody.innerHTML =
-        '<tr><td colspan="4">Leaderboard unavailable. Deploy Edge <code>leaderboard</code> or run latest <code>schema.sql</code> (RPC); load <code>assets/js/vendor/supabase.umd.min.js</code>.</td></tr>';
+        '<tr><td colspan="5">Leaderboard unavailable. Deploy Edge <code>leaderboard</code> or run latest <code>schema.sql</code> (RPC); load <code>assets/js/vendor/supabase.umd.min.js</code>.</td></tr>';
     }
   }
 

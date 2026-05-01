@@ -1993,6 +1993,13 @@
     return Math.round(m * 100) / 100;
   }
 
+  /** Cloud settle payload for Aura peak (server clamps 1–89). */
+  function crashPeakForCloud(mult) {
+    const m = Number(mult);
+    if (!Number.isFinite(m)) return undefined;
+    return Math.round(Math.min(Math.max(m, 1), 89) * 100) / 100;
+  }
+
   function crashTick() {
     if (!crashRuntime.active || crashRuntime.crashed) return;
     crashRuntime.mult += 0.012 + crashRuntime.mult * 0.0048 + Math.random() * 0.01;
@@ -2048,7 +2055,8 @@
       'crash',
       `Aura Check @ ${bustAt}× — stacked ${stacked}×`,
       -crashRuntime.bet,
-      wBust.tokens
+      wBust.tokens,
+      { crash_peak_mult: crashPeakForCloud(crashRuntime.mult) }
     );
     setGameOutcome(
       'crash',
@@ -2107,7 +2115,8 @@
           ? `Farmed ${mult.toFixed(2)}× · ${net} FUQ (paid ${payout})`
           : `Farmed ${mult.toFixed(2)}× · even (paid ${payout})`,
       net,
-      w.tokens
+      w.tokens,
+      { crash_peak_mult: crashPeakForCloud(mult) }
     );
     setGameOutcome(
       'crash',
@@ -2618,6 +2627,16 @@
 
     window.addEventListener('fuqmea-wallet-hydrated', paintWalletFromStorage);
     window.addEventListener('fuqmea-cloud-init-complete', paintWalletFromStorage, { once: true });
+
+    window.addEventListener('fuqmea-aura-cloud-peak', (ev) => {
+      const pk = ev && ev.detail && Number(ev.detail.peak);
+      if (!Number.isFinite(pk) || pk <= 0) return;
+      const s = loadWinStreaks();
+      if (!s.crash) return;
+      s.crash.peakBankMult = Math.max(Number(s.crash.peakBankMult) || 0, pk);
+      saveWinStreaks(s);
+      renderWinStreakBars();
+    });
 
     const w = loadWallet();
     syncCoinBestFromWallet(w);

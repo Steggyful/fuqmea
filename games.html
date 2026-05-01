@@ -97,7 +97,7 @@
           <button type="button" class="button games-wallet-btn games-rakeback-btn" id="games-rakeback-claim" disabled>NO RAKEBACK YET</button>
         </section>
 
-        <section class="games-cloud-panel" aria-labelledby="games-account-heading" hidden>
+        <section class="games-cloud-panel" aria-labelledby="games-account-heading">
           <div class="games-account-head-row">
             <h2 id="games-account-heading" class="games-account-heading">SAVE PROGRESS</h2>
             <span class="games-account-status-chip" id="games-cloud-status" aria-live="polite">Cloud OFF</span>
@@ -137,7 +137,7 @@
           <p class="games-history-hint games-account-msg" id="games-cloud-msg" role="status">Enable cloud in <code>cloud-config.js</code> to sync.</p>
         </section>
 
-        <section class="games-leaderboard-panel" aria-labelledby="games-leaderboard-title" hidden>
+        <section class="games-leaderboard-panel" aria-labelledby="games-leaderboard-title">
           <div class="games-quest-panel-head">
             <h2 id="games-leaderboard-title" class="games-daily-quests-heading">LEADERBOARD</h2>
             <div class="games-cloud-actions">
@@ -154,10 +154,11 @@
                   <th>Name</th>
                   <th id="games-lb-head-score">Balance</th>
                   <th id="games-lb-head-rounds">Rounds</th>
+                  <th id="games-lb-head-aura">Aura peak</th>
                 </tr>
               </thead>
               <tbody id="games-leaderboard-body">
-                <tr><td colspan="4">Cloud leaderboard disabled.</td></tr>
+                <tr><td colspan="5">Loading leaderboard…</td></tr>
               </tbody>
             </table>
           </div>
@@ -495,7 +496,7 @@
   <script src="assets/js/init.js?v=2.1.6" defer></script>
   <script src="assets/js/cloud-config.js?v=1.3.2" defer></script>
   <script src="assets/js/vendor/supabase.umd.min.js?v=2.49.8" defer></script>
-  <script src="assets/js/cloud-sync.js?v=1.13.0" defer></script>
-  <script src="assets/js/games.js?v=2.6.0" defer></script>
+  <script src="assets/js/cloud-sync.js?v=1.14.0" defer></script>
+  <script src="assets/js/games.js?v=2.7.0" defer></script>
 </body>
 </html>
