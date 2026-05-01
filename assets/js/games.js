@@ -2237,10 +2237,21 @@
     const rawStreak = Number(st.coinStreak ?? st.coin_streak);
     const sStreak = Number.isFinite(rawStreak) ? Math.max(0, Math.floor(rawStreak)) : 0;
     const sDaily = st.lastDaily ?? st.last_daily ?? '';
+    /** apply_settlement returns rakeback_pool; settle-game echoes it as rakebackPool. Must merge here
+     * or every successful round wipes the locally mirrored pool until the next tab-hydrate. */
+    const rbSrc = st.rakebackPool ?? st.rakeback_pool;
+    let sRake = localNow.rakebackPool ?? 0;
+    if (rbSrc !== undefined && rbSrc !== null && rbSrc !== '') {
+      const n = Number(rbSrc);
+      if (Number.isFinite(n)) {
+        sRake = Math.max(0, Math.round(n * 100) / 100);
+      }
+    }
     const merged = {
       tokens: trustServerTokens ? sTok : Math.max(localNow.tokens || 0, sTok),
       coinStreak: Math.max(localNow.coinStreak || 0, sStreak),
-      lastDaily: mergeLastDailyStr(localNow.lastDaily, typeof sDaily === 'string' ? sDaily : '')
+      lastDaily: mergeLastDailyStr(localNow.lastDaily, typeof sDaily === 'string' ? sDaily : ''),
+      rakebackPool: trustServerTokens ? sRake : Math.max(localNow.rakebackPool || 0, sRake)
     };
     saveWallet(merged);
     return merged;
