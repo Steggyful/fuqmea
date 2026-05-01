@@ -122,6 +122,7 @@ Canonical definitions live in **[`schema.sql`](schema.sql)** end-to-end. **[`sup
 | [`20260430210000_wallets_public_read_and_leaderboard_grants.sql`](migrations/20260430210000_wallets_public_read_and_leaderboard_grants.sql) | `wallets_public_read` policy + `SELECT` grants on both leaderboard views |
 | [`20260502130000_wallet_aura_peak_leaderboard.sql`](migrations/20260502130000_wallet_aura_peak_leaderboard.sql) | `wallets.aura_peak_multiplier` column + `apply_settlement(..., p_crash_peak)` + `aura_peak` columns on the leaderboard views/RPCs |
 | [`20260502160000_leaderboard_aggregate.sql`](migrations/20260502160000_leaderboard_aggregate.sql) | `public.leaderboard_aggregate` table + RLS + `tg_refresh_leaderboard_aggregate` triggers + backfill; replaces the SECURITY DEFINER leaderboard views with invoker views over the aggregate, and switches the leaderboard RPCs to SECURITY INVOKER |
+| [`20260502170000_rakeback_pool.sql`](migrations/20260502170000_rakeback_pool.sql) | `wallets.rakeback_pool numeric(12,2)` column, in-server rakeback accrual inside `apply_settlement` (10% of \|delta\| on coin/rps/slots/bj/crash losses), and a new `claim_rakeback()` RPC. **Apply on existing projects** so signed-in clients can read/claim rakeback after deploying `cloud-sync.js@1.20.0`. |
 
 **SQL Editor workflow:** one full paste of **`schema.sql`** is sufficient. **CLI-only migrations** do not create the base tables/RPCs from scratch — run **`schema.sql`** once on a new project, then use migrations for small follow-ups, or keep re-pasting the full **`schema.sql`** when you change it.
 
@@ -237,6 +238,17 @@ Commit and deploy to GitHub Pages as usual. After deploy, bump the `?v=` on scri
 - Each **cloud** round triggers `settle-game` → Postgres updates **`wallets`** + **`game_events`** → trigger refreshes the aggregate row.
 - Right after each local round, **`refreshLeaderboard()`** runs once for **your** browser, so **your** open games page usually pulls new rows automatically.
 - **Other players** (or you after a reload) still need **Reload** / **leaderboard Refresh** unless you build polling—they read from Postgres at request time, not live websocket.
+
+## Rakeback (server-side)
+
+Rakeback was previously tracked in the browser's `localStorage` and could leak between users on a shared device. The 1.20.0 client moves the pool onto the server:
+
+- **Storage:** `public.wallets.rakeback_pool numeric(12,2)` (default 0; check ≥ 0).
+- **Accrual:** inside `apply_settlement`. Whenever the settled `p_game` is one of `coin / rps / slots / bj / crash` and the delta is negative, the pool grows by `round(abs(delta) * 0.10, 2)`. No client-driven accrual call exists; the server is the single source of truth.
+- **Claim:** new RPC `claim_rakeback()` (SECURITY DEFINER, granted to `authenticated`). Floors the pool to a whole-FUQ payout, credits `wallets.tokens` atomically, keeps the fractional remainder for next time, and inserts a `rakeback_claim` row in `game_events` so it shows in history and feeds the leaderboard aggregate.
+- **Migration:** [`supabase/migrations/20260502170000_rakeback_pool.sql`](migrations/20260502170000_rakeback_pool.sql) adds the column, drops + recreates `apply_settlement` with the new return shape (`tokens, coin_streak, last_daily, rakeback_pool, event_id`), and creates `claim_rakeback`. Idempotent — safe to re-apply.
+- **Edge function:** the legacy `rakeback` game key is rejected by `settle-game`. Old clients will see one failed claim until they refresh; the cache-bust in `games.html` forces a reload.
+- **Guests:** the panel shows "Sign in to earn 10% rakeback on losses." Nothing accrues without a session, which closes the abuse loop where a user signed in, drained tokens, signed out, and re-pulled the cloud balance into guest play.
 
 ## First-login device balance (once per account)
 

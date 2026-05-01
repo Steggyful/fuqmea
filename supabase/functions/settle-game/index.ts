@@ -21,8 +21,9 @@ function allowedDeltaForGame(game: string): { min: number; max: number } | null 
   if (g === 'coin' || g === 'rps' || g === 'slots' || g === 'bj' || g === 'crash') return { min: -250, max: 600 };
   if (g === 'daily') return { min: 0, max: 60 };
   if (g === 'quest' || g === 'quest_weekly') return { min: 0, max: 250 };
-  if (g === 'rakeback') return { min: 0, max: 2000 };
   if (g === 'reset') return { min: -5000, max: 0 };
+  // Rakeback claim is server-driven via the claim_rakeback RPC; legacy clients sending
+  // 'rakeback' through settle-game are rejected so they refresh and pick up the new flow.
   return null;
 }
 
@@ -174,7 +175,8 @@ Deno.serve(async (req) => {
       wallet: {
         tokens: Number(row.tokens) || 0,
         coinStreak: Number(row.coin_streak) || 0,
-        lastDaily: row.last_daily || ''
+        lastDaily: row.last_daily || '',
+        rakebackPool: Number(row.rakeback_pool) || 0
       },
       eventId: row.event_id || null
     }),

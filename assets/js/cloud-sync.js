@@ -2,7 +2,7 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.19.0';
+  const BUILD = '1.20.0';
 
   /** Same key as games.js — must stay in sync for offline→cloud one-time merge. */
   const FUN_WALLET_KEY = 'fuqmea_fun_wallet_v1';
@@ -338,6 +338,13 @@
     badge.classList.toggle('games-cloud-status--on', Boolean(isOn));
   }
 
+  /** Cached auth state so other modules (games.js) can react via fuqmea-cloud-auth-state. */
+  let signedInCached = false;
+
+  function isSignedIn() {
+    return signedInCached;
+  }
+
   /** Guest blurb vs signed-in line + optional status strip (games-cloud-msg). */
   function setCloudAccountPanelMode(opts) {
     if (!opts || typeof opts !== 'object') return;
@@ -359,6 +366,12 @@
     }
     if (msgEl && Object.prototype.hasOwnProperty.call(opts, 'statusNote')) {
       msgEl.textContent = opts.statusNote == null ? '' : String(opts.statusNote);
+    }
+    if (signedInCached !== signedIn) {
+      signedInCached = signedIn;
+      window.dispatchEvent(
+        new CustomEvent('fuqmea-cloud-auth-state', { detail: { signedIn } })
+      );
     }
   }
 
@@ -630,15 +643,16 @@
   function readFunWalletSnapshot() {
     try {
       const raw = localStorage.getItem(FUN_WALLET_KEY);
-      if (!raw) return { tokens: 200, coinStreak: 0, lastDaily: '' };
+      if (!raw) return { tokens: 200, coinStreak: 0, lastDaily: '', rakebackPool: 0 };
       const w = JSON.parse(raw);
       return {
         tokens: Math.max(0, Math.floor(Number(w.tokens) || 0)),
         coinStreak: Math.max(0, Math.floor(Number(w.coinStreak) || 0)),
-        lastDaily: typeof w.lastDaily === 'string' ? w.lastDaily : ''
+        lastDaily: typeof w.lastDaily === 'string' ? w.lastDaily : '',
+        rakebackPool: Math.max(0, Math.round(Number(w.rakebackPool) * 100) / 100) || 0
       };
     } catch {
-      return { tokens: 200, coinStreak: 0, lastDaily: '' };
+      return { tokens: 200, coinStreak: 0, lastDaily: '', rakebackPool: 0 };
     }
   }
 
@@ -652,7 +666,8 @@
     const out = {
       tokens: Math.max(0, Math.floor(Number(w.tokens) || 0)),
       coinStreak: Math.max(0, Math.floor(Number(w.coinStreak) || 0)),
-      lastDaily: normalizeLastDailyForStorage(w.lastDaily)
+      lastDaily: normalizeLastDailyForStorage(w.lastDaily),
+      rakebackPool: Math.max(0, Math.round(Number(w.rakebackPool) * 100) / 100) || 0
     };
     localStorage.setItem(FUN_WALLET_KEY, JSON.stringify(out));
     window.dispatchEvent(new CustomEvent('fuqmea-wallet-hydrated'));
@@ -695,7 +710,9 @@
    *  backup exists (e.g. user cleared storage). */
   function restoreGuestOrReset() {
     const backup = readGuestBackup();
-    const target = backup || { tokens: 200, coinStreak: 0, lastDaily: '' };
+    const target = backup || { tokens: 200, coinStreak: 0, lastDaily: '', rakebackPool: 0 };
+    // Guest mode never has rakeback (server-side feature for signed-in users only).
+    target.rakebackPool = 0;
     writeFunWalletLocal(target);
     clearGuestBackup();
   }
@@ -722,17 +739,21 @@
       return {
         tokens: localSnap.tokens,
         coinStreak: localSnap.coinStreak,
-        lastDaily: localSnap.lastDaily
+        lastDaily: localSnap.lastDaily,
+        rakebackPool: localSnap.rakebackPool || 0
       };
     }
     const cTok = Math.max(0, Math.floor(Number(cloudRow.tokens) || 0));
     const streakSrc = cloudRow.coin_streak ?? cloudRow.coinStreak;
     const cStreak = Math.max(0, Math.floor(Number(streakSrc) || 0));
     const ldRemote = cloudRow.last_daily ?? cloudRow.lastDaily;
+    const rbSrc = cloudRow.rakeback_pool ?? cloudRow.rakebackPool;
+    const cRake = Math.max(0, Math.round(Number(rbSrc) * 100) / 100) || 0;
     return {
       tokens: cTok,
       coinStreak: Math.max(cStreak, localSnap.coinStreak),
-      lastDaily: mergeLastDaily(localSnap.lastDaily, ldRemote)
+      lastDaily: mergeLastDaily(localSnap.lastDaily, ldRemote),
+      rakebackPool: cRake
     };
   }
 
@@ -1286,12 +1307,36 @@
     return raw.length > 90 ? `${raw.slice(0, 87)}…` : raw;
   }
 
+  /** Claim accrued server-side rakeback (signed-in only). The RPC pays floor(pool) into
+   *  tokens, keeps the fractional remainder, and inserts a 'rakeback_claim' game event
+   *  for the history log. Local wallet snapshot is rewritten from the response. */
+  async function claimRakeback() {
+    const sb = getSupabase();
+    if (!sb) return { ok: false, error: 'no_client' };
+    const { data, error } = await sb.rpc('claim_rakeback');
+    if (error) {
+      return { ok: false, error: shortErrText(error) };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return { ok: false, error: 'empty_response' };
+    const merged = reconcileLocalWithCloudRow(readFunWalletSnapshot(), row);
+    writeFunWalletLocal(merged);
+    emitAuraCloudPeak(row);
+    return {
+      ok: true,
+      paid: Math.max(0, Math.floor(Number(row.paid) || 0)),
+      wallet: merged
+    };
+  }
+
   window.FuqCloud = {
     enabled: isEnabled,
+    isSignedIn,
     recordSettlement,
     getLastSettlementResult,
     getSettlementInFlightCount,
     refreshLeaderboard: loadLeaderboard,
+    claimRakeback,
     startOAuth
   };
 

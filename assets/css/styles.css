@@ -2667,6 +2667,22 @@ h1 {
   font-size: 0.74rem;
 }
 
+.games-rakeback-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: rgba(154, 160, 176, 0.85);
+}
+
+.games-rakeback-stage--guest .games-rakeback-hint {
+  color: rgba(57, 255, 20, 0.78);
+}
+
+.games-rakeback-stage--guest .games-rakeback-val,
+.games-rakeback-stage--guest .games-rakeback-sub {
+  opacity: 0.6;
+}
+
 .games-rakeback-btn {
   margin-top: 0.55rem;
   width: 100%;

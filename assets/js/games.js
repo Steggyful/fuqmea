@@ -1111,24 +1111,40 @@
     document.getElementById('bj-split-btn')?.addEventListener('click', bjSplit);
   }
 
+  /** Day boundary is global midnight Mountain Time (America/Denver) so dailies, weeklies,
+   *  and the daily bonus reset at the same instant for every player on every device. */
   function todayKey() {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    try {
+      const fmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Denver',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      return fmt.format(new Date());
+    } catch (_) {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
   }
 
-  /** ISO-like week ID (Monday start), local date—pairs with midnight daily reset messaging */
+  /** ISO week id (Monday start) computed from the MT day key so the weekly reset also
+   *  rolls over at midnight MT for everyone, not at each device's local midnight. */
   function weekKey() {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
-    const isoYear = date.getFullYear();
-    const jan4 = new Date(isoYear, 0, 4);
-    jan4.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+    const dayStr = todayKey();
+    const parts = dayStr.split('-').map(Number);
+    if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) {
+      return `${new Date().getFullYear()}-W01`;
+    }
+    const [y, m, d] = parts;
+    const date = new Date(Date.UTC(y, m - 1, d));
+    date.setUTCDate(date.getUTCDate() + 3 - ((date.getUTCDay() + 6) % 7));
+    const isoYear = date.getUTCFullYear();
     const weekNum =
-      Math.floor((date.getTime() - jan4.getTime()) / 604800000) + 1;
+      Math.floor((date.getTime() - Date.UTC(isoYear, 0, 4)) / 604800000) + 1;
     const wSafe = Number.isFinite(weekNum) && weekNum > 0 ? weekNum : 1;
     return `${isoYear}-W${String(wSafe).padStart(2, '0')}`;
   }
@@ -2179,22 +2195,24 @@
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        return { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '' };
+        return { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '', rakebackPool: 0 };
       }
       const w = JSON.parse(raw);
       return {
         tokens: Math.max(0, Math.floor(Number(w.tokens)) || 0),
         coinStreak: Math.max(0, Math.floor(Number(w.coinStreak)) || 0),
-        lastDaily: typeof w.lastDaily === 'string' ? w.lastDaily : ''
+        lastDaily: typeof w.lastDaily === 'string' ? w.lastDaily : '',
+        rakebackPool: Math.max(0, Math.round(Number(w.rakebackPool) * 100) / 100) || 0
       };
     } catch {
-      return { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '' };
+      return { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '', rakebackPool: 0 };
     }
   }
 
   function saveWallet(w, opts) {
     w.tokens = Math.max(0, Math.floor(w.tokens));
     w.coinStreak = Math.max(0, Math.floor(w.coinStreak));
+    if (typeof w.rakebackPool !== 'number') w.rakebackPool = 0;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
   }
 
@@ -2228,58 +2246,26 @@
     return merged;
   }
 
-  function defaultRakebackState() {
-    return { pool: 0, claimedTotal: 0 };
+  /** Rakeback is now server-driven (apply_settlement accrues 10% of |delta| on arcade losses
+   *  for signed-in users). Guests don't accrue — sign-up incentive. */
+  function addRakebackFromLoss(_net) {
+    return;
   }
 
-  function loadRakebackState() {
-    try {
-      const raw = localStorage.getItem(RAKEBACK_STATE_KEY);
-      if (!raw) return defaultRakebackState();
-      const o = JSON.parse(raw);
-      const poolNum = Number(o.pool);
-      return {
-        // Keep fractional accrual so small losses still build toward claimable rakeback.
-        pool: Number.isFinite(poolNum) ? Math.max(0, Math.round(poolNum * 100) / 100) : 0,
-        claimedTotal: Math.max(0, Math.floor(Number(o.claimedTotal)) || 0)
-      };
-    } catch {
-      return defaultRakebackState();
+  /** Async claim via the claim_rakeback Postgres RPC. Server credits tokens and writes
+   *  the game-event row; client just renders the new wallet + a local history line. */
+  async function claimRakeback() {
+    if (!cloudClient || !cloudClient.isSignedIn || !cloudClient.isSignedIn()) {
+      return { ok: false, reason: 'guest' };
     }
-  }
-
-  function saveRakebackState(s) {
-    const poolNum = Number(s.pool);
-    const out = {
-      pool: Number.isFinite(poolNum) ? Math.max(0, Math.round(poolNum * 100) / 100) : 0,
-      claimedTotal: Math.max(0, Math.floor(Number(s.claimedTotal)) || 0)
-    };
-    localStorage.setItem(RAKEBACK_STATE_KEY, JSON.stringify(out));
-  }
-
-  /** Rakeback = 10% of net losses with fractional carry; claims are whole FUQ only. */
-  function addRakebackFromLoss(net) {
-    const n = Number(net) || 0;
-    if (n >= 0) return;
-    const add = Math.abs(n) * 0.1;
-    if (add <= 0) return;
-    const st = loadRakebackState();
-    st.pool = Math.max(0, Math.round((st.pool + add) * 100) / 100);
-    saveRakebackState(st);
-    renderRakeback(st);
-  }
-
-  function claimRakeback() {
-    const st = loadRakebackState();
-    const amount = Math.max(0, Math.floor(Number(st.pool) || 0));
-    if (amount < 1) return null;
-    const w = loadWallet();
-    w.tokens += amount;
-    saveWallet(w);
-    st.pool = Math.max(0, Math.round((st.pool - amount) * 100) / 100);
-    st.claimedTotal += amount;
-    saveRakebackState(st);
-    return { amount, wallet: w, rakeback: st };
+    if (typeof cloudClient.claimRakeback !== 'function') {
+      return { ok: false, reason: 'unsupported' };
+    }
+    const result = await cloudClient.claimRakeback();
+    if (!result || !result.ok) {
+      return { ok: false, reason: result && result.error ? result.error : 'failed' };
+    }
+    return { ok: true, paid: result.paid || 0, wallet: result.wallet };
   }
 
   function defaultWinStreaks() {
@@ -2405,14 +2391,20 @@
     const next = [row, ...loadHistory()].slice(0, MAX_HISTORY);
     saveHistory(next);
     renderHistory(next);
-    if (cloudClient?.enabled?.()) {
+    // settleExtra._localOnly = skip the cloud settle (server-driven flows like rakeback claim
+    // already inserted their own game_events row via RPC; sending another would double-count).
+    const localOnly = !!(settleExtra && settleExtra._localOnly);
+    if (!localOnly && cloudClient?.enabled?.()) {
       const payload = {
         game: row.game,
         detail: row.detail,
         delta: row.delta,
         balanceAfter: row.balance
       };
-      if (settleExtra && typeof settleExtra === 'object') Object.assign(payload, settleExtra);
+      if (settleExtra && typeof settleExtra === 'object') {
+        const { _localOnly, ...rest } = settleExtra;
+        Object.assign(payload, rest);
+      }
       cloudClient
         .recordSettlement(payload)
         .then((result) => {
@@ -2554,30 +2546,38 @@
     }
   }
 
-  function renderRakeback(st) {
-    const state = st || loadRakebackState();
-    const poolRaw = Number(state.pool) || 0;
-    const pool = Math.max(0, Math.floor(poolRaw));
+  function renderRakeback() {
+    const w = loadWallet();
+    const poolRaw = Math.max(0, Number(w.rakebackPool) || 0);
+    const pool = Math.floor(poolRaw);
     const poolDisplay =
       poolRaw > 0 && poolRaw < 1
         ? poolRaw.toFixed(1)
-        : Number.isInteger(poolRaw)
+        : pool >= 1
           ? pool.toLocaleString()
           : poolRaw.toFixed(1);
-    const claimed = Math.max(0, Math.floor(Number(state.claimedTotal)) || 0);
-    const hasPool = pool > 0;
+    const signedIn = !!(cloudClient && cloudClient.isSignedIn && cloudClient.isSignedIn());
+    const hasPool = signedIn && pool > 0;
     document.querySelectorAll('.js-rakeback-pool').forEach((el) => {
-      el.textContent = poolDisplay;
+      el.textContent = signedIn ? poolDisplay : '0';
     });
     document.querySelectorAll('.js-rakeback-claimed').forEach((el) => {
-      el.textContent = claimed.toLocaleString();
+      el.textContent = signedIn ? pool.toLocaleString() : '—';
     });
     const panel = document.querySelector('.games-rakeback-stage');
-    if (panel) panel.classList.toggle('games-rakeback-stage--active', hasPool);
+    if (panel) {
+      panel.classList.toggle('games-rakeback-stage--active', hasPool);
+      panel.classList.toggle('games-rakeback-stage--guest', !signedIn);
+    }
     const btn = document.getElementById('games-rakeback-claim');
     if (btn) {
-      btn.disabled = !hasPool;
-      btn.textContent = hasPool ? `CLAIM ${pool} RAKEBACK` : 'NO RAKEBACK YET';
+      if (!signedIn) {
+        btn.disabled = true;
+        btn.textContent = 'SIGN IN TO EARN RAKEBACK';
+      } else {
+        btn.disabled = !hasPool;
+        btn.textContent = hasPool ? `CLAIM ${pool} RAKEBACK` : 'NO RAKEBACK YET';
+      }
     }
   }
 
@@ -2627,6 +2627,8 @@
 
     window.addEventListener('fuqmea-wallet-hydrated', paintWalletFromStorage);
     window.addEventListener('fuqmea-cloud-init-complete', paintWalletFromStorage, { once: true });
+    // Auth state flips the rakeback panel between "Sign in to earn" and live pool readout.
+    window.addEventListener('fuqmea-cloud-auth-state', () => renderRakeback());
 
     window.addEventListener('fuqmea-aura-cloud-peak', (ev) => {
       const pk = ev && ev.detail && Number(ev.detail.peak);
@@ -2659,11 +2661,35 @@
       btn.addEventListener('click', claimDailyBonus);
     });
 
-    document.getElementById('games-rakeback-claim')?.addEventListener('click', () => {
-      const out = claimRakeback();
-      if (!out) return;
-      renderWallet(out.wallet);
-      pushHistory('rakeback', `Claimed ${out.amount} FUQ`, out.amount, out.wallet.tokens);
+    document.getElementById('games-rakeback-claim')?.addEventListener('click', async () => {
+      const btn = document.getElementById('games-rakeback-claim');
+      if (btn && btn.disabled) return;
+      const msg = document.getElementById('games-cloud-msg');
+      const out = await claimRakeback();
+      if (!out || !out.ok) {
+        if (msg) {
+          msg.textContent =
+            out && out.reason === 'guest'
+              ? 'Sign in to earn 10% rakeback on losses.'
+              : out && out.reason === 'no_rakeback_to_claim'
+                ? 'No rakeback to claim yet — keep playing.'
+                : 'Rakeback claim failed — try again in a moment.';
+        }
+        renderRakeback();
+        return;
+      }
+      const w = loadWallet();
+      renderWallet(w);
+      renderRakeback();
+      // Local-only history row; the claim_rakeback RPC already wrote a game_events row server-side.
+      pushHistory(
+        'rakeback_claim',
+        `Claimed ${out.paid} FUQ rakeback`,
+        out.paid,
+        w.tokens,
+        { _localOnly: true }
+      );
+      if (msg) msg.textContent = `Claimed ${out.paid} FUQ rakeback.`;
     });
 
     document.getElementById('games-reset-btn')?.addEventListener('click', () => {
@@ -2672,7 +2698,8 @@
       localStorage.removeItem(WIN_STREAK_KEY);
       localStorage.removeItem(QUEST_STATE_KEY);
       localStorage.removeItem(WEEKLY_QUEST_STATE_KEY);
-      localStorage.removeItem(RAKEBACK_STATE_KEY);
+      // RAKEBACK_STATE_KEY removed: rakeback now lives on the server (wallets.rakeback_pool).
+      try { localStorage.removeItem(RAKEBACK_STATE_KEY); } catch (_) { /* legacy clean-up */ }
       clearHistory();
       const fresh = loadWallet();
       renderWallet(fresh);

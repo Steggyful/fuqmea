@@ -62,6 +62,12 @@ create table if not exists public.wallets (
 alter table public.wallets
   add column if not exists aura_peak_multiplier double precision not null default 0;
 
+-- Rakeback (server-side): 10% of |delta| accrues automatically on arcade losses inside
+-- apply_settlement. Claim flow is the dedicated claim_rakeback() RPC below.
+alter table public.wallets
+  add column if not exists rakeback_pool numeric(12,2) not null default 0
+    check (rakeback_pool >= 0);
+
 create table if not exists public.game_events (
   id bigserial primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -108,6 +114,7 @@ $$;
 
 drop function if exists public.apply_settlement(text, text, integer);
 drop function if exists public.apply_settlement(text, text, integer, integer, text);
+drop function if exists public.apply_settlement(text, text, integer, integer, text, double precision);
 
 create or replace function public.apply_settlement(
   p_game text,
@@ -121,6 +128,7 @@ returns table (
   tokens integer,
   coin_streak integer,
   last_daily date,
+  rakeback_pool numeric,
   event_id bigint
 )
 language plpgsql
@@ -132,11 +140,13 @@ declare
   v_tokens integer;
   v_coin_streak integer;
   v_last_daily date;
+  v_rakeback_pool numeric(12,2);
   v_event_id bigint;
   v_parsed_daily date;
   v_game text := lower(trim(coalesce(p_game, '')));
   v_streak_cap integer;
   v_crash_peak double precision;
+  v_rb_accrue numeric(12,2) := 0;
 begin
   v_uid := auth.uid();
   if v_uid is null then
@@ -164,6 +174,11 @@ begin
     v_crash_peak := least(greatest(p_crash_peak::double precision, 1.0), 89.0);
   end if;
 
+  -- Server-side rakeback: 10% of net loss on arcade games, fractional cents preserved.
+  if v_game in ('coin', 'rps', 'slots', 'bj', 'crash') and p_delta < 0 then
+    v_rb_accrue := round(abs(p_delta::numeric) * 0.10, 2);
+  end if;
+
   update public.wallets w
   set
     tokens = greatest(w.tokens + p_delta, 0),
@@ -184,17 +199,82 @@ begin
       when v_crash_peak is not null then
         greatest(coalesce(w.aura_peak_multiplier, 0)::double precision, v_crash_peak)
       else coalesce(w.aura_peak_multiplier, 0)::double precision
-    end
+    end,
+    rakeback_pool = coalesce(w.rakeback_pool, 0) + v_rb_accrue
   where w.user_id = v_uid
-  returning w.tokens, w.coin_streak, w.last_daily
-  into v_tokens, v_coin_streak, v_last_daily;
+  returning w.tokens, w.coin_streak, w.last_daily, w.rakeback_pool
+  into v_tokens, v_coin_streak, v_last_daily, v_rakeback_pool;
 
   insert into public.game_events (user_id, game, detail, delta, balance_after)
   values (v_uid, p_game, left(coalesce(p_detail, ''), 160), p_delta, v_tokens)
   returning id into v_event_id;
 
   return query
-  select v_tokens, v_coin_streak, v_last_daily, v_event_id;
+  select v_tokens, v_coin_streak, v_last_daily, v_rakeback_pool, v_event_id;
+end;
+$$;
+
+-- Claim accrued rakeback: floors the pool to a whole-FUQ payout, keeps the fractional
+-- remainder for the next claim, credits wallet tokens, and writes a 'rakeback_claim' game event.
+drop function if exists public.claim_rakeback();
+
+create or replace function public.claim_rakeback()
+returns table (
+  tokens integer,
+  coin_streak integer,
+  last_daily date,
+  aura_peak_multiplier double precision,
+  rakeback_pool numeric,
+  paid integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_pool numeric(12,2);
+  v_pay integer;
+  v_rem numeric(12,2);
+  v_balance_after integer;
+  v_streak integer;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  perform public.ensure_wallet_exists(v_uid);
+
+  select coalesce(w.rakeback_pool, 0) into v_pool
+  from public.wallets w
+  where w.user_id = v_uid
+  for update;
+
+  if v_pool is null then
+    raise exception 'wallet_not_found';
+  end if;
+
+  v_pay := floor(v_pool)::integer;
+  if v_pay <= 0 then
+    raise exception 'no_rakeback_to_claim';
+  end if;
+  v_rem := v_pool - v_pay;
+
+  update public.wallets w
+  set
+    tokens = w.tokens + v_pay,
+    rakeback_pool = v_rem,
+    updated_at = now()
+  where w.user_id = v_uid
+  returning w.tokens, w.coin_streak into v_balance_after, v_streak;
+
+  insert into public.game_events (user_id, game, detail, delta, balance_after)
+  values (v_uid, 'rakeback_claim', concat('Claimed ', v_pay::text, ' FUQ'), v_pay, v_balance_after);
+
+  return query
+  select w.tokens, w.coin_streak, w.last_daily, w.aura_peak_multiplier, w.rakeback_pool, v_pay
+  from public.wallets w
+  where w.user_id = v_uid;
 end;
 $$;
 
@@ -596,6 +676,7 @@ grant usage on schema public to anon, authenticated;
 grant select on public.leaderboard_all_time to anon, authenticated;
 grant select on public.leaderboard_weekly to anon, authenticated;
 grant execute on function public.apply_settlement(text, text, integer, integer, text, double precision) to authenticated;
+grant execute on function public.claim_rakeback() to authenticated;
 grant execute on function public.ensure_wallet_exists(uuid) to authenticated;
 grant execute on function public.import_initial_device_wallet(integer, integer, text) to authenticated;
 grant execute on function public.leaderboard_all_time_rows(integer) to anon, authenticated;
