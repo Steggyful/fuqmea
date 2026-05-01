@@ -128,6 +128,37 @@
   margin-top: 0.6rem;
 }
 
+.games-cloud-otp-block {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.games-cloud-otp-input {
+  letter-spacing: 0.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+}
+
+.games-cloud-resend-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: var(--lime);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.games-cloud-resend-link:hover,
+.games-cloud-resend-link:focus {
+  color: #fff;
+}
+
 .games-cloud-email {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.22);

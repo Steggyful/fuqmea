@@ -437,13 +437,27 @@
   async function fetchLeaderboardRows(limit) {
     const ep = deriveLeaderboardEndpoint();
     if (ep) {
+      const headers = {
+        'Content-Type': 'application/json',
+        apikey: CONFIG.supabaseAnonKey
+      };
+      // Bearer when signed in keeps the JWT-protected Edge function reachable; guests fall back to public REST view.
+      const sb = getSupabase();
+      if (sb) {
+        try {
+          await maybeRefreshToken();
+          const { data } = await sb.auth.getSession();
+          if (data.session?.access_token) {
+            headers.Authorization = `Bearer ${data.session.access_token}`;
+          }
+        } catch (_) {
+          /**/
+        }
+      }
       try {
         const res = await fetch(ep, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            apikey: CONFIG.supabaseAnonKey
-          },
+          headers,
           body: JSON.stringify({
             scope: leaderboardScope === 'weekly' ? 'weekly' : 'alltime',
             limit
@@ -710,7 +724,10 @@
     }
   }
 
-  async function requestMagicLink(email) {
+  /** Tracks the email a code was just sent to so the verify/resend buttons know who to talk to. */
+  let pendingOtpEmail = '';
+
+  async function requestEmailCode(email) {
     const sb = getSupabase();
     if (!sb) throw new Error('Supabase client unavailable');
     const { error } = await sb.auth.signInWithOtp({
@@ -721,6 +738,23 @@
       }
     });
     if (error) throw error;
+    pendingOtpEmail = email;
+  }
+
+  async function verifyEmailCode(email, token) {
+    const sb = getSupabase();
+    if (!sb) throw new Error('Supabase client unavailable');
+    const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
+    if (error) throw error;
+  }
+
+  function setOtpBlockVisible(show) {
+    const block = byId('games-cloud-otp-block');
+    if (block) block.hidden = !show;
+    if (!show) {
+      const codeInput = byId('games-cloud-otp-code');
+      if (codeInput) codeInput.value = '';
+    }
   }
 
   /** Serialized so settlement responses apply in order (no balance races). */
@@ -966,32 +1000,95 @@
       loginForm.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const emailInput = byId('games-cloud-email');
-        const msg = byId('games-cloud-msg');
         const email = String(emailInput?.value || '').trim();
         if (!email || !email.includes('@')) {
-          if (msg) msg.textContent = 'Enter a valid email.';
+          setCloudAccountPanelMode({ signedIn: false, statusNote: 'Enter a valid email.' });
           return;
         }
         try {
-          await requestMagicLink(email);
+          await requestEmailCode(email);
+          setOtpBlockVisible(true);
           setCloudAccountPanelMode({
             signedIn: false,
-            statusNote: 'Check your email — open the link to finish signing in.'
+            statusNote: 'Code sent. Enter the 6 digits from your email below.'
           });
-        } catch {
+          byId('games-cloud-otp-code')?.focus();
+        } catch (err) {
           setCloudAccountPanelMode({
             signedIn: false,
-            statusNote: 'Could not send email — try again.'
+            statusNote: `Could not send code (${shortErrText(err)}).`
           });
         }
       });
     }
+
+    byId('games-cloud-otp-verify')?.addEventListener('click', async () => {
+      const codeInput = byId('games-cloud-otp-code');
+      const code = String(codeInput?.value || '').replace(/\D/g, '').slice(0, 6);
+      if (!pendingOtpEmail) {
+        setCloudAccountPanelMode({
+          signedIn: false,
+          statusNote: 'Enter your email above first, then request a code.'
+        });
+        return;
+      }
+      if (code.length !== 6) {
+        setCloudAccountPanelMode({
+          signedIn: false,
+          statusNote: 'Enter the 6-digit code from the email.'
+        });
+        return;
+      }
+      try {
+        await verifyEmailCode(pendingOtpEmail, code);
+        setOtpBlockVisible(false);
+        pendingOtpEmail = '';
+        // onAuthStateChange('SIGNED_IN') drives refreshSignedInChrome.
+      } catch (err) {
+        setCloudAccountPanelMode({
+          signedIn: false,
+          statusNote: `Code did not work (${shortErrText(err)}). Try again or resend.`
+        });
+      }
+    });
+
+    byId('games-cloud-otp-code')?.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        byId('games-cloud-otp-verify')?.click();
+      }
+    });
+
+    byId('games-cloud-otp-resend')?.addEventListener('click', async () => {
+      const targetEmail = pendingOtpEmail || String(byId('games-cloud-email')?.value || '').trim();
+      if (!targetEmail || !targetEmail.includes('@')) {
+        setCloudAccountPanelMode({
+          signedIn: false,
+          statusNote: 'Enter your email and request a code first.'
+        });
+        return;
+      }
+      try {
+        await requestEmailCode(targetEmail);
+        setCloudAccountPanelMode({
+          signedIn: false,
+          statusNote: 'New code sent. Check your email.'
+        });
+      } catch (err) {
+        setCloudAccountPanelMode({
+          signedIn: false,
+          statusNote: `Could not resend (${shortErrText(err)}).`
+        });
+      }
+    });
 
     byId('games-cloud-logout-btn')?.addEventListener('click', async () => {
       await clearAuthSessionEverywhere();
       setProfileBlockVisible(false);
       setGuestLoginAreaVisible(true);
       setAccountToolbarVisible(false);
+      setOtpBlockVisible(false);
+      pendingOtpEmail = '';
       updateCloudBadge('Not signed in', false);
       setCloudAccountPanelMode({ signedIn: false, statusNote: 'Signed out.' });
       await loadLeaderboard();
@@ -1095,11 +1192,15 @@
       sb.auth.onAuthStateChange((event, session) => {
         authLog('onAuthStateChange', event, !!session?.access_token);
         if (event === 'SIGNED_IN' && session?.access_token) {
+          setOtpBlockVisible(false);
+          pendingOtpEmail = '';
           void refreshSignedInChrome();
         } else if (event === 'SIGNED_OUT') {
           setProfileBlockVisible(false);
           setGuestLoginAreaVisible(true);
           setAccountToolbarVisible(false);
+          setOtpBlockVisible(false);
+          pendingOtpEmail = '';
           updateCloudBadge('Not signed in', false);
           setCloudAccountPanelMode({ signedIn: false, statusNote: '' });
           void loadLeaderboard().catch(() => {});
