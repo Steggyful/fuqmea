@@ -329,7 +329,6 @@
    */
   async function hydrateWalletAfterLogin() {
     if (!isEnabled()) return;
-    const snap = readFunWalletSnapshot();
     try {
       await maybeRefreshToken().catch(() => {});
       if (!readSession()?.accessToken) return;
@@ -345,9 +344,10 @@
       let cloudLike = row;
       try {
         const sess = readSession();
+        const snap = readFunWalletSnapshot();
         const ep = deriveImportDeviceWalletEndpoint();
         if (!sess?.accessToken || !ep) {
-          writeFunWalletLocal(reconcileLocalWithCloudRow(snap, row));
+          writeFunWalletLocal(reconcileLocalWithCloudRow(readFunWalletSnapshot(), row));
           return;
         }
 
@@ -370,9 +370,9 @@
         cloudLike = row;
       }
 
-      writeFunWalletLocal(reconcileLocalWithCloudRow(snap, cloudLike));
+      writeFunWalletLocal(reconcileLocalWithCloudRow(readFunWalletSnapshot(), cloudLike));
     } catch (_) {
-      writeFunWalletLocal(snap);
+      writeFunWalletLocal(readFunWalletSnapshot());
     }
   }
 

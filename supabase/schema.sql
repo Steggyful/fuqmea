@@ -236,7 +236,12 @@ begin
 end;
 $$;
 
-create or replace view public.leaderboard_all_time as
+-- security_invoker = false: leaderboard must aggregate everyone's game_events. With default invoker=true,
+-- RLS on game_events (owner-only read) hides other users' rows, so net_delta / rounds columns are ~0 while
+-- current_balance still shows (wallets_public_read). Same broken behavior for anon + authenticated.
+create or replace view public.leaderboard_all_time
+with (security_invoker = false)
+as
 select
   p.id as user_id,
   p.handle,
@@ -249,7 +254,10 @@ join public.wallets w on w.user_id = p.id
 left join public.game_events ge on ge.user_id = p.id
 group by p.id, p.handle, p.display_name, w.tokens;
 
-create or replace view public.leaderboard_weekly as
+-- Weekly bucket: Postgres week starts Monday (date_trunc semantics). Server TZ is typically UTC on Supabase.
+create or replace view public.leaderboard_weekly
+with (security_invoker = false)
+as
 select
   p.id as user_id,
   p.handle,

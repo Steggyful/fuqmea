@@ -2178,6 +2178,30 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
   }
 
+  /** apply_settlement only updates tokens server-side; keep local streak/daily from max(local, server). */
+  function mergeLastDailyStr(a, b) {
+    const x = typeof a === 'string' ? a.trim().slice(0, 32) : '';
+    const y = typeof b === 'string' ? b.trim().slice(0, 32) : '';
+    if (!x) return y;
+    if (!y) return x;
+    return x >= y ? x : y;
+  }
+
+  function applyCloudWalletSettlement(serverW) {
+    const st =
+      typeof serverW === 'object' && serverW
+        ? serverW
+        : { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '' };
+    const localNow = loadWallet();
+    const merged = {
+      tokens: Math.max(0, Math.floor(Number(st.tokens)) || 0),
+      coinStreak: Math.max(localNow.coinStreak || 0, Math.max(0, Math.floor(Number(st.coinStreak)) || 0)),
+      lastDaily: mergeLastDailyStr(localNow.lastDaily, st.lastDaily)
+    };
+    saveWallet(merged);
+    return merged;
+  }
+
   function defaultRakebackState() {
     return { pool: 0, claimedTotal: 0 };
   }
@@ -2360,8 +2384,10 @@
         .recordSettlement({ game: row.game, detail: row.detail, delta: row.delta, balanceAfter: row.balance })
         .then((wallet) => {
           if (!wallet) return;
-          saveWallet(wallet, { skipCloud: true });
-          renderWallet(wallet);
+          const merged = applyCloudWalletSettlement(wallet);
+          syncCoinBestFromWallet(merged);
+          renderWallet(merged);
+          renderWinStreakBars();
         })
         .catch(() => {
           // Client keeps local history/wallet if network settlement is unavailable.

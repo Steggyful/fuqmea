@@ -123,6 +123,10 @@ to anon, authenticated
 using (true);
 ```
 
+**Existing project — “Rounds” / weekly totals always zero (but balance looks OK):** the leaderboard views sum rows from **`game_events`**, but **`game_events`** only allows owners to **`SELECT`** their own rows — so joins run as **the caller** hide everyone else’s events. Reload `schema.sql` from this repo **or** recreate both views with **`with (security_invoker = false)`** on `leaderboard_all_time` and `leaderboard_weekly` (see [`schema.sql`](schema.sql)): that runs the aggregated query with the **view owner**’s rights so public leaderboard math is correct **without** exposing raw event rows publicly (only aggregates in the views).
+
+Weekly scope uses **`date_trunc('week', now())`** — week starts Monday, in the database session timezone (**usually UTC** on Supabase), which may differ from “weekly quests” keyed off the browser’s local ISO week — see comments in **`games.js`** vs this SQL.
+
 **Unique display names:** the current [`schema.sql`](schema.sql) adds index `profiles_display_name_lower_unique`. If the index fails to create, two accounts already share the same name (case-insensitive); change or clear one in **Table Editor → profiles** first, then re-run the index statement.
 
 ---
