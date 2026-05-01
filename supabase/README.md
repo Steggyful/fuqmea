@@ -127,6 +127,8 @@ using (true);
 
 Weekly scope uses **`date_trunc('week', now())`** — week starts Monday, in the database session timezone (**usually UTC** on Supabase), which may differ from “weekly quests” keyed off the browser’s local ISO week — see comments in **`games.js`** vs this SQL.
 
+Standalone patch (same definitions as `schema.sql`): [`supabase/migrations/20260430120000_leaderboard_views_security.sql`](migrations/20260430120000_leaderboard_views_security.sql); or `npx supabase db query --linked -f supabase/migrations/20260430120000_leaderboard_views_security.sql` from a CLI-linked project folder.
+
 **Unique display names:** the current [`schema.sql`](schema.sql) adds index `profiles_display_name_lower_unique`. If the index fails to create, two accounts already share the same name (case-insensitive); change or clear one in **Table Editor → profiles** first, then re-run the index statement.
 
 ---
