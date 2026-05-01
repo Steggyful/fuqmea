@@ -136,6 +136,20 @@
   border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
+.games-cloud-build {
+  margin-left: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.games-cloud-build:empty {
+  display: none;
+}
+
 .games-cloud-otp-input {
   letter-spacing: 0.2em;
   text-align: center;

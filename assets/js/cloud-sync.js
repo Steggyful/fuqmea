@@ -1,6 +1,9 @@
 (function () {
   'use strict';
 
+  /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
+  const BUILD = '1.18.0';
+
   /** Same key as games.js — must stay in sync for offline→cloud one-time merge. */
   const FUN_WALLET_KEY = 'fuqmea_fun_wallet_v1';
 
@@ -9,6 +12,21 @@
 
   /** Implicit-grant redirects use URL fragments; stash before stripping so async init can setSession(). */
   const IMPLICIT_FRAG_PENDING_KEY = 'fuqmea_auth_implicit_frag_pending_v1';
+
+  /** Snapshot the auth-callback intent BEFORE supabase-js touches the URL so we can surface failures. */
+  const incomingAuthCallbackKind = (() => {
+    try {
+      const s = new URLSearchParams(window.location.search || '');
+      if (s.get('code')) return 'pkce';
+      if (s.get('token_hash')) return 'token_hash';
+      const h = window.location.hash || '';
+      if (h.includes('code=')) return 'pkce';
+      if (h.includes('access_token=')) return 'implicit';
+    } catch (_) {
+      /**/
+    }
+    return null;
+  })();
 
   const CONFIG = window.FUQ_CLOUD_CONFIG || {};
   /** Defer singleton until bootstrap (vendor script runs before this file). */
@@ -129,7 +147,11 @@
           auth: {
             persistSession: true,
             autoRefreshToken: true,
-            detectSessionInUrl: false,
+            // Required for flowType: 'pkce'. With this true, supabase-js wires the PKCE state
+            // machine on signInWithOAuth, parses ?code= on return, exchanges for a session, and
+            // strips the URL itself. Manual exchangeCodeForSession was racing that machine and
+            // producing "invalid flow state" 404s on /auth/v1/token?grant_type=pkce.
+            detectSessionInUrl: true,
             flowType: 'pkce',
             storage: window.localStorage
           }
@@ -141,24 +163,6 @@
     return supabaseClient;
   }
 
-  /** What kind of callback (if any) is in the current URL? PKCE `?code=`, email `?token_hash=`, or implicit `#access_token=`. */
-  function detectAuthCallback() {
-    let search = null;
-    try {
-      search = new URLSearchParams(window.location.search || '');
-    } catch (_) {
-      /**/
-    }
-    const hash = window.location.hash || '';
-    if (search && search.get('code')) return { kind: 'pkce' };
-    if (search && search.get('token_hash')) {
-      return { kind: 'token_hash', token_hash: search.get('token_hash'), type: search.get('type') || 'magiclink' };
-    }
-    if (hash.includes('code=')) return { kind: 'pkce' };
-    if (hash.includes('access_token=')) return { kind: 'implicit' };
-    return null;
-  }
-
   function stripAuthParamsFromUrl() {
     try {
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -167,11 +171,17 @@
     }
   }
 
-  /** PKCE/code + token_hash + legacy implicit + migrated fuqmea_cloud_session → Supabase persisted session. */
+  /**
+   * Migrate any legacy/implicit storage into a real supabase-js session BEFORE the singleton is used.
+   * PKCE `?code=` and `?token_hash=` are handled automatically by supabase-js once
+   * `detectSessionInUrl: true` is set; we do NOT call exchangeCodeForSession / verifyOtp here.
+   * Post-init failure surfacing lives in init() against `incomingAuthCallbackKind`.
+   */
   async function bootstrapAuthSession(sb) {
     if (!sb) return;
     lastAuthCallbackError = null;
     authCallbackJustSignedIn = false;
+    authLog('bootstrap start, incoming callback?', incomingAuthCallbackKind);
 
     try {
       const pend = localStorage.getItem(IMPLICIT_FRAG_PENDING_KEY);
@@ -220,39 +230,8 @@
       authLog('legacy session read error', e);
     }
 
-    const cb = detectAuthCallback();
-    if (cb) {
-      authLog('auth callback detected', cb.kind);
-      try {
-        if (cb.kind === 'pkce') {
-          const { error } = await sb.auth.exchangeCodeForSession(window.location.href);
-          if (error) throw error;
-          authCallbackJustSignedIn = true;
-          authLog('PKCE exchange success');
-        } else if (cb.kind === 'token_hash') {
-          const { error } = await sb.auth.verifyOtp({
-            type: cb.type,
-            token_hash: cb.token_hash
-          });
-          if (error) throw error;
-          authCallbackJustSignedIn = true;
-          authLog('token_hash verifyOtp success');
-        }
-        // implicit was already handled via IMPLICIT_FRAG_PENDING_KEY.
-      } catch (err) {
-        lastAuthCallbackError = err;
-        try {
-          // eslint-disable-next-line no-console
-          console.error('[FuqCloud] auth callback failed', err);
-        } catch (_) {
-          /**/
-        }
-      } finally {
-        // Single-use codes; prevent retry-on-reload regardless of outcome.
-        stripAuthParamsFromUrl();
-      }
-    }
-
+    // Touch getSession so supabase-js finishes its `detectSessionInUrl` work
+    // (parses ?code=, exchanges, sets session, and strips the URL itself).
     try {
       await sb.auth.getSession();
     } catch (e) {
@@ -395,6 +374,28 @@
     if (el) el.hidden = !show;
   }
 
+  /** Reset every signed-in surface back to the guest layout. Avoids the chip-says-Not-signed-in
+   *  but Sign-out-button-still-showing half-state we hit when an auth callback fails. */
+  function applyGuestChrome(statusNote) {
+    setProfileBlockVisible(false);
+    setGuestLoginAreaVisible(true);
+    setAccountToolbarVisible(false);
+    setOtpBlockVisible(false);
+    pendingOtpEmail = '';
+    updateCloudBadge('Not signed in', false);
+    setCloudAccountPanelMode({ signedIn: false, statusNote: statusNote || '' });
+  }
+
+  /** Light wrapper: also paints the version chip if it is in the DOM. */
+  function paintBuildChip() {
+    try {
+      const el = byId('games-cloud-build');
+      if (el) el.textContent = `v${BUILD}`;
+    } catch (_) {
+      /**/
+    }
+  }
+
   async function fetchLeaderboardViaRest(limit) {
     const view = leaderboardScope === 'weekly' ? 'leaderboard_weekly' : 'leaderboard_all_time';
     const metric = leaderboardScope === 'weekly' ? 'weekly_net_delta.desc' : 'current_balance.desc';
@@ -435,38 +436,40 @@
   }
 
   async function fetchLeaderboardRows(limit) {
-    const ep = deriveLeaderboardEndpoint();
-    if (ep) {
-      const headers = {
-        'Content-Type': 'application/json',
-        apikey: CONFIG.supabaseAnonKey
-      };
-      // Bearer when signed in keeps the JWT-protected Edge function reachable; guests fall back to public REST view.
-      const sb = getSupabase();
-      if (sb) {
-        try {
-          await maybeRefreshToken();
-          const { data } = await sb.auth.getSession();
-          if (data.session?.access_token) {
-            headers.Authorization = `Bearer ${data.session.access_token}`;
-          }
-        } catch (_) {
-          /**/
-        }
-      }
+    // Only call the JWT-protected Edge function when we have a bearer; guests would 401, which clutters
+    // the console even though we silently fall through. Public RLS on leaderboard_aggregate covers guests.
+    let bearer = null;
+    const sb = getSupabase();
+    if (sb) {
       try {
-        const res = await fetch(ep, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            scope: leaderboardScope === 'weekly' ? 'weekly' : 'alltime',
-            limit
-          })
-        });
-        const j = res.ok ? await res.json().catch(() => null) : null;
-        if (j && typeof j === 'object' && Array.isArray(j.rows)) return j.rows;
+        await maybeRefreshToken();
+        const { data } = await sb.auth.getSession();
+        bearer = data.session?.access_token || null;
       } catch (_) {
-        /* REST fallback */
+        /**/
+      }
+    }
+    if (bearer) {
+      const ep = deriveLeaderboardEndpoint();
+      if (ep) {
+        try {
+          const res = await fetch(ep, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              apikey: CONFIG.supabaseAnonKey,
+              Authorization: `Bearer ${bearer}`
+            },
+            body: JSON.stringify({
+              scope: leaderboardScope === 'weekly' ? 'weekly' : 'alltime',
+              limit
+            })
+          });
+          const j = res.ok ? await res.json().catch(() => null) : null;
+          if (j && typeof j === 'object' && Array.isArray(j.rows)) return j.rows;
+        } catch (_) {
+          /* REST fallback */
+        }
       }
     }
     return fetchLeaderboardViaRest(limit);
@@ -1084,13 +1087,7 @@
 
     byId('games-cloud-logout-btn')?.addEventListener('click', async () => {
       await clearAuthSessionEverywhere();
-      setProfileBlockVisible(false);
-      setGuestLoginAreaVisible(true);
-      setAccountToolbarVisible(false);
-      setOtpBlockVisible(false);
-      pendingOtpEmail = '';
-      updateCloudBadge('Not signed in', false);
-      setCloudAccountPanelMode({ signedIn: false, statusNote: 'Signed out.' });
+      applyGuestChrome('Signed out.');
       await loadLeaderboard();
     });
 
@@ -1159,26 +1156,20 @@
     };
 
     try {
+      paintBuildChip();
+      authLog('init', `build=${BUILD}`, 'incomingAuthCallback=', incomingAuthCallbackKind);
+
       if (!isEnabledBasics()) {
+        applyGuestChrome('Cloud save is off in settings.');
         updateCloudBadge('Cloud OFF', false);
-        setProfileBlockVisible(false);
-        setGuestLoginAreaVisible(true);
-        setAccountToolbarVisible(false);
-        setCloudAccountPanelMode({ signedIn: false, statusNote: 'Cloud save is off in settings.' });
         return;
       }
 
       await initAuthUi();
 
       if (!isEnabled()) {
+        applyGuestChrome('Missing Supabase script — see games.html script includes.');
         updateCloudBadge('Unavailable', false);
-        setProfileBlockVisible(false);
-        setGuestLoginAreaVisible(true);
-        setAccountToolbarVisible(false);
-        setCloudAccountPanelMode({
-          signedIn: false,
-          statusNote: 'Missing Supabase script — see games.html script includes.'
-        });
         await loadLeaderboard().catch(() => {});
         return;
       }
@@ -1196,31 +1187,35 @@
           pendingOtpEmail = '';
           void refreshSignedInChrome();
         } else if (event === 'SIGNED_OUT') {
-          setProfileBlockVisible(false);
-          setGuestLoginAreaVisible(true);
-          setAccountToolbarVisible(false);
-          setOtpBlockVisible(false);
-          pendingOtpEmail = '';
-          updateCloudBadge('Not signed in', false);
-          setCloudAccountPanelMode({ signedIn: false, statusNote: '' });
+          applyGuestChrome('');
           void loadLeaderboard().catch(() => {});
         }
       });
 
       await bootstrapAuthSession(sb);
 
-      const { data: sessWrap } = await sb.auth.getSession();
-      authLog('init session?', !!sessWrap.session?.access_token, 'callbackOk?', authCallbackJustSignedIn, 'callbackErr?', !!lastAuthCallbackError);
+      // Belt-and-suspenders: supabase-js usually stripped the URL itself when detectSessionInUrl: true.
+      if (incomingAuthCallbackKind) stripAuthParamsFromUrl();
 
-      if (!sessWrap.session?.access_token) {
-        updateCloudBadge('Not signed in', false);
-        setProfileBlockVisible(false);
-        setGuestLoginAreaVisible(true);
-        setAccountToolbarVisible(false);
-        const note = lastAuthCallbackError
-          ? `Sign-in link could not be completed (${shortErrText(lastAuthCallbackError)}). Request a new email link.`
-          : '';
-        setCloudAccountPanelMode({ signedIn: false, statusNote: note });
+      const { data: sessWrap } = await sb.auth.getSession();
+      const haveSession = Boolean(sessWrap.session?.access_token);
+      authLog('init session?', haveSession, 'callbackOk?', authCallbackJustSignedIn, 'callbackErr?', !!lastAuthCallbackError);
+
+      if (!haveSession) {
+        if (incomingAuthCallbackKind) {
+          // Came back from OAuth / magic link but supabase-js did not seat a session.
+          // eslint-disable-next-line no-console
+          console.error('[FuqCloud] auth callback failed (no session after detection)', {
+            kind: incomingAuthCallbackKind
+          });
+          const guidance =
+            incomingAuthCallbackKind === 'pkce'
+              ? 'Sign-in didn\u2019t complete. Clear site data and retry in one tab, or use the email code.'
+              : 'Sign-in link could not be completed. Request a fresh email code.';
+          applyGuestChrome(guidance);
+        } else {
+          applyGuestChrome('');
+        }
         await loadLeaderboard().catch(() => {});
         return;
       }
