@@ -117,9 +117,11 @@ Canonical definitions live in **[`schema.sql`](schema.sql)** end-to-end. **[`sup
 
 | Migration | Matches `schema.sql` section |
 |-----------|----------------------------|
-| [`20260430120000_leaderboard_views_security.sql`](migrations/20260430120000_leaderboard_views_security.sql) | `leaderboard_all_time` / `leaderboard_weekly` views with `security_invoker = false` |
-| [`20260430153000_leaderboard_rpc.sql`](migrations/20260430153000_leaderboard_rpc.sql) | `leaderboard_all_time_rows` / `leaderboard_weekly_rows` + `EXECUTE` for `anon`, `authenticated` |
+| [`20260430120000_leaderboard_views_security.sql`](migrations/20260430120000_leaderboard_views_security.sql) | (superseded) `leaderboard_all_time` / `leaderboard_weekly` definer views — replaced by the aggregate-table migration below |
+| [`20260430153000_leaderboard_rpc.sql`](migrations/20260430153000_leaderboard_rpc.sql) | `leaderboard_all_time_rows` / `leaderboard_weekly_rows` + `EXECUTE` for `anon`, `authenticated` (rewritten by the aggregate-table migration below) |
 | [`20260430210000_wallets_public_read_and_leaderboard_grants.sql`](migrations/20260430210000_wallets_public_read_and_leaderboard_grants.sql) | `wallets_public_read` policy + `SELECT` grants on both leaderboard views |
+| [`20260502130000_wallet_aura_peak_leaderboard.sql`](migrations/20260502130000_wallet_aura_peak_leaderboard.sql) | `wallets.aura_peak_multiplier` column + `apply_settlement(..., p_crash_peak)` + `aura_peak` columns on the leaderboard views/RPCs |
+| [`20260502160000_leaderboard_aggregate.sql`](migrations/20260502160000_leaderboard_aggregate.sql) | `public.leaderboard_aggregate` table + RLS + `tg_refresh_leaderboard_aggregate` triggers + backfill; replaces the SECURITY DEFINER leaderboard views with invoker views over the aggregate, and switches the leaderboard RPCs to SECURITY INVOKER |
 
 **SQL Editor workflow:** one full paste of **`schema.sql`** is sufficient. **CLI-only migrations** do not create the base tables/RPCs from scratch — run **`schema.sql`** once on a new project, then use migrations for small follow-ups, or keep re-pasting the full **`schema.sql`** when you change it.
 
@@ -135,11 +137,9 @@ to anon, authenticated
 using (true);
 ```
 
-**Existing project — “Rounds” / weekly totals always zero (but balance looks OK):** the leaderboard views sum rows from **`game_events`**, but **`game_events`** only allows owners to **`SELECT`** their own rows — so joins run as **the caller** hide everyone else’s events. Reload `schema.sql` from this repo **or** recreate both views with **`with (security_invoker = false)`** on `leaderboard_all_time` and `leaderboard_weekly` (see [`schema.sql`](schema.sql)): that runs the aggregated query with the **view owner**’s rights so public leaderboard math is correct **without** exposing raw event rows publicly (only aggregates in the views).
+**Existing project — “Rounds” / weekly totals always zero (but balance looks OK):** historically the leaderboard views aggregated **`game_events`** directly, and owner-only RLS hid other players' rows from the caller. The current architecture (see **Leaderboard freshness** below) replaces those definer views with the **`leaderboard_aggregate`** table — fed by triggers — so the math is correct *without* any RLS bypass. Run [`supabase/migrations/20260502160000_leaderboard_aggregate.sql`](migrations/20260502160000_leaderboard_aggregate.sql) (or re-paste the full [`schema.sql`](schema.sql)) and the next settled round will populate aggregate rows. The migration also backfills existing users on first run.
 
 Weekly scope uses **`date_trunc('week', now())`** — week starts Monday, in the database session timezone (**usually UTC** on Supabase), which may differ from “weekly quests” keyed off the browser’s local ISO week — see comments in **`games.js`** vs this SQL.
-
-Standalone patch (same definitions as `schema.sql`): [`supabase/migrations/20260430120000_leaderboard_views_security.sql`](migrations/20260430120000_leaderboard_views_security.sql); or `npx supabase db query --linked -f supabase/migrations/20260430120000_leaderboard_views_security.sql` from a CLI-linked project folder.
 
 **Unique display names:** the current [`schema.sql`](schema.sql) adds index `profiles_display_name_lower_unique`. If the index fails to create, two accounts already share the same name (case-insensitive); change or clear one in **Table Editor → profiles** first, then re-run the index statement.
 
@@ -188,7 +188,7 @@ Use **`--no-verify-jwt`** on `leaderboard` if prompted (public POST with no Bear
 
 **Why `import-device-wallet`:** the browser must not call PostgREST **`/rpc/import_initial_device_wallet`** directly from your custom domain — the preflight often fails CORS. The Edge Function runs the same RPC **server-side** and returns `Access-Control-Allow-Origin: *` (same pattern as `settle-game`).
 
-**Why `leaderboard`:** leaderboard tables depend on aggregates over **`game_events`**; REST view reads remain fragile vs RLS/publishable keys. The Edge handler calls SECURITY DEFINER RPCs (`leaderboard_*_rows`) from the server with the same anon/publishable env pattern as **`settle-game`**.
+**Why `leaderboard`:** signed-in players hit the JWT-protected Edge function, which calls the **`leaderboard_*_rows`** RPCs server-side with the same anon/publishable env pattern as **`settle-game`**. Guests fall back to the public REST view (`leaderboard_all_time` / `leaderboard_weekly`) — both surfaces read the same **`leaderboard_aggregate`** table, so results are consistent.
 
 ### Secrets (usually automatic)
 
@@ -231,8 +231,10 @@ Commit and deploy to GitHub Pages as usual. After deploy, bump the `?v=` on scri
 
 ## Leaderboard freshness
 
-- Deploy SQL first when upgrading: **`supabase/migrations/20260502130000_wallet_aura_peak_leaderboard.sql`** (or rerun full [`schema.sql`](schema.sql)), then **`supabase functions deploy settle-game leaderboard import-device-wallet`** so Aura peak columns and **`apply_settlement(..., p_crash_peak)`** stay in sync with the Edge handler.
-- Each **cloud** round triggers `settle-game` → Postgres updates **`wallets`** + **`game_events`**.
+- **Deploy SQL first when upgrading:** run **`supabase/migrations/20260502130000_wallet_aura_peak_leaderboard.sql`** (Aura peak) **then** **`supabase/migrations/20260502160000_leaderboard_aggregate.sql`** (aggregate table replaces the SECURITY DEFINER views) — or rerun full [`schema.sql`](schema.sql) once. Then **`supabase functions deploy settle-game leaderboard import-device-wallet`**.
+- Architecture: **`public.leaderboard_aggregate`** is a denormalized per-user table that holds only leaderboard-safe columns (no per-event detail). RLS allows public **`select`**; only the **SECURITY DEFINER** trigger function **`tg_refresh_leaderboard_aggregate`** writes. **`game_events`** insert / **`wallets`** update / **`profiles`** name change all fire that function for the affected user. Views and RPCs read straight from the aggregate as **SECURITY INVOKER**, so the Supabase Security Advisor no longer flags definer-view RLS bypass.
+- Weekly columns gate by **`weekly_week_start = date_trunc('week', now())::date`**; users who haven't played this week show **0 / 0** in the weekly leaderboard automatically — no cron needed.
+- Each **cloud** round triggers `settle-game` → Postgres updates **`wallets`** + **`game_events`** → trigger refreshes the aggregate row.
 - Right after each local round, **`refreshLeaderboard()`** runs once for **your** browser, so **your** open games page usually pulls new rows automatically.
 - **Other players** (or you after a reload) still need **Reload** / **leaderboard Refresh** unless you build polling—they read from Postgres at request time, not live websocket.
 
