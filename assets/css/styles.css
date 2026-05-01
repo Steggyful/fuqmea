@@ -26,10 +26,6 @@
   border-color: rgba(88, 101, 242, 0.6);
 }
 
-.games-cloud-signout-wrap {
-  margin-bottom: 0.6rem;
-}
-
 .games-cloud-profile-block {
   margin-bottom: 0.75rem;
   padding-top: 0.35rem;
@@ -56,6 +52,62 @@
   border-radius: 12px;
   padding: 0.8rem;
   background: rgba(12, 16, 20, 0.5);
+}
+
+.games-account-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.games-account-heading {
+  margin: 0;
+  font-size: clamp(1rem, 2.8vw, 1.35rem);
+  letter-spacing: 0.06em;
+}
+
+.games-account-status-chip {
+  font-size: 0.62rem;
+  font-weight: bold;
+  letter-spacing: 0.1em;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.games-account-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  margin: 0.65rem 0 0;
+}
+
+.games-account-toolbar--guest {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.games-account-toolbar--guest .games-oauth-row {
+  margin-bottom: 0;
+}
+
+.games-account-sync-btn {
+  border-color: rgba(57, 255, 20, 0.52);
+  color: var(--lime);
+  background: rgba(57, 255, 20, 0.08);
+}
+
+.games-account-msg {
+  margin-top: 0.55rem;
+}
+
+.games-account-signout-btn {
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .games-cloud-status--on {
@@ -2610,6 +2662,13 @@ h1 {
 .games-quest-toggle:focus-visible {
   outline: 2px solid var(--yellow);
   outline-offset: 2px;
+}
+
+.games-quest-toggle--active {
+  border-color: rgba(57, 255, 20, 0.65);
+  color: var(--lime);
+  box-shadow: 0 0 0 1px rgba(57, 255, 20, 0.15);
+  background: rgba(57, 255, 20, 0.1);
 }
 
 .games-quest-body {

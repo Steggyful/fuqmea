@@ -7,7 +7,7 @@
   <meta name="description" content="FuqMeA arcade — aura farm (crash-style), blackjack, coin flip, RPS & slots · fun FUQ tokens">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://*.functions.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com • GAMES</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.37">
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.38">
 </head>
 <body class="games-page">
   <header>
@@ -97,41 +97,44 @@
           <button type="button" class="button games-wallet-btn games-rakeback-btn" id="games-rakeback-claim" disabled>NO RAKEBACK YET</button>
         </section>
 
-        <section class="games-cloud-panel" aria-label="Save progress and leaderboard">
-          <div class="games-rakeback-row">
-            <span class="games-rakeback-label">Account</span>
-            <strong class="games-rakeback-val" id="games-cloud-status">Cloud OFF</strong>
+        <section class="games-cloud-panel" aria-labelledby="games-account-heading">
+          <div class="games-account-head-row">
+            <h2 id="games-account-heading" class="games-account-heading">SAVE PROGRESS</h2>
+            <span class="games-account-status-chip" id="games-cloud-status" aria-live="polite">Cloud OFF</span>
           </div>
-          <p class="games-cloud-lead">Optional: save FUQ balance and leaderboard on this account. You can play everything without logging in. Logins do not use a password on this site&mdash;Google and Discord use their own sign-in, or we email you a one-time link.</p>
-          <p class="games-cloud-legal-hint"><a href="legal.html#privacy">Privacy</a> &middot; FUQ coins are for fun, not real money.</p>
-          <div class="games-oauth-row" id="games-oauth-row" hidden>
-            <button type="button" class="button games-wallet-btn games-oauth-btn games-oauth-btn--google" id="games-oauth-google" hidden>Continue with Google</button>
-            <button type="button" class="button games-wallet-btn games-oauth-btn games-oauth-btn--discord" id="games-oauth-discord" hidden>Continue with Discord</button>
-          </div>
-          <div class="games-cloud-signout-wrap">
-            <button type="button" class="button games-wallet-btn" id="games-cloud-logout-btn">Sign out</button>
+          <p class="games-cloud-lead">Play without an account anytime. Sign in to save balance and leaderboard across devices — each logged-in round auto-settles to the cloud.</p>
+          <div class="games-account-toolbar games-account-toolbar--guest" id="games-account-login-actions">
+            <div class="games-oauth-row" id="games-oauth-row" hidden>
+              <button type="button" class="button games-wallet-btn games-oauth-btn games-oauth-btn--google" id="games-oauth-google" hidden>Continue with Google</button>
+              <button type="button" class="button games-wallet-btn games-oauth-btn games-oauth-btn--discord" id="games-oauth-discord" hidden>Continue with Discord</button>
+            </div>
+            <div id="games-cloud-email-block">
+              <details class="games-cloud-email-details" id="games-cloud-email-details">
+                <summary class="games-cloud-email-summary" id="games-cloud-email-summary">Email me a link instead</summary>
+                <form id="games-cloud-login-form" class="games-cloud-login-form" autocomplete="on">
+                  <label for="games-cloud-email" class="games-rakeback-label">Email</label>
+                  <input id="games-cloud-email" type="email" class="games-cloud-email" placeholder="you@example.com" required>
+                  <div class="games-cloud-actions">
+                    <button type="submit" class="button games-wallet-btn">Send magic link</button>
+                  </div>
+                </form>
+              </details>
+            </div>
           </div>
           <div id="games-cloud-profile-block" class="games-cloud-profile-block" hidden>
-            <label for="games-display-name" class="games-rakeback-label">Display name (leaderboard)</label>
+            <label for="games-display-name" class="games-rakeback-label">Display name (shown on leaderboard)</label>
             <div class="games-cloud-profile-row">
               <input id="games-display-name" type="text" class="games-cloud-email" maxlength="32" placeholder="2–32 characters" autocomplete="nickname">
-              <button type="button" class="button games-wallet-btn" id="games-display-name-save">Save</button>
+              <button type="button" class="button games-wallet-btn" id="games-display-name-save">Save name</button>
             </div>
-            <p class="games-history-hint" id="games-display-name-hint">Shown on the leaderboard instead of your handle when set. Leave blank to use your handle.</p>
+            <p class="games-history-hint" id="games-display-name-hint">Leave blank to use your handle.</p>
           </div>
-          <div id="games-cloud-email-block">
-            <details class="games-cloud-email-details" id="games-cloud-email-details">
-              <summary class="games-cloud-email-summary" id="games-cloud-email-summary">Email me a link instead</summary>
-              <form id="games-cloud-login-form" class="games-cloud-login-form" autocomplete="on">
-                <label for="games-cloud-email" class="games-rakeback-label">Email</label>
-                <input id="games-cloud-email" type="email" class="games-cloud-email" placeholder="you@example.com" required>
-                <div class="games-cloud-actions">
-                  <button type="submit" class="button games-wallet-btn">Send magic link</button>
-                </div>
-              </form>
-            </details>
+          <div class="games-account-toolbar" id="games-account-toolbar" hidden>
+            <button type="button" class="button games-wallet-btn games-account-sync-btn" id="games-cloud-sync-now" title="Reload balance from cloud and refresh leaderboard">Sync now</button>
+            <button type="button" class="button games-wallet-btn games-account-signout-btn" id="games-cloud-logout-btn">Sign out</button>
           </div>
-          <p class="games-history-hint" id="games-cloud-msg" role="status">Enable cloud in <code>cloud-config.js</code> to sync.</p>
+          <p class="games-cloud-legal-hint"><a href="legal.html#privacy">Privacy</a> &middot; FUQ coins are fun tokens only, not cash.</p>
+          <p class="games-history-hint games-account-msg" id="games-cloud-msg" role="status">Enable cloud in <code>cloud-config.js</code> to sync.</p>
         </section>
 
         <section class="games-leaderboard-panel" aria-labelledby="games-leaderboard-title">
@@ -149,8 +152,8 @@
                 <tr>
                   <th>#</th>
                   <th>Name</th>
-                  <th>Balance</th>
-                  <th>Rounds</th>
+                  <th id="games-lb-head-score">Balance</th>
+                  <th id="games-lb-head-rounds">Rounds</th>
                 </tr>
               </thead>
               <tbody id="games-leaderboard-body">
@@ -490,8 +493,8 @@
 
   <script src="assets/js/hub.js?v=2.1.7" defer></script>
   <script src="assets/js/init.js?v=2.1.6" defer></script>
-  <script src="assets/js/cloud-config.js?v=1.2.0" defer></script>
-  <script src="assets/js/cloud-sync.js?v=1.10.0" defer></script>
-  <script src="assets/js/games.js?v=2.5.0" defer></script>
+  <script src="assets/js/cloud-config.js?v=1.3.0" defer></script>
+  <script src="assets/js/cloud-sync.js?v=1.11.0" defer></script>
+  <script src="assets/js/games.js?v=2.5.1" defer></script>
 </body>
 </html>

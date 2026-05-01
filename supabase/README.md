@@ -169,13 +169,18 @@ If the CLI asks to initialize Supabase locally, allow it (`supabase init`). That
 ```powershell
 npx supabase functions deploy settle-game
 npx supabase functions deploy import-device-wallet
+npx supabase functions deploy leaderboard
 ```
+
+Use **`--no-verify-jwt`** on `leaderboard` if prompted (public POST with no Bearer token).
 
 **Why `import-device-wallet`:** the browser must not call PostgREST **`/rpc/import_initial_device_wallet`** directly from your custom domain — the preflight often fails CORS. The Edge Function runs the same RPC **server-side** and returns `Access-Control-Allow-Origin: *` (same pattern as `settle-game`).
 
+**Why `leaderboard`:** leaderboard tables depend on aggregates over **`game_events`**; REST view reads remain fragile vs RLS/publishable keys. The Edge handler calls SECURITY DEFINER RPCs (`leaderboard_*_rows`) from the server with the same anon/publishable env pattern as **`settle-game`**.
+
 ### Secrets (usually automatic)
 
-Deployed Edge Functions receive **`SUPABASE_URL`** automatically. Your API key may be exposed as **`SUPABASE_ANON_KEY`** (legacy) or inside **`SUPABASE_PUBLISHABLE_KEYS`** (JSON) after dashboard key migrations ([Secrets docs](https://supabase.com/docs/guides/functions/secrets)). Repo **`settle-game`** and **`import-device-wallet`** read either pattern.
+Deployed Edge Functions receive **`SUPABASE_URL`** automatically. Your API key may be exposed as **`SUPABASE_ANON_KEY`** (legacy) or inside **`SUPABASE_PUBLISHABLE_KEYS`** (JSON) after dashboard key migrations ([Secrets docs](https://supabase.com/docs/guides/functions/secrets)). Repo **`settle-game`**, **`import-device-wallet`**, and **`leaderboard`** read either pattern.
 
 If logs still show **`Missing Supabase env vars`** after **`npx supabase functions deploy settle-game`**:
 
@@ -187,6 +192,7 @@ If logs still show **`Missing Supabase env vars`** after **`npx supabase functio
 
 - Settle: `https://YOUR_PROJECT_REF.functions.supabase.co/settle-game`
 - Device import: `…/import-device-wallet` — if you leave **`importDeviceWalletEndpoint`** empty in `cloud-config.js`, it is derived from **`settleEndpoint`** automatically.
+- Leaderboard: `…/leaderboard` — **`leaderboardEndpoint`** empty → derived from **`settleEndpoint`** (path swap from `settle-game`).
 
 You can confirm under **Edge Functions** → **settle-game** in the dashboard.
 
@@ -201,7 +207,9 @@ Open **`assets/js/cloud-config.js`** in this repo:
 3. Paste **`supabaseAnonKey`** — the anon/public key only.
 4. Paste **`settleEndpoint`** — the full **`settle-game`** function URL from Part E.
 5. Optionally set **`importDeviceWalletEndpoint`**; if empty, **`…/import-device-wallet`** is derived from **`settleEndpoint`** (recommended).
-6. After Part C, set which buttons appear: **`loginGoogle`**, **`loginDiscord`**, **`loginEmail`** (see comments in the file; only turn on providers you actually configured in the dashboard).
+6. Optionally set **`leaderboardEndpoint`**; typically leave empty so **`…/leaderboard`** is derived from **`settleEndpoint`** (deploy the **`leaderboard`** Edge Function + SQL RPCs in [`schema.sql`](schema.sql)).
+
+7. After Part C, set which buttons appear: **`loginGoogle`**, **`loginDiscord`**, **`loginEmail`** (see comments in the file; only turn on providers you actually configured in the dashboard).
 
 `leaderboardLimit` can stay **25** or increase if you like.
 

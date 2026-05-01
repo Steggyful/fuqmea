@@ -62,6 +62,17 @@
     return '';
   }
 
+  function deriveLeaderboardEndpoint() {
+    const explicit =
+      typeof CONFIG.leaderboardEndpoint === 'string' ? CONFIG.leaderboardEndpoint.trim() : '';
+    if (explicit) return explicit;
+    const se = typeof CONFIG.settleEndpoint === 'string' ? CONFIG.settleEndpoint.trim() : '';
+    if (se && /settle-game/i.test(se)) {
+      return se.replace(/\/settle-game\/?$/i, '/leaderboard');
+    }
+    return '';
+  }
+
   function byId(id) {
     return document.getElementById(id);
   }
@@ -117,6 +128,68 @@
     const inp = byId('games-display-name');
     if (block) block.hidden = !show;
     if (!show && inp) inp.value = '';
+  }
+
+  function setAccountToolbarVisible(show) {
+    const t = byId('games-account-toolbar');
+    if (t) t.hidden = !show;
+  }
+
+  function setGuestLoginAreaVisible(show) {
+    const el = byId('games-account-login-actions');
+    if (el) el.hidden = !show;
+  }
+
+  async function fetchLeaderboardViaRest(limit) {
+    const view = leaderboardScope === 'weekly' ? 'leaderboard_weekly' : 'leaderboard_all_time';
+    const metric = leaderboardScope === 'weekly' ? 'weekly_net_delta.desc' : 'current_balance.desc';
+    const selectCols =
+      leaderboardScope === 'weekly'
+        ? 'leaderboard_name,weekly_net_delta,weekly_rounds'
+        : 'leaderboard_name,current_balance,total_rounds,net_delta';
+    return authFetch(`/rest/v1/${view}?select=${selectCols}&order=${metric}&limit=${limit}`, { method: 'GET' });
+  }
+
+  async function fetchLeaderboardRows(limit) {
+    const ep = deriveLeaderboardEndpoint();
+    if (ep) {
+      try {
+        const res = await fetch(ep, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: CONFIG.supabaseAnonKey
+          },
+          body: JSON.stringify({
+            scope: leaderboardScope === 'weekly' ? 'weekly' : 'alltime',
+            limit
+          })
+        });
+        const j = res.ok ? await res.json().catch(() => null) : null;
+        if (j && typeof j === 'object' && Array.isArray(j.rows)) return j.rows;
+      } catch (_) {
+        /* try REST fallback */
+      }
+    }
+    return fetchLeaderboardViaRest(limit);
+  }
+
+  function updateLeaderboardTableHeadLabels() {
+    const scoreCol = byId('games-lb-head-score');
+    if (scoreCol) {
+      scoreCol.textContent = leaderboardScope === 'weekly' ? 'Week net ±' : 'Balance';
+    }
+    const rndCol = byId('games-lb-head-rounds');
+    if (rndCol) {
+      rndCol.textContent = leaderboardScope === 'weekly' ? 'Week rounds' : 'Rounds';
+    }
+  }
+
+  function syncLeaderboardScopeButtons() {
+    const allt = byId('games-leaderboard-scope-alltime');
+    const wk = byId('games-leaderboard-scope-weekly');
+    if (allt) allt.classList.toggle('games-quest-toggle--active', leaderboardScope === 'alltime');
+    if (wk) wk.classList.toggle('games-quest-toggle--active', leaderboardScope === 'weekly');
   }
 
   function syncProfileForm(profile) {
@@ -415,16 +488,12 @@
     if (!isEnabled()) return;
     const tbody = byId('games-leaderboard-body');
     if (!tbody) return;
+    updateLeaderboardTableHeadLabels();
+    syncLeaderboardScopeButtons();
     tbody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
     try {
       const lim = Number(CONFIG.leaderboardLimit || 25);
-      const view = leaderboardScope === 'weekly' ? 'leaderboard_weekly' : 'leaderboard_all_time';
-      const metric = leaderboardScope === 'weekly' ? 'weekly_net_delta.desc' : 'current_balance.desc';
-      const selectCols =
-        leaderboardScope === 'weekly'
-          ? 'leaderboard_name,weekly_net_delta,weekly_rounds'
-          : 'leaderboard_name,current_balance,total_rounds,net_delta';
-      const rows = await authFetch(`/rest/v1/${view}?select=${selectCols}&order=${metric}&limit=${lim}`, { method: 'GET' });
+      const rows = await fetchLeaderboardRows(lim);
       if (!rows?.length) {
         tbody.innerHTML = '<tr><td colspan="4">No players yet.</td></tr>';
         return;
@@ -443,7 +512,8 @@
         })
         .join('');
     } catch {
-      tbody.innerHTML = '<tr><td colspan="4">Leaderboard unavailable.</td></tr>';
+      tbody.innerHTML =
+        '<tr><td colspan="4">Leaderboard unavailable. Deploy Edge <code>leaderboard</code> or run latest <code>schema.sql</code> (RPC).</td></tr>';
     }
   }
 
@@ -473,6 +543,25 @@
     }
   }
 
+  async function syncProgressNow() {
+    const msg = byId('games-cloud-msg');
+    if (!readSession()?.accessToken) {
+      if (msg) msg.textContent = 'Sign in first — then Sync now pulls your cloud balance.';
+      return false;
+    }
+    if (msg) msg.textContent = 'Syncing…';
+    try {
+      await maybeRefreshToken().catch(() => {});
+      await hydrateWalletAfterLogin();
+      await loadLeaderboard();
+      if (msg) msg.textContent = 'Synced — balance refreshed.';
+      return true;
+    } catch {
+      if (msg) msg.textContent = 'Could not sync right now.';
+      return false;
+    }
+  }
+
   async function initAuthUi() {
     setupLoginLayout();
     const loginForm = byId('games-cloud-login-form');
@@ -483,6 +572,9 @@
     byId('games-oauth-discord')?.addEventListener('click', () => startOAuth('discord'));
     byId('games-display-name-save')?.addEventListener('click', () => {
       saveDisplayName();
+    });
+    byId('games-cloud-sync-now')?.addEventListener('click', () => {
+      void syncProgressNow();
     });
 
     if (loginForm) {
@@ -507,12 +599,15 @@
     logoutBtn.addEventListener('click', async () => {
       clearSession();
       setProfileBlockVisible(false);
+      setGuestLoginAreaVisible(true);
+      setAccountToolbarVisible(false);
       updateCloudBadge('Cloud OFF', false);
       const msg = byId('games-cloud-msg');
       if (msg) msg.textContent = 'Signed out.';
       await loadLeaderboard();
     });
 
+    syncLeaderboardScopeButtons();
     byId('games-leaderboard-scope-alltime')?.addEventListener('click', async () => {
       leaderboardScope = 'alltime';
       await loadLeaderboard();
@@ -532,6 +627,8 @@
       if (!isEnabled()) {
         updateCloudBadge('Cloud OFF', false);
         setProfileBlockVisible(false);
+        setGuestLoginAreaVisible(true);
+        setAccountToolbarVisible(false);
         return;
       }
 
@@ -541,12 +638,16 @@
       if (!session?.accessToken) {
         updateCloudBadge('Cloud ready (login needed)', false);
         setProfileBlockVisible(false);
+        setGuestLoginAreaVisible(true);
+        setAccountToolbarVisible(false);
         const m = byId('games-cloud-msg');
-        if (m) m.textContent = 'Sign in to save FUQ and leaderboard to your account.';
+        if (m) m.textContent = 'Sign in to save progress on this device. While signed in, each round settles to the cloud automatically.';
         await loadLeaderboard().catch(() => {});
         return;
       }
 
+      setGuestLoginAreaVisible(false);
+      setAccountToolbarVisible(true);
       try {
         await maybeRefreshToken().catch(() => {});
         const me = await getMe();
@@ -555,7 +656,10 @@
         syncProfileForm(prof);
         updateCloudBadge('Cloud ON', true);
         const m2 = byId('games-cloud-msg');
-        if (m2) m2.textContent = 'Signed in — FUQ and leaderboard sync to this account.';
+        if (m2) {
+          m2.textContent =
+            'Signed in. Progress saves after each cloud round — use Sync now if you play on multiple devices.';
+        }
       } catch (err) {
         const txt = String(err?.message || err || '');
         const revoke =
@@ -568,6 +672,8 @@
         if (revoke) {
           clearSession();
           setProfileBlockVisible(false);
+          setGuestLoginAreaVisible(true);
+          setAccountToolbarVisible(false);
           updateCloudBadge('Cloud OFF', false);
         }
       }
@@ -582,6 +688,7 @@
     enabled: isEnabled,
     recordSettlement,
     refreshLeaderboard: loadLeaderboard,
+    syncProgressNow,
     startOAuth
   };
 
