@@ -62,6 +62,38 @@
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.games-cloud-profile-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+}
+
+.games-cloud-profile-summary {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.games-cloud-profile-preview {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--lime);
+  word-break: break-word;
+}
+
+.games-cloud-profile-sub {
+  margin: 0.28rem 0 0;
+}
+
+.games-cloud-profile-editor {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed rgba(255, 255, 255, 0.14);
+}
+
 .games-cloud-profile-row {
   display: flex;
   flex-wrap: wrap;

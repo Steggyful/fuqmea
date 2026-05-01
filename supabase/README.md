@@ -102,6 +102,8 @@ Magic-link senders are often `noreply@...` or Supabase-branded until you configu
 
 **Display name (leaderboard):** If your Supabase project already existed before this feature, run the new `display_name` / trigger / view section from `supabase/schema.sql` once in the SQL editor (or re-run the full file).
 
+**Display name moderation:** `profiles_before_write` rejects a curated list of hate slurs and similar strings by matching normalized substrings (alphanumeric fold; see `profiles_before_write` in [`schema.sql`](schema.sql)). It is heuristic—expand the list in a new migration, and use the **Table Editor** to clear a user’s `display_name` if something offensive slips through. The same token list is mirrored in [`assets/js/display-name-policy.js`](../assets/js/display-name-policy.js) for client-side preflight. Deploy [`supabase/migrations/20260503120000_display_name_blocklist.sql`](migrations/20260503120000_display_name_blocklist.sql) on existing databases.
+
 ## Part D — Install the database schema (one paste)
 
 1. Open **SQL Editor** in Supabase.
@@ -123,6 +125,7 @@ Canonical definitions live in **[`schema.sql`](schema.sql)** end-to-end. **[`sup
 | [`20260502130000_wallet_aura_peak_leaderboard.sql`](migrations/20260502130000_wallet_aura_peak_leaderboard.sql) | `wallets.aura_peak_multiplier` column + `apply_settlement(..., p_crash_peak)` + `aura_peak` columns on the leaderboard views/RPCs |
 | [`20260502160000_leaderboard_aggregate.sql`](migrations/20260502160000_leaderboard_aggregate.sql) | `public.leaderboard_aggregate` table + RLS + `tg_refresh_leaderboard_aggregate` triggers + backfill; replaces the SECURITY DEFINER leaderboard views with invoker views over the aggregate, and switches the leaderboard RPCs to SECURITY INVOKER |
 | [`20260502170000_rakeback_pool.sql`](migrations/20260502170000_rakeback_pool.sql) | `wallets.rakeback_pool numeric(12,2)` column, in-server rakeback accrual inside `apply_settlement` (10% of \|delta\| on coin/rps/slots/bj/crash losses), and a new `claim_rakeback()` RPC. **Apply on existing projects** so signed-in clients can read/claim rakeback after deploying `cloud-sync.js@1.20.0`. |
+| [`20260503120000_display_name_blocklist.sql`](migrations/20260503120000_display_name_blocklist.sql) | Replaces `profiles_before_write` with display-name substring moderation (`DISPLAY_NAME DISALLOWED`); pairs with `assets/js/display-name-policy.js` + `games.html` script order. |
 
 **SQL Editor workflow:** one full paste of **`schema.sql`** is sufficient. **CLI-only migrations** do not create the base tables/RPCs from scratch — run **`schema.sql`** once on a new project, then use migrations for small follow-ups, or keep re-pasting the full **`schema.sql`** when you change it.
 

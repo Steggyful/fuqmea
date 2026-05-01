@@ -2,7 +2,10 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.20.0';
+  const BUILD = '1.21.0';
+
+  /** Latest profile row from server — used to restore the display-name field on Cancel and keep preview in sync. */
+  let lastLoadedProfileRow = null;
 
   /** Same key as games.js — must stay in sync for offline→cloud one-time merge. */
   const FUN_WALLET_KEY = 'fuqmea_fun_wallet_v1';
@@ -375,11 +378,30 @@
     }
   }
 
+  function collapseProfileEditor() {
+    const ed = byId('games-display-name-editor');
+    const inp = byId('games-display-name');
+    const toggleBtn = byId('games-display-name-toggle');
+    if (ed) ed.hidden = true;
+    if (inp && lastLoadedProfileRow) {
+      const dn = lastLoadedProfileRow.display_name;
+      inp.value = dn != null && String(dn).trim() !== '' ? String(dn).trim() : '';
+    }
+    if (toggleBtn) toggleBtn.textContent = 'Change';
+  }
+
   function setProfileBlockVisible(show) {
     const block = byId('games-cloud-profile-block');
     const inp = byId('games-display-name');
     if (block) block.hidden = !show;
-    if (!show && inp) inp.value = '';
+    if (!show) {
+      lastLoadedProfileRow = null;
+      if (inp) inp.value = '';
+      const ed = byId('games-display-name-editor');
+      if (ed) ed.hidden = true;
+      const toggleBtn = byId('games-display-name-toggle');
+      if (toggleBtn) toggleBtn.textContent = 'Change';
+    }
   }
 
   function setAccountToolbarVisible(show) {
@@ -530,9 +552,23 @@
 
   function syncProfileForm(profile) {
     const inp = byId('games-display-name');
+    const preview = byId('games-leaderboard-name-preview');
+    const sub = byId('games-display-name-sub');
     if (!inp) return;
+    lastLoadedProfileRow = profile && typeof profile === 'object' ? { ...profile } : null;
+    const dnRaw = profile?.display_name != null ? String(profile.display_name).trim() : '';
+    const handleRaw = profile?.handle != null ? String(profile.handle).trim() : '';
+    const shown = dnRaw.length >= 2 ? dnRaw : handleRaw || '—';
+    if (preview) preview.textContent = shown;
+    if (sub) {
+      sub.textContent =
+        dnRaw.length >= 2
+          ? 'Custom name shown on the leaderboard.'
+          : 'Using your automatic handle until you set a custom name.';
+    }
+    inp.value = dnRaw.length >= 2 ? dnRaw : '';
+    collapseProfileEditor();
     setProfileBlockVisible(true);
-    inp.value = profile && profile.display_name != null ? String(profile.display_name) : '';
   }
 
   async function saveDisplayName() {
@@ -548,6 +584,11 @@
       if (hint) hint.textContent = 'Max 32 characters.';
       return;
     }
+    const pol = typeof window !== 'undefined' ? window.FuqDisplayNamePolicy : null;
+    if (pol && typeof pol.displayNameFailsPolicy === 'function' && raw.length > 0 && pol.displayNameFailsPolicy(raw)) {
+      if (hint) hint.textContent = 'That name isn’t allowed — pick something else.';
+      return;
+    }
     try {
       await maybeRefreshToken();
       const me = await getMe();
@@ -558,15 +599,24 @@
         body: JSON.stringify(body)
       });
       if (hint) hint.textContent = 'Saved. Leaderboard refreshes below.';
+      const prof = await ensureProfile(me);
+      syncProfileForm(prof);
       await loadLeaderboard();
     } catch (err) {
       const msg = err && err.message ? String(err.message) : '';
       const dup =
         /23505|duplicate key|unique constraint|profiles_display_name_lower_unique/i.test(msg);
+      const blocked =
+        /DISPLAY_NAME DISALLOWED|23514/i.test(msg) ||
+        /display_name.*check/i.test(msg);
       if (hint) {
-        hint.textContent = dup
-          ? 'That display name is already taken — pick another.'
-          : 'Could not save — try again.';
+        if (blocked) {
+          hint.textContent = 'That name isn’t allowed — pick something else.';
+        } else if (dup) {
+          hint.textContent = 'That display name is already taken — pick another.';
+        } else {
+          hint.textContent = 'Could not save — try again.';
+        }
       }
     }
   }
@@ -1063,6 +1113,19 @@
     });
     byId('games-display-name-save')?.addEventListener('click', () => {
       saveDisplayName();
+    });
+    byId('games-display-name-toggle')?.addEventListener('click', () => {
+      const ed = byId('games-display-name-editor');
+      const tb = byId('games-display-name-toggle');
+      if (!ed) return;
+      ed.hidden = !ed.hidden;
+      if (tb) tb.textContent = ed.hidden ? 'Change' : 'Close';
+      if (!ed.hidden) byId('games-display-name')?.focus();
+    });
+    byId('games-display-name-cancel')?.addEventListener('click', () => {
+      collapseProfileEditor();
+      const hint = byId('games-display-name-hint');
+      if (hint) hint.textContent = 'Leave blank to use your handle.';
     });
 
     if (loginForm) {
