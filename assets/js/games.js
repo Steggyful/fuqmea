@@ -24,7 +24,6 @@
   const MAX_HISTORY = 35;
   const BET_CHOICES = [5, 10, 25];
   const cloudClient = window.FuqCloud || null;
-  let cloudHydrateOnceDone = false;
   const SLOT_SYMBOLS = [
     { id: 'ecat', label: 'E CAT', emoji: '🐱', image: 'assets/images/slots/e Cat - Floride.JPG' },
     { id: 'butt', label: 'BUTT', emoji: '🍑', image: 'assets/images/slots/Emoji - Butt.PNG' },
@@ -2551,6 +2550,13 @@
   }
 
   function initWalletUi() {
+    window.addEventListener('fuqmea-wallet-hydrated', () => {
+      const nw = loadWallet();
+      syncCoinBestFromWallet(nw);
+      renderWallet(nw);
+      renderWinStreakBars();
+    });
+
     const w = loadWallet();
     syncCoinBestFromWallet(w);
     renderWallet(w);
@@ -2601,19 +2607,7 @@
 
     renderQuestPanels();
 
-    if (!cloudClient?.enabled?.() || cloudHydrateOnceDone) return;
-    cloudHydrateOnceDone = true;
-    cloudClient
-      .bootstrapFromCloud()
-      .then((remoteWallet) => {
-        if (!remoteWallet) return;
-        saveWallet(remoteWallet, { skipCloud: true });
-        renderWallet(remoteWallet);
-        renderWinStreakBars();
-      })
-      .catch(() => {
-        // Keep local fallback when cloud bootstrapping fails.
-      });
+    /** Cloud mirrors wallet via cloud-sync hydrateWalletAfterLogin + fuqmea-wallet-hydrated. */
   }
 
   function coinNormRotateYDeg(deg) {

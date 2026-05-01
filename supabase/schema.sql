@@ -11,6 +11,9 @@ create table if not exists public.profiles (
 
 alter table public.profiles add column if not exists display_name text;
 
+-- One-time merge of offline device wallet into cloud (see import_initial_device_wallet).
+alter table public.profiles add column if not exists wallet_import_completed boolean not null default false;
+
 alter table public.profiles drop constraint if exists profiles_display_name_len;
 alter table public.profiles add constraint profiles_display_name_len
   check (display_name is null or (char_length(display_name) between 2 and 32));
@@ -143,6 +146,96 @@ begin
 end;
 $$;
 
+-- First login only: copy device token balance into cloud if this account never played on-server.
+-- Sets profiles.wallet_import_completed; skipped if already true or any game_events exist.
+create or replace function public.import_initial_device_wallet(
+  p_tokens integer,
+  p_coin_streak integer,
+  p_last_daily text
+)
+returns table (
+  tokens integer,
+  coin_streak integer,
+  last_daily date
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_done boolean;
+  v_cloud_played boolean;
+  v_cap_tokens integer;
+  v_cap_streak integer;
+  v_daily date;
+  v_existing_tokens integer;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated';
+  end if;
+
+  perform public.ensure_wallet_exists(v_uid);
+
+  select coalesce(
+    (select p.wallet_import_completed from public.profiles p where p.id = v_uid limit 1),
+    false
+  ) into v_done;
+
+  select exists(select 1 from public.game_events where user_id = v_uid limit 1)
+  into v_cloud_played;
+
+  if v_cloud_played then
+    update public.profiles
+    set wallet_import_completed = true
+    where id = v_uid
+      and not coalesce(wallet_import_completed, false);
+    return query
+    select w.tokens, w.coin_streak, w.last_daily
+    from public.wallets w
+    where w.user_id = v_uid;
+    return;
+  end if;
+
+  if v_done then
+    return query
+    select w.tokens, w.coin_streak, w.last_daily
+    from public.wallets w
+    where w.user_id = v_uid;
+    return;
+  end if;
+
+  v_cap_tokens := least(greatest(coalesce(p_tokens, 200), 200), 999999999);
+  v_cap_streak := least(greatest(coalesce(p_coin_streak, 0), 0), 500000);
+
+  begin
+    if p_last_daily is not null and length(trim(p_last_daily)) >= 8 then
+      v_daily := trim(p_last_daily)::date;
+    else
+      v_daily := null;
+    end if;
+  exception when others then
+    v_daily := null;
+  end;
+
+  select w.tokens into v_existing_tokens from public.wallets w where w.user_id = v_uid limit 1;
+
+  update public.wallets w
+  set
+    tokens = greatest(v_cap_tokens, coalesce(v_existing_tokens, 200)),
+    coin_streak = greatest(v_cap_streak, coalesce(w.coin_streak, 0)),
+    last_daily = coalesce(v_daily, w.last_daily)
+  where w.user_id = v_uid;
+
+  update public.profiles
+  set wallet_import_completed = true
+  where id = v_uid;
+
+  return query
+  select w.tokens, w.coin_streak, w.last_daily from public.wallets w where w.user_id = v_uid;
+end;
+$$;
+
 create or replace view public.leaderboard_all_time as
 select
   p.id as user_id,
@@ -218,3 +311,4 @@ grant select on public.leaderboard_all_time to anon, authenticated;
 grant select on public.leaderboard_weekly to anon, authenticated;
 grant execute on function public.apply_settlement(text, text, integer) to authenticated;
 grant execute on function public.ensure_wallet_exists(uuid) to authenticated;
+grant execute on function public.import_initial_device_wallet(integer, integer, text) to authenticated;

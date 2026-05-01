@@ -200,6 +200,22 @@ Commit and deploy to GitHub Pages as usual. After deploy, bump the `?v=` on scri
 
 ---
 
+## Leaderboard freshness
+
+- Each **cloud** round triggers `settle-game` → Postgres updates **`wallets`** + **`game_events`**.
+- Right after each local round, **`refreshLeaderboard()`** runs once for **your** browser, so **your** open games page usually pulls new rows automatically.
+- **Other players** (or you after a reload) still need **Reload** / **leaderboard Refresh** unless you build polling—they read from Postgres at request time, not live websocket.
+
+## First-login device balance (once per account)
+
+The database function **`import_initial_device_wallet`** (in [`schema.sql`](schema.sql)) runs when you’re signed in: it copies your **offline** `localStorage` wallet into Supabase **only if** there are **no** `game_events` for that account yet (`wallet_import_completed` is also set so it never merges again).
+
+**Existing databases:** run the new column + function + grant from [`schema.sql`](schema.sql):
+
+- `profiles.wallet_import_completed`
+- `import_initial_device_wallet`
+- `grant execute ...`
+
 ## Part G — Quick test checklist
 
 **Before you rely on a deploy:** confirm in the Supabase dashboard (same project as `supabaseUrl`): **SQL Editor** ran `schema.sql` without errors; **Authentication → URL Configuration** lists your real **`…/games.html`** URL(s); Google/Discord OAuth clients use **`https://<project-ref>.supabase.co/auth/v1/callback`**; **API keys** → anon/publishable still matches `cloud-config.js` if you rotated keys.

@@ -2,6 +2,8 @@
   'use strict';
 
   const SESSION_KEY = 'fuqmea_cloud_session_v1';
+  /** Same key as games.js — must stay in sync for offline→cloud one-time merge. */
+  const FUN_WALLET_KEY = 'fuqmea_fun_wallet_v1';
   const CONFIG = window.FUQ_CLOUD_CONFIG || {};
   let leaderboardScope = 'alltime';
 
@@ -165,6 +167,12 @@
     return session;
   }
 
+  /** Run before games.js bootstraps wallet: OAuth redirect uses #access_token in the URL. */
+  if (isEnabled()) {
+    const fromHash = parseHashTokens();
+    if (fromHash) writeSession(fromHash);
+  }
+
   async function maybeRefreshToken() {
     const session = readSession();
     if (!session?.refreshToken) return;
@@ -219,15 +227,102 @@
   }
 
   async function ensureWallet() {
-    const rows = await authFetch('/rest/v1/wallets?select=tokens,coin_streak,last_daily&limit=1', { method: 'GET' });
+    const me = await getMe();
+    const uid = me?.id;
+    if (!uid) return null;
+    const q = encodeURIComponent(uid);
+    let rows = await authFetch(
+      `/rest/v1/wallets?select=tokens,coin_streak,last_daily&user_id=eq.${q}&limit=1`,
+      { method: 'GET' }
+    );
     if (rows?.length) return rows[0];
     await authFetch('/rest/v1/wallets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
       body: JSON.stringify([{}])
     });
-    const retry = await authFetch('/rest/v1/wallets?select=tokens,coin_streak,last_daily&limit=1', { method: 'GET' });
-    return retry?.[0] || null;
+    rows = await authFetch(
+      `/rest/v1/wallets?select=tokens,coin_streak,last_daily&user_id=eq.${q}&limit=1`,
+      { method: 'GET' }
+    );
+    return rows?.[0] || null;
+  }
+
+  function readFunWalletSnapshot() {
+    try {
+      const raw = localStorage.getItem(FUN_WALLET_KEY);
+      if (!raw) return { tokens: 200, coinStreak: 0, lastDaily: '' };
+      const w = JSON.parse(raw);
+      return {
+        tokens: Math.max(0, Math.floor(Number(w.tokens) || 0)),
+        coinStreak: Math.max(0, Math.floor(Number(w.coinStreak) || 0)),
+        lastDaily: typeof w.lastDaily === 'string' ? w.lastDaily : ''
+      };
+    } catch {
+      return { tokens: 200, coinStreak: 0, lastDaily: '' };
+    }
+  }
+
+  function normalizeLastDailyForStorage(d) {
+    if (d == null || d === '') return '';
+    const s = String(d);
+    return s.length >= 10 ? s.slice(0, 10) : s;
+  }
+
+  function writeFunWalletLocal(w) {
+    const out = {
+      tokens: Math.max(0, Math.floor(Number(w.tokens) || 0)),
+      coinStreak: Math.max(0, Math.floor(Number(w.coinStreak) || 0)),
+      lastDaily: normalizeLastDailyForStorage(w.lastDaily)
+    };
+    localStorage.setItem(FUN_WALLET_KEY, JSON.stringify(out));
+    window.dispatchEvent(new CustomEvent('fuqmea-wallet-hydrated'));
+  }
+
+  /**
+   * After profile exists: pull cloud wallet, run one-time device import RPC if allowed, mirror into localStorage.
+   * Dispatches fuqmea-wallet-hydrated so games.js refresh UI (runs after OAuth hash + session restore).
+   */
+  async function hydrateWalletAfterLogin() {
+    if (!isEnabled()) return;
+    await maybeRefreshToken();
+    if (!readSession()?.accessToken) return;
+
+    const snap = readFunWalletSnapshot();
+    const row = await ensureWallet();
+    if (!row) return;
+
+    try {
+      const rows = await authFetch('/rpc/import_initial_device_wallet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=representation'
+        },
+        body: JSON.stringify({
+          p_tokens: snap.tokens,
+          p_coin_streak: snap.coinStreak,
+          p_last_daily: snap.lastDaily
+        })
+      });
+      const first = Array.isArray(rows) ? rows[0] : rows;
+      if (first) {
+        writeFunWalletLocal({
+          tokens: Number(first.tokens) || 0,
+          coinStreak: Number(first.coin_streak) || 0,
+          lastDaily: first.last_daily
+        });
+        return;
+      }
+    } catch (_) {
+      // Old DB without RPC or transient error — mirror cloud wallet only.
+    }
+
+    writeFunWalletLocal({
+      tokens: Number(row.tokens) || 0,
+      coinStreak: Number(row.coin_streak) || 0,
+      lastDaily: row.last_daily
+    });
   }
 
   async function requestMagicLink(email) {
@@ -240,21 +335,6 @@
         email_redirect_to: window.location.href.split('#')[0]
       })
     });
-  }
-
-  async function bootstrapFromCloud() {
-    if (!isEnabled()) return null;
-    await maybeRefreshToken();
-    const session = readSession();
-    if (!session?.accessToken) return null;
-    const wallet = await ensureWallet();
-    return wallet
-      ? {
-          tokens: Number(wallet.tokens) || 0,
-          coinStreak: Number(wallet.coin_streak) || 0,
-          lastDaily: wallet.last_daily || ''
-        }
-      : null;
   }
 
   async function recordSettlement(evt) {
@@ -399,9 +479,6 @@
       return;
     }
 
-    const parsed = parseHashTokens();
-    if (parsed) writeSession(parsed);
-
     await initAuthUi();
 
     const session = readSession();
@@ -418,6 +495,9 @@
       await maybeRefreshToken();
       const me = await getMe();
       const prof = await ensureProfile(me);
+      try {
+        await hydrateWalletAfterLogin();
+      } catch (_) {}
       syncProfileForm(prof);
       updateCloudBadge('Cloud ON', true);
       const m2 = byId('games-cloud-msg');
@@ -433,7 +513,6 @@
 
   window.FuqCloud = {
     enabled: isEnabled,
-    bootstrapFromCloud,
     recordSettlement,
     refreshLeaderboard: loadLeaderboard,
     startOAuth
