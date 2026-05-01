@@ -7,7 +7,7 @@
   <meta name="description" content="FuqMeA arcade — aura farm (crash-style), blackjack, coin flip, RPS & slots · fun FUQ tokens">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://*.functions.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com • GAMES</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.39">
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.40">
 </head>
 <body class="games-page">
   <header>
@@ -99,10 +99,11 @@
 
         <section class="games-cloud-panel" aria-labelledby="games-account-heading">
           <div class="games-account-head-row">
-            <h2 id="games-account-heading" class="games-account-heading">SAVE PROGRESS</h2>
+            <h2 id="games-account-heading" class="games-account-heading">ACCOUNT</h2>
             <span class="games-account-status-chip" id="games-cloud-status" aria-live="polite">Cloud OFF</span>
           </div>
-          <p class="games-cloud-lead">Play without an account anytime. Sign in to save balance and leaderboard across devices — each logged-in round auto-settles to the cloud.</p>
+          <p class="games-cloud-lead" id="games-cloud-lead-guest">Sign in to save your balance and leaderboard on the server. As a guest, play stays on this device only.</p>
+          <p class="games-cloud-signed-line" id="games-cloud-signed-line" hidden aria-live="polite"></p>
           <div class="games-account-toolbar games-account-toolbar--guest" id="games-account-login-actions">
             <div class="games-oauth-row" id="games-oauth-row" hidden>
               <button type="button" class="button games-wallet-btn games-oauth-btn games-oauth-btn--google" id="games-oauth-google" hidden>Continue with Google</button>
@@ -110,12 +111,12 @@
             </div>
             <div id="games-cloud-email-block">
               <details class="games-cloud-email-details" id="games-cloud-email-details">
-                <summary class="games-cloud-email-summary" id="games-cloud-email-summary">Email me a link instead</summary>
+                <summary class="games-cloud-email-summary" id="games-cloud-email-summary">Sign in with email</summary>
                 <form id="games-cloud-login-form" class="games-cloud-login-form" autocomplete="on">
                   <label for="games-cloud-email" class="games-rakeback-label">Email</label>
                   <input id="games-cloud-email" type="email" class="games-cloud-email" placeholder="you@example.com" required>
                   <div class="games-cloud-actions">
-                    <button type="submit" class="button games-wallet-btn">Send magic link</button>
+                    <button type="submit" class="button games-wallet-btn">Email sign-in link</button>
                   </div>
                 </form>
               </details>
@@ -134,7 +135,7 @@
             <button type="button" class="button games-wallet-btn games-account-signout-btn" id="games-cloud-logout-btn">Sign out</button>
           </div>
           <p class="games-cloud-legal-hint"><a href="legal.html#privacy">Privacy</a> &middot; FUQ coins are fun tokens only, not cash.</p>
-          <p class="games-history-hint games-account-msg" id="games-cloud-msg" role="status">Enable cloud in <code>cloud-config.js</code> to sync.</p>
+          <p class="games-history-hint games-account-msg" id="games-cloud-msg" role="status"></p>
         </section>
 
         <section class="games-leaderboard-panel" aria-labelledby="games-leaderboard-title">
@@ -496,7 +497,7 @@
   <script src="assets/js/init.js?v=2.1.6" defer></script>
   <script src="assets/js/cloud-config.js?v=1.3.2" defer></script>
   <script src="assets/js/vendor/supabase.umd.min.js?v=2.49.8" defer></script>
-  <script src="assets/js/cloud-sync.js?v=1.14.0" defer></script>
-  <script src="assets/js/games.js?v=2.7.0" defer></script>
+  <script src="assets/js/cloud-sync.js?v=1.15.0" defer></script>
+  <script src="assets/js/games.js?v=2.7.1" defer></script>
 </body>
 </html>

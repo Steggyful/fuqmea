@@ -5,6 +5,14 @@
   color: rgba(255, 255, 255, 0.88);
 }
 
+.games-cloud-signed-line {
+  margin: 0.35rem 0 0.5rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--lime);
+}
+
 .games-cloud-legal-hint {
   margin: 0 0 0.65rem;
   font-size: 0.82rem;

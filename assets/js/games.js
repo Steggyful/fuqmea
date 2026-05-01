@@ -2420,9 +2420,9 @@
             console.warn('[FuqMeA] settlement failed', result && result.error ? result.error : result);
             const msg = document.getElementById('games-cloud-msg');
             if (msg && result && result.status === 401) {
-              msg.textContent = 'Session expired — sign in again to save rounds to the cloud.';
+              msg.textContent = 'Session expired. Sign in again to save rounds.';
             } else if (msg && result && result.error === 'not_signed_in') {
-              msg.textContent = 'Sign in to save each round to the cloud automatically.';
+              msg.textContent = 'Sign in to save rounds to the cloud.';
             }
             return;
           }

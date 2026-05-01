@@ -267,6 +267,30 @@
     badge.classList.toggle('games-cloud-status--on', Boolean(isOn));
   }
 
+  /** Guest blurb vs signed-in line + optional status strip (games-cloud-msg). */
+  function setCloudAccountPanelMode(opts) {
+    if (!opts || typeof opts !== 'object') return;
+    const signedIn = Boolean(opts.signedIn);
+    const me = opts.me;
+    const guestLead = byId('games-cloud-lead-guest');
+    const signedLine = byId('games-cloud-signed-line');
+    const msgEl = byId('games-cloud-msg');
+    if (guestLead) guestLead.hidden = signedIn;
+    if (signedLine) {
+      signedLine.hidden = !signedIn;
+      if (signedIn) {
+        const em =
+          me && typeof me.email === 'string' && me.email.includes('@') ? me.email : '';
+        signedLine.textContent = em ? `Signed in as ${em}` : 'Signed in.';
+      } else {
+        signedLine.textContent = '';
+      }
+    }
+    if (msgEl && Object.prototype.hasOwnProperty.call(opts, 'statusNote')) {
+      msgEl.textContent = opts.statusNote == null ? '' : String(opts.statusNote);
+    }
+  }
+
   function setProfileBlockVisible(show) {
     const block = byId('games-cloud-profile-block');
     const inp = byId('games-display-name');
@@ -287,10 +311,14 @@
   async function fetchLeaderboardViaRest(limit) {
     const view = leaderboardScope === 'weekly' ? 'leaderboard_weekly' : 'leaderboard_all_time';
     const metric = leaderboardScope === 'weekly' ? 'weekly_net_delta.desc' : 'current_balance.desc';
-    const selectCols =
+    const withAura =
       leaderboardScope === 'weekly'
         ? 'leaderboard_name,weekly_net_delta,weekly_rounds,aura_peak'
         : 'leaderboard_name,current_balance,total_rounds,net_delta,aura_peak';
+    const legacy =
+      leaderboardScope === 'weekly'
+        ? 'leaderboard_name,weekly_net_delta,weekly_rounds'
+        : 'leaderboard_name,current_balance,total_rounds,net_delta';
     const headers = { apikey: CONFIG.supabaseAnonKey };
     const sb = getSupabase();
     if (sb) {
@@ -302,14 +330,21 @@
         /**/
       }
     }
-    const path = `/rest/v1/${view}?select=${selectCols}&order=${metric}&limit=${limit}`;
-    const res = await fetch(`${CONFIG.supabaseUrl}${path}`, { method: 'GET', headers });
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(body || `Request failed: ${res.status}`);
+    async function reqOne(selectCols) {
+      const path = `/rest/v1/${view}?select=${selectCols}&order=${metric}&limit=${limit}`;
+      const res = await fetch(`${CONFIG.supabaseUrl}${path}`, { method: 'GET', headers });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || `Request failed: ${res.status}`);
+      }
+      const ct = res.headers.get('content-type') || '';
+      return ct.includes('application/json') ? res.json() : res.text();
     }
-    const ct = res.headers.get('content-type') || '';
-    return ct.includes('application/json') ? res.json() : res.text();
+    try {
+      return await reqOne(withAura);
+    } catch (_) {
+      return reqOne(legacy);
+    }
   }
 
   async function fetchLeaderboardRows(limit) {
@@ -444,20 +479,30 @@
     const uid = me?.id;
     if (!uid) return null;
     const q = encodeURIComponent(uid);
-    let rows = await authFetch(
-      `/rest/v1/wallets?select=tokens,coin_streak,last_daily,aura_peak_multiplier&user_id=eq.${q}&limit=1`,
-      { method: 'GET' }
-    );
+    const selFull = 'tokens,coin_streak,last_daily,aura_peak_multiplier';
+    const selBase = 'tokens,coin_streak,last_daily';
+    async function selectRow(sel) {
+      return authFetch(`/rest/v1/wallets?select=${encodeURIComponent(sel)}&user_id=eq.${q}&limit=1`, {
+        method: 'GET'
+      });
+    }
+    let rows;
+    try {
+      rows = await selectRow(selFull);
+    } catch (_) {
+      rows = await selectRow(selBase);
+    }
     if (rows?.length) return rows[0];
     await authFetch('/rest/v1/wallets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Prefer: 'return=representation' },
       body: JSON.stringify([{}])
     });
-    rows = await authFetch(
-      `/rest/v1/wallets?select=tokens,coin_streak,last_daily,aura_peak_multiplier&user_id=eq.${q}&limit=1`,
-      { method: 'GET' }
-    );
+    try {
+      rows = await selectRow(selFull);
+    } catch (_) {
+      rows = await selectRow(selBase);
+    }
     return rows?.[0] || null;
   }
 
@@ -781,7 +826,7 @@
       else det.removeAttribute('open');
     }
     if (sum) {
-      sum.textContent = wantGoogle() || wantDiscord() ? 'Email me a link instead' : 'Log in with email (magic link)';
+      sum.textContent = wantGoogle() || wantDiscord() ? 'Or sign in with email' : 'Sign in with email';
     }
   }
 
@@ -789,7 +834,7 @@
     const msg = byId('games-cloud-msg');
     const token = await getAccessToken();
     if (!token) {
-      if (msg) msg.textContent = 'Sign in first — then Sync now pulls your cloud balance.';
+      setCloudAccountPanelMode({ signedIn: false, statusNote: 'Sign in first, then use Sync.' });
       return false;
     }
     if (msg) msg.textContent = 'Syncing…';
@@ -797,10 +842,18 @@
       await maybeRefreshToken().catch(() => {});
       await hydrateWalletAfterLogin();
       await loadLeaderboard();
-      if (msg) msg.textContent = 'Synced — balance refreshed.';
+      setCloudAccountPanelMode({
+        signedIn: true,
+        me: await getMe().catch(() => null),
+        statusNote: 'Synced with server.'
+      });
       return true;
     } catch {
-      if (msg) msg.textContent = 'Could not sync right now.';
+      setCloudAccountPanelMode({
+        signedIn: true,
+        me: await getMe().catch(() => null),
+        statusNote: 'Sync failed — try again.'
+      });
       return false;
     }
   }
@@ -808,8 +861,6 @@
   async function initAuthUi() {
     setupLoginLayout();
     const loginForm = byId('games-cloud-login-form');
-    const logoutBtn = byId('games-cloud-logout-btn');
-    if (!logoutBtn) return;
 
     byId('games-oauth-google')?.addEventListener('click', () => {
       void startOAuth('google');
@@ -836,21 +887,26 @@
         }
         try {
           await requestMagicLink(email);
-          if (msg) msg.textContent = 'Magic link sent. Open your email to finish login.';
+          setCloudAccountPanelMode({
+            signedIn: false,
+            statusNote: 'Check your email — open the link to finish signing in.'
+          });
         } catch {
-          if (msg) msg.textContent = 'Could not send magic link right now.';
+          setCloudAccountPanelMode({
+            signedIn: false,
+            statusNote: 'Could not send email — try again.'
+          });
         }
       });
     }
 
-    logoutBtn.addEventListener('click', async () => {
+    byId('games-cloud-logout-btn')?.addEventListener('click', async () => {
       await clearAuthSessionEverywhere();
       setProfileBlockVisible(false);
       setGuestLoginAreaVisible(true);
       setAccountToolbarVisible(false);
-      updateCloudBadge('Cloud OFF', false);
-      const msg = byId('games-cloud-msg');
-      if (msg) msg.textContent = 'Signed out.';
+      updateCloudBadge('Not signed in', false);
+      setCloudAccountPanelMode({ signedIn: false, statusNote: 'Signed out.' });
       await loadLeaderboard();
     });
 
@@ -886,12 +942,12 @@
       const prof = await ensureProfile(me);
       await hydrateWalletAfterLogin().catch(() => {});
       syncProfileForm(prof);
-      updateCloudBadge('Cloud ON', true);
-      const m2 = byId('games-cloud-msg');
-      if (m2) {
-        m2.textContent =
-          'Signed in. Progress saves after each cloud round — use Sync now if you play on multiple devices.';
-      }
+      updateCloudBadge('Signed in', true);
+      setCloudAccountPanelMode({
+        signedIn: true,
+        me,
+        statusNote: 'Rounds save automatically while you are signed in.'
+      });
     } catch (err) {
       const txt = String(err?.message || err || '');
       if (isAuthRevokedError(txt)) {
@@ -899,7 +955,8 @@
         setProfileBlockVisible(false);
         setGuestLoginAreaVisible(true);
         setAccountToolbarVisible(false);
-        updateCloudBadge('Cloud OFF', false);
+        updateCloudBadge('Not signed in', false);
+        setCloudAccountPanelMode({ signedIn: false, statusNote: '' });
       }
     }
     await loadLeaderboard().catch(() => {});
@@ -916,16 +973,21 @@
         setProfileBlockVisible(false);
         setGuestLoginAreaVisible(true);
         setAccountToolbarVisible(false);
+        setCloudAccountPanelMode({ signedIn: false, statusNote: 'Cloud save is off in settings.' });
         return;
       }
 
       await initAuthUi();
 
       if (!isEnabled()) {
-        updateCloudBadge('OFF — vendor supabase.umd.min.js missing', false);
+        updateCloudBadge('Unavailable', false);
         setProfileBlockVisible(false);
         setGuestLoginAreaVisible(true);
         setAccountToolbarVisible(false);
+        setCloudAccountPanelMode({
+          signedIn: false,
+          statusNote: 'Missing Supabase script — see games.html script includes.'
+        });
         await loadLeaderboard().catch(() => {});
         return;
       }
@@ -938,17 +1000,27 @@
 
       await bootstrapAuthSession(sb);
 
+      sb.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session?.access_token) {
+          void refreshSignedInChrome();
+        } else if (event === 'SIGNED_OUT') {
+          setProfileBlockVisible(false);
+          setGuestLoginAreaVisible(true);
+          setAccountToolbarVisible(false);
+          updateCloudBadge('Not signed in', false);
+          setCloudAccountPanelMode({ signedIn: false, statusNote: '' });
+          void loadLeaderboard().catch(() => {});
+        }
+      });
+
       const { data: sessWrap } = await sb.auth.getSession();
 
       if (!sessWrap.session?.access_token) {
-        updateCloudBadge('Cloud ready (login needed)', false);
+        updateCloudBadge('Not signed in', false);
         setProfileBlockVisible(false);
         setGuestLoginAreaVisible(true);
         setAccountToolbarVisible(false);
-        const m = byId('games-cloud-msg');
-        if (m)
-          m.textContent =
-            'Sign in to save progress on this device. While signed in, each round settles to the cloud automatically.';
+        setCloudAccountPanelMode({ signedIn: false, statusNote: '' });
         await loadLeaderboard().catch(() => {});
         return;
       }
