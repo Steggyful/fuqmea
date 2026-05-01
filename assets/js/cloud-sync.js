@@ -15,6 +15,30 @@
   let supabaseClient = null;
 
   let leaderboardScope = 'alltime';
+  /** Set by bootstrap so init() can show a precise reason without re-reading the URL. */
+  let lastAuthCallbackError = null;
+  /** True after a successful PKCE/token-hash exchange so `init` skips the duplicate refresh. */
+  let authCallbackJustSignedIn = false;
+  /** Guard against onAuthStateChange + post-bootstrap double-running refreshSignedInChrome. */
+  let chromeRefreshInFlight = false;
+
+  function authDebugEnabled() {
+    try {
+      return localStorage.getItem('fuq_auth_debug') === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function authLog() {
+    if (!authDebugEnabled()) return;
+    try {
+      // eslint-disable-next-line no-console
+      console.log.apply(console, ['[FuqCloud]'].concat(Array.from(arguments)));
+    } catch (_) {
+      /**/
+    }
+  }
 
   captureImplicitFragmentIfNeeded();
 
@@ -117,36 +141,65 @@
     return supabaseClient;
   }
 
-  function hasOAuthCallbackCode() {
+  /** What kind of callback (if any) is in the current URL? PKCE `?code=`, email `?token_hash=`, or implicit `#access_token=`. */
+  function detectAuthCallback() {
+    let search = null;
     try {
-      const code = new URLSearchParams(window.location.search).get('code');
-      if (code) return true;
+      search = new URLSearchParams(window.location.search || '');
     } catch (_) {
       /**/
     }
-    const h = window.location.hash || '';
-    return h.includes('code=');
+    const hash = window.location.hash || '';
+    if (search && search.get('code')) return { kind: 'pkce' };
+    if (search && search.get('token_hash')) {
+      return { kind: 'token_hash', token_hash: search.get('token_hash'), type: search.get('type') || 'magiclink' };
+    }
+    if (hash.includes('code=')) return { kind: 'pkce' };
+    if (hash.includes('access_token=')) return { kind: 'implicit' };
+    return null;
   }
 
-  /** PKCE/code + legacy implicit + migrated fuqmea_cloud_session → Supabase persisted session. */
+  function stripAuthParamsFromUrl() {
+    try {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (_) {
+      /**/
+    }
+  }
+
+  /** PKCE/code + token_hash + legacy implicit + migrated fuqmea_cloud_session → Supabase persisted session. */
   async function bootstrapAuthSession(sb) {
     if (!sb) return;
+    lastAuthCallbackError = null;
+    authCallbackJustSignedIn = false;
+
     try {
       const pend = localStorage.getItem(IMPLICIT_FRAG_PENDING_KEY);
       if (pend) {
         localStorage.removeItem(IMPLICIT_FRAG_PENDING_KEY);
-        const p = JSON.parse(pend);
-        if (p?.access_token && p?.refresh_token) {
-          const { error } = await sb.auth.setSession({
-            access_token: p.access_token,
-            refresh_token: p.refresh_token
-          });
-          if (error) {
-            /** fall through — user may PKCE-exchange instead */
+        try {
+          const p = JSON.parse(pend);
+          if (p?.access_token && p?.refresh_token) {
+            const { error } = await sb.auth.setSession({
+              access_token: p.access_token,
+              refresh_token: p.refresh_token
+            });
+            if (!error) {
+              authCallbackJustSignedIn = true;
+              authLog('implicit session restored');
+            } else {
+              authLog('implicit setSession error', error);
+            }
           }
+        } catch (e) {
+          authLog('implicit JSON parse error', e);
         }
       }
+    } catch (e) {
+      authLog('implicit pending read error', e);
+    }
 
+    try {
       const leg = localStorage.getItem(LEGACY_SESSION_KEY);
       if (leg) {
         localStorage.removeItem(LEGACY_SESSION_KEY);
@@ -157,19 +210,53 @@
               access_token: p.accessToken,
               refresh_token: p.refreshToken
             });
+            authLog('legacy session restored');
           }
+        } catch (e) {
+          authLog('legacy session parse error', e);
+        }
+      }
+    } catch (e) {
+      authLog('legacy session read error', e);
+    }
+
+    const cb = detectAuthCallback();
+    if (cb) {
+      authLog('auth callback detected', cb.kind);
+      try {
+        if (cb.kind === 'pkce') {
+          const { error } = await sb.auth.exchangeCodeForSession(window.location.href);
+          if (error) throw error;
+          authCallbackJustSignedIn = true;
+          authLog('PKCE exchange success');
+        } else if (cb.kind === 'token_hash') {
+          const { error } = await sb.auth.verifyOtp({
+            type: cb.type,
+            token_hash: cb.token_hash
+          });
+          if (error) throw error;
+          authCallbackJustSignedIn = true;
+          authLog('token_hash verifyOtp success');
+        }
+        // implicit was already handled via IMPLICIT_FRAG_PENDING_KEY.
+      } catch (err) {
+        lastAuthCallbackError = err;
+        try {
+          // eslint-disable-next-line no-console
+          console.error('[FuqCloud] auth callback failed', err);
         } catch (_) {
           /**/
         }
+      } finally {
+        // Single-use codes; prevent retry-on-reload regardless of outcome.
+        stripAuthParamsFromUrl();
       }
+    }
 
-      if (hasOAuthCallbackCode()) {
-        await sb.auth.exchangeCodeForSession(window.location.href);
-      }
-
+    try {
       await sb.auth.getSession();
-    } catch (_) {
-      /**/
+    } catch (e) {
+      authLog('getSession after bootstrap error', e);
     }
   }
 
@@ -934,6 +1021,11 @@
   }
 
   async function refreshSignedInChrome() {
+    if (chromeRefreshInFlight) {
+      authLog('refreshSignedInChrome skipped (already in flight)');
+      return;
+    }
+    chromeRefreshInFlight = true;
     setGuestLoginAreaVisible(false);
     setAccountToolbarVisible(true);
     try {
@@ -958,6 +1050,8 @@
         updateCloudBadge('Not signed in', false);
         setCloudAccountPanelMode({ signedIn: false, statusNote: '' });
       }
+    } finally {
+      chromeRefreshInFlight = false;
     }
     await loadLeaderboard().catch(() => {});
   }
@@ -998,9 +1092,8 @@
         return;
       }
 
-      await bootstrapAuthSession(sb);
-
       sb.auth.onAuthStateChange((event, session) => {
+        authLog('onAuthStateChange', event, !!session?.access_token);
         if (event === 'SIGNED_IN' && session?.access_token) {
           void refreshSignedInChrome();
         } else if (event === 'SIGNED_OUT') {
@@ -1013,22 +1106,38 @@
         }
       });
 
+      await bootstrapAuthSession(sb);
+
       const { data: sessWrap } = await sb.auth.getSession();
+      authLog('init session?', !!sessWrap.session?.access_token, 'callbackOk?', authCallbackJustSignedIn, 'callbackErr?', !!lastAuthCallbackError);
 
       if (!sessWrap.session?.access_token) {
         updateCloudBadge('Not signed in', false);
         setProfileBlockVisible(false);
         setGuestLoginAreaVisible(true);
         setAccountToolbarVisible(false);
-        setCloudAccountPanelMode({ signedIn: false, statusNote: '' });
+        const note = lastAuthCallbackError
+          ? `Sign-in link could not be completed (${shortErrText(lastAuthCallbackError)}). Request a new email link.`
+          : '';
+        setCloudAccountPanelMode({ signedIn: false, statusNote: note });
         await loadLeaderboard().catch(() => {});
         return;
       }
 
-      await refreshSignedInChrome();
+      // If onAuthStateChange already fired SIGNED_IN inside bootstrap, it kicked off refresh; do not duplicate here.
+      if (!authCallbackJustSignedIn && !chromeRefreshInFlight) {
+        await refreshSignedInChrome();
+      } else {
+        authLog('skipping post-bootstrap refresh (callback or in-flight)');
+      }
     } finally {
       signalInitDone();
     }
+  }
+
+  function shortErrText(err) {
+    const raw = err && (err.message || err.error_description || err.error || err.msg) ? String(err.message || err.error_description || err.error || err.msg) : String(err || 'auth error');
+    return raw.length > 90 ? `${raw.slice(0, 87)}…` : raw;
   }
 
   window.FuqCloud = {
