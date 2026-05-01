@@ -4,6 +4,8 @@ type SettlePayload = {
   game?: string;
   detail?: string;
   delta?: number;
+  coin_streak?: number;
+  last_daily?: string;
 };
 
 const corsHeaders = {
@@ -115,11 +117,23 @@ Deno.serve(async (req) => {
     });
   }
 
-  const { data, error } = await client.rpc('apply_settlement', {
-    p_game: game,
-    p_detail: detail,
-    p_delta: delta
-  });
+  const gKey = game.toLowerCase();
+
+  /** Optional wallet fields — validated per game before RPC */
+  type RpcArgs = { p_game: string; p_detail: string; p_delta: number; p_coin_streak?: number; p_last_daily?: string };
+  const rpcArgs: RpcArgs = { p_game: game, p_detail: detail, p_delta: delta };
+
+  if (gKey === 'coin' && payload.coin_streak != null && Number.isFinite(Number(payload.coin_streak))) {
+    const cs = Math.trunc(Number(payload.coin_streak));
+    if (cs >= 0 && cs <= 500_000) rpcArgs.p_coin_streak = cs;
+  }
+
+  if (gKey === 'daily' && typeof payload.last_daily === 'string') {
+    const ld = payload.last_daily.trim().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(ld)) rpcArgs.p_last_daily = ld;
+  }
+
+  const { data, error } = await client.rpc('apply_settlement', rpcArgs);
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {

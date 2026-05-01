@@ -24,6 +24,17 @@
   const MAX_HISTORY = 35;
   const BET_CHOICES = [5, 10, 25];
   const cloudClient = window.FuqCloud || null;
+  const LEADERBOARD_REFRESH_DEBOUNCE_MS = 900;
+  let leaderboardRefreshTimer = null;
+
+  function scheduleLeaderboardRefresh() {
+    if (!cloudClient?.refreshLeaderboard) return;
+    if (leaderboardRefreshTimer) window.clearTimeout(leaderboardRefreshTimer);
+    leaderboardRefreshTimer = window.setTimeout(() => {
+      leaderboardRefreshTimer = null;
+      cloudClient.refreshLeaderboard().catch(() => {});
+    }, LEADERBOARD_REFRESH_DEBOUNCE_MS);
+  }
   const SLOT_SYMBOLS = [
     { id: 'ecat', label: 'E CAT', emoji: '🐱', image: 'assets/images/slots/e Cat - Floride.JPG' },
     { id: 'butt', label: 'BUTT', emoji: '🍑', image: 'assets/images/slots/Emoji - Butt.PNG' },
@@ -2178,7 +2189,7 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
   }
 
-  /** apply_settlement only updates tokens server-side; keep local streak/daily from max(local, server). */
+  /** After a successful settlement, server tokens are authoritative; merge streak/daily defensively. */
   function mergeLastDailyStr(a, b) {
     const x = typeof a === 'string' ? a.trim().slice(0, 32) : '';
     const y = typeof b === 'string' ? b.trim().slice(0, 32) : '';
@@ -2187,17 +2198,22 @@
     return x >= y ? x : y;
   }
 
-  function applyCloudWalletSettlement(serverW) {
+  function applyCloudWalletSettlement(serverW, opts) {
+    const trustServerTokens = opts && opts.trustServerTokens;
     const st =
       typeof serverW === 'object' && serverW
         ? serverW
         : { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '' };
     const localNow = loadWallet();
-    const sTok = Math.max(0, Math.floor(Number(st.tokens)) || 0);
+    const rawTok = Number(st.tokens);
+    const sTok = Number.isFinite(rawTok) ? Math.max(0, Math.floor(rawTok)) : 0;
+    const rawStreak = Number(st.coinStreak ?? st.coin_streak);
+    const sStreak = Number.isFinite(rawStreak) ? Math.max(0, Math.floor(rawStreak)) : 0;
+    const sDaily = st.lastDaily ?? st.last_daily ?? '';
     const merged = {
-      tokens: Math.max(localNow.tokens || 0, sTok),
-      coinStreak: Math.max(localNow.coinStreak || 0, Math.max(0, Math.floor(Number(st.coinStreak)) || 0)),
-      lastDaily: mergeLastDailyStr(localNow.lastDaily, st.lastDaily)
+      tokens: trustServerTokens ? sTok : Math.max(localNow.tokens || 0, sTok),
+      coinStreak: Math.max(localNow.coinStreak || 0, sStreak),
+      lastDaily: mergeLastDailyStr(localNow.lastDaily, typeof sDaily === 'string' ? sDaily : '')
     };
     saveWallet(merged);
     return merged;
@@ -2369,7 +2385,7 @@
     localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, MAX_HISTORY)));
   }
 
-  function pushHistory(game, detail, delta, balanceAfter) {
+  function pushHistory(game, detail, delta, balanceAfter, settleExtra) {
     const row = {
       at: Date.now(),
       game,
@@ -2381,19 +2397,35 @@
     saveHistory(next);
     renderHistory(next);
     if (cloudClient?.enabled?.()) {
+      const payload = {
+        game: row.game,
+        detail: row.detail,
+        delta: row.delta,
+        balanceAfter: row.balance
+      };
+      if (settleExtra && typeof settleExtra === 'object') Object.assign(payload, settleExtra);
       cloudClient
-        .recordSettlement({ game: row.game, detail: row.detail, delta: row.delta, balanceAfter: row.balance })
-        .then((wallet) => {
-          if (!wallet) return;
-          const merged = applyCloudWalletSettlement(wallet);
+        .recordSettlement(payload)
+        .then((result) => {
+          if (!result || !result.ok || !result.wallet) {
+            console.warn('[FuqMeA] settlement failed', result && result.error ? result.error : result);
+            const msg = document.getElementById('games-cloud-msg');
+            if (msg && result && result.status === 401) {
+              msg.textContent = 'Session expired — sign in again to save rounds to the cloud.';
+            } else if (msg && result && result.error === 'not_signed_in') {
+              msg.textContent = 'Sign in to save each round to the cloud automatically.';
+            }
+            return;
+          }
+          const merged = applyCloudWalletSettlement(result.wallet, { trustServerTokens: true });
           syncCoinBestFromWallet(merged);
           renderWallet(merged);
           renderWinStreakBars();
         })
-        .catch(() => {
-          // Client keeps local history/wallet if network settlement is unavailable.
+        .catch((err) => {
+          console.warn('[FuqMeA] settlement threw', err);
         });
-      cloudClient.refreshLeaderboard?.().catch(() => {});
+      scheduleLeaderboardRefresh();
     }
   }
 
@@ -2602,7 +2634,7 @@
       cur.lastDaily = day;
       saveWallet(cur);
       renderWallet(cur);
-      pushHistory('daily', `Claimed +${DAILY_BONUS}`, cur.tokens - before, cur.tokens);
+      pushHistory('daily', `Claimed +${DAILY_BONUS}`, cur.tokens - before, cur.tokens, { lastDaily: day });
     }
     document.querySelectorAll('.js-games-daily').forEach((btn) => {
       btn.addEventListener('click', claimDailyBonus);
@@ -2723,7 +2755,7 @@
       const net = w.tokens - before;
       addRakebackFromLoss(net);
       bumpWeeklyFuqEarnedFromGames(net);
-      pushHistory('coin', detail, net, w.tokens);
+      pushHistory('coin', detail, net, w.tokens, { coinStreak: w.coinStreak });
       if (win) {
         syncCoinBestFromWallet(w);
         setGameOutcome('coin', 'win', `You called ${pick.toUpperCase()} · landed ${outcome.toUpperCase()} · ${net >= 0 ? '+' : ''}${net} coins`);

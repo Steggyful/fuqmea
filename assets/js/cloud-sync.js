@@ -575,11 +575,49 @@
     if (error) throw error;
   }
 
-  async function recordSettlement(evt) {
-    if (!isEnabled() || !CONFIG.settleEndpoint) return null;
+  /** Serialized so settlement responses apply in order (no balance races). */
+  let settlementChain = Promise.resolve();
+  let settlementInFlight = 0;
+  let lastSettlementResult = null;
+
+  function emitSettlementPending() {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('fuqmea-settlement-pending', {
+          detail: { count: settlementInFlight }
+        })
+      );
+    } catch (_) {
+      /**/
+    }
+  }
+
+  function bumpSettlementInFlight(d) {
+    settlementInFlight = Math.max(0, settlementInFlight + d);
+    emitSettlementPending();
+  }
+
+  /**
+   * @returns {Promise<{ ok: boolean, wallet?: object, error?: string, status?: number, detail?: string, eventId?: * }>}
+   */
+  async function settleOneRequest(evt) {
+    if (!isEnabled() || !CONFIG.settleEndpoint) {
+      return { ok: false, error: 'cloud_disabled' };
+    }
     await maybeRefreshToken();
     const accessToken = await getAccessToken();
-    if (!accessToken) return null;
+    if (!accessToken) return { ok: false, error: 'not_signed_in' };
+
+    const body = {
+      game: evt.game,
+      detail: evt.detail,
+      delta: evt.delta
+    };
+    const cs = evt.coin_streak != null ? evt.coin_streak : evt.coinStreak;
+    if (typeof cs === 'number' && Number.isFinite(cs)) body.coin_streak = Math.trunc(cs);
+    const ld = evt.last_daily != null ? evt.last_daily : evt.lastDaily;
+    if (typeof ld === 'string' && ld.trim()) body.last_daily = ld.trim().slice(0, 10);
+
     let res;
     try {
       res = await fetch(CONFIG.settleEndpoint, {
@@ -589,18 +627,70 @@
           Authorization: `Bearer ${accessToken}`,
           apikey: CONFIG.supabaseAnonKey
         },
-        body: JSON.stringify({
-          game: evt.game,
-          detail: evt.detail,
-          delta: evt.delta
-        })
+        body: JSON.stringify(body)
       });
-    } catch (_) {
-      return null;
+    } catch (err) {
+      return { ok: false, error: 'network', detail: String(err && err.message ? err.message : err) };
     }
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => null);
-    return data?.wallet || null;
+
+    const rawText = await res.text().catch(() => '');
+    let data = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch (_) {
+      data = null;
+    }
+
+    if (!res.ok) {
+      const errMsg =
+        (data && typeof data === 'object' && data.error != null ? String(data.error) : '') ||
+        rawText ||
+        `http_${res.status}`;
+      const out = { ok: false, status: res.status, error: errMsg };
+      return out;
+    }
+
+    const wallet = data && typeof data === 'object' ? data.wallet : null;
+    if (!wallet || typeof wallet !== 'object') {
+      return { ok: false, error: 'no_wallet_in_response' };
+    }
+    return {
+      ok: true,
+      wallet,
+      status: res.status,
+      eventId: data && data.eventId != null ? data.eventId : null
+    };
+  }
+
+  /**
+   * FIFO: one settlement HTTP request at a time.
+   * @returns {Promise<{ ok: boolean, wallet?: object, error?: string, status?: number }>}
+   */
+  function recordSettlement(evt) {
+    const run = async () => {
+      bumpSettlementInFlight(1);
+      try {
+        const out = await settleOneRequest(evt);
+        lastSettlementResult = out;
+        return out;
+      } finally {
+        bumpSettlementInFlight(-1);
+      }
+    };
+    const p = settlementChain.then(run, run);
+    settlementChain = p.then(
+      () => undefined,
+      () => undefined
+    );
+    return p;
+  }
+
+  function getLastSettlementResult() {
+    return lastSettlementResult;
+  }
+
+  function getSettlementInFlightCount() {
+    return settlementInFlight;
   }
 
   async function loadLeaderboard() {
@@ -843,6 +933,8 @@
   window.FuqCloud = {
     enabled: isEnabled,
     recordSettlement,
+    getLastSettlementResult,
+    getSettlementInFlightCount,
     refreshLeaderboard: loadLeaderboard,
     syncProgressNow,
     startOAuth
