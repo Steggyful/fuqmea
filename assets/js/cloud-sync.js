@@ -293,12 +293,21 @@
    * Cloud can still be ahead (other device); stale cloud after a failed settle won't wipe progress.
    */
   function reconcileLocalWithCloudRow(localSnap, cloudRow) {
+    if (!cloudRow || typeof cloudRow !== 'object') {
+      return {
+        tokens: localSnap.tokens,
+        coinStreak: localSnap.coinStreak,
+        lastDaily: localSnap.lastDaily
+      };
+    }
     const cTok = Math.max(0, Math.floor(Number(cloudRow.tokens) || 0));
-    const cStreak = Math.max(0, Math.floor(Number(cloudRow.coin_streak) || 0));
+    const streakSrc = cloudRow.coin_streak ?? cloudRow.coinStreak;
+    const cStreak = Math.max(0, Math.floor(Number(streakSrc) || 0));
+    const ldRemote = cloudRow.last_daily ?? cloudRow.lastDaily;
     return {
       tokens: Math.max(cTok, localSnap.tokens),
       coinStreak: Math.max(cStreak, localSnap.coinStreak),
-      lastDaily: mergeLastDaily(localSnap.lastDaily, cloudRow.last_daily)
+      lastDaily: mergeLastDaily(localSnap.lastDaily, ldRemote)
     };
   }
 
@@ -308,31 +317,42 @@
    */
   async function hydrateWalletAfterLogin() {
     if (!isEnabled()) return;
-    await maybeRefreshToken();
-    if (!readSession()?.accessToken) return;
-
     const snap = readFunWalletSnapshot();
-    const row = await ensureWallet();
-    if (!row) return;
-
     try {
-      const rows = await authFetch('/rpc/import_initial_device_wallet', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Prefer: 'return=representation'
-        },
-        body: JSON.stringify({
-          p_tokens: snap.tokens,
-          p_coin_streak: snap.coinStreak,
-          p_last_daily: snap.lastDaily
-        })
-      });
-      const first = Array.isArray(rows) ? rows[0] : rows;
-      const cloudLike = first || row;
+      await maybeRefreshToken().catch(() => {});
+      if (!readSession()?.accessToken) return;
+
+      let row = null;
+      try {
+        row = await ensureWallet();
+      } catch (_) {
+        return;
+      }
+      if (!row) return;
+
+      let cloudLike = row;
+      try {
+        const rows = await authFetch('/rpc/import_initial_device_wallet', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Prefer: 'return=representation'
+          },
+          body: JSON.stringify({
+            p_tokens: snap.tokens,
+            p_coin_streak: snap.coinStreak,
+            p_last_daily: snap.lastDaily
+          })
+        });
+        const first = Array.isArray(rows) ? rows[0] : rows;
+        if (first) cloudLike = first;
+      } catch (_) {
+        cloudLike = row;
+      }
+
       writeFunWalletLocal(reconcileLocalWithCloudRow(snap, cloudLike));
     } catch (_) {
-      writeFunWalletLocal(reconcileLocalWithCloudRow(snap, row));
+      writeFunWalletLocal(snap);
     }
   }
 
@@ -484,42 +504,58 @@
   }
 
   async function init() {
-    if (!isEnabled()) {
-      updateCloudBadge('Cloud OFF', false);
-      setProfileBlockVisible(false);
-      return;
-    }
-
-    await initAuthUi();
-
-    const session = readSession();
-    if (!session?.accessToken) {
-      updateCloudBadge('Cloud ready (login needed)', false);
-      setProfileBlockVisible(false);
-      const m = byId('games-cloud-msg');
-      if (m) m.textContent = 'Sign in to save FUQ and leaderboard to your account.';
-      await loadLeaderboard();
-      return;
-    }
+    const signalInitDone = () => {
+      window.dispatchEvent(new CustomEvent('fuqmea-cloud-init-complete'));
+    };
 
     try {
-      await maybeRefreshToken();
-      const me = await getMe();
-      const prof = await ensureProfile(me);
-      try {
-        await hydrateWalletAfterLogin();
-      } catch (_) {}
-      syncProfileForm(prof);
-      updateCloudBadge('Cloud ON', true);
-      const m2 = byId('games-cloud-msg');
-      if (m2) m2.textContent = 'Signed in — FUQ and leaderboard sync to this account.';
-    } catch {
-      clearSession();
-      setProfileBlockVisible(false);
-      updateCloudBadge('Cloud OFF', false);
-    }
+      if (!isEnabled()) {
+        updateCloudBadge('Cloud OFF', false);
+        setProfileBlockVisible(false);
+        return;
+      }
 
-    await loadLeaderboard();
+      await initAuthUi();
+
+      const session = readSession();
+      if (!session?.accessToken) {
+        updateCloudBadge('Cloud ready (login needed)', false);
+        setProfileBlockVisible(false);
+        const m = byId('games-cloud-msg');
+        if (m) m.textContent = 'Sign in to save FUQ and leaderboard to your account.';
+        await loadLeaderboard().catch(() => {});
+        return;
+      }
+
+      try {
+        await maybeRefreshToken().catch(() => {});
+        const me = await getMe();
+        const prof = await ensureProfile(me);
+        await hydrateWalletAfterLogin().catch(() => {});
+        syncProfileForm(prof);
+        updateCloudBadge('Cloud ON', true);
+        const m2 = byId('games-cloud-msg');
+        if (m2) m2.textContent = 'Signed in — FUQ and leaderboard sync to this account.';
+      } catch (err) {
+        const txt = String(err?.message || err || '');
+        const revoke =
+          /\b401\b/.test(txt) ||
+          /JWT expired/i.test(txt) ||
+          /invalid_grant/i.test(txt) ||
+          /invalid refresh token/i.test(txt) ||
+          /refresh_token_not_found/i.test(txt) ||
+          /invalid jwt/i.test(txt);
+        if (revoke) {
+          clearSession();
+          setProfileBlockVisible(false);
+          updateCloudBadge('Cloud OFF', false);
+        }
+      }
+
+      await loadLeaderboard().catch(() => {});
+    } finally {
+      signalInitDone();
+    }
   }
 
   window.FuqCloud = {

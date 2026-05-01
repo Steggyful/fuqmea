@@ -2550,12 +2550,15 @@
   }
 
   function initWalletUi() {
-    window.addEventListener('fuqmea-wallet-hydrated', () => {
+    function paintWalletFromStorage() {
       const nw = loadWallet();
       syncCoinBestFromWallet(nw);
       renderWallet(nw);
       renderWinStreakBars();
-    });
+    }
+
+    window.addEventListener('fuqmea-wallet-hydrated', paintWalletFromStorage);
+    window.addEventListener('fuqmea-cloud-init-complete', paintWalletFromStorage, { once: true });
 
     const w = loadWallet();
     syncCoinBestFromWallet(w);
