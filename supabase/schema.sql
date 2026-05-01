@@ -15,6 +15,12 @@ alter table public.profiles drop constraint if exists profiles_display_name_len;
 alter table public.profiles add constraint profiles_display_name_len
   check (display_name is null or (char_length(display_name) between 2 and 32));
 
+-- Case-insensitive unique display names (null/blank = use handle on leaderboard; many nulls allowed)
+drop index if exists profiles_display_name_lower_unique;
+create unique index profiles_display_name_lower_unique
+  on public.profiles (lower(trim(display_name)))
+  where display_name is not null and trim(display_name) <> '';
+
 create or replace function public.profiles_before_write()
 returns trigger
 language plpgsql
@@ -187,6 +193,13 @@ create policy wallets_owner_select
 on public.wallets for select
 to authenticated
 using (auth.uid() = user_id);
+
+-- Leaderboard views join wallets; without this, RLS hides other users' balances (only your row visible).
+drop policy if exists wallets_public_read on public.wallets;
+create policy wallets_public_read
+on public.wallets for select
+to anon, authenticated
+using (true);
 
 drop policy if exists wallets_owner_insert on public.wallets;
 create policy wallets_owner_insert

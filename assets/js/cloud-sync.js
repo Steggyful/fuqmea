@@ -136,8 +136,15 @@
       });
       if (hint) hint.textContent = 'Saved. Leaderboard refreshes below.';
       await loadLeaderboard();
-    } catch {
-      if (hint) hint.textContent = 'Could not save — try again.';
+    } catch (err) {
+      const msg = err && err.message ? String(err.message) : '';
+      const dup =
+        /23505|duplicate key|unique constraint|profiles_display_name_lower_unique/i.test(msg);
+      if (hint) {
+        hint.textContent = dup
+          ? 'That display name is already taken — pick another.'
+          : 'Could not save — try again.';
+      }
     }
   }
 

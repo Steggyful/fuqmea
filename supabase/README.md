@@ -113,6 +113,18 @@ You should see no errors. This creates profiles, wallets, game events, leaderboa
 
 **If you already ran an older schema** and something fails, screenshot the error in the SQL editor — you may need a small follow-up migration (ask in Cursor with the message text).
 
+**Existing project — leaderboard balance wrong but names OK:** older RLS only allowed each user to read their own `wallets` row, so the leaderboard view could not see other players’ balances. Run the **`wallets_public_read`** policy block from the current [`schema.sql`](schema.sql) (search for `wallets_public_read`), or paste:
+
+```sql
+drop policy if exists wallets_public_read on public.wallets;
+create policy wallets_public_read
+on public.wallets for select
+to anon, authenticated
+using (true);
+```
+
+**Unique display names:** the current [`schema.sql`](schema.sql) adds index `profiles_display_name_lower_unique`. If the index fails to create, two accounts already share the same name (case-insensitive); change or clear one in **Table Editor → profiles** first, then re-run the index statement.
+
 ---
 
 ## Part E — Deploy the `settle-game` Edge Function
@@ -207,6 +219,7 @@ Commit and deploy to GitHub Pages as usual. After deploy, bump the `?v=` on scri
 | Google/Discord “redirect_uri mismatch” or loops | Google Cloud → OAuth client must include `https://<ref>.supabase.co/auth/v1/callback` — **and** **Authentication → URL Configuration** must list your real **`.../games.html`** URL (Part C) |
 | Magic link opens but errors / loops | Redirect URLs + Site URL in **Authentication → URL Configuration** must include your exact **`.../games.html`** URL |
 | Leaderboard stuck on “loading” | `enabled`/URL/key wrong; browser devtools → **Network** → failed calls to `<project>.supabase.co` |
+| Leaderboard names OK but scores/balances wrong or missing | Run **`wallets_public_read`** policy (see Part D migration note above); redeploy not required |
 | Balance does not persist | `settleEndpoint` missing/wrong; function logs show errors |
 | CSP blocks fetch | **`games.html`** must allow `https://*.supabase.co` (already configured) |
 
