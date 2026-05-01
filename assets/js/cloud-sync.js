@@ -279,6 +279,29 @@
     window.dispatchEvent(new CustomEvent('fuqmea-wallet-hydrated'));
   }
 
+  /** Prefer later ISO yyyy-mm-dd for daily claimed flag (lex compare works). */
+  function mergeLastDaily(localD, remoteD) {
+    const l = normalizeLastDailyForStorage(localD);
+    const r = normalizeLastDailyForStorage(remoteD);
+    if (!l) return r;
+    if (!r) return l;
+    return l >= r ? l : r;
+  }
+
+  /**
+   * Never drop local totals below what the browser already had on reload.
+   * Cloud can still be ahead (other device); stale cloud after a failed settle won't wipe progress.
+   */
+  function reconcileLocalWithCloudRow(localSnap, cloudRow) {
+    const cTok = Math.max(0, Math.floor(Number(cloudRow.tokens) || 0));
+    const cStreak = Math.max(0, Math.floor(Number(cloudRow.coin_streak) || 0));
+    return {
+      tokens: Math.max(cTok, localSnap.tokens),
+      coinStreak: Math.max(cStreak, localSnap.coinStreak),
+      lastDaily: mergeLastDaily(localSnap.lastDaily, cloudRow.last_daily)
+    };
+  }
+
   /**
    * After profile exists: pull cloud wallet, run one-time device import RPC if allowed, mirror into localStorage.
    * Dispatches fuqmea-wallet-hydrated so games.js refresh UI (runs after OAuth hash + session restore).
@@ -306,23 +329,11 @@
         })
       });
       const first = Array.isArray(rows) ? rows[0] : rows;
-      if (first) {
-        writeFunWalletLocal({
-          tokens: Number(first.tokens) || 0,
-          coinStreak: Number(first.coin_streak) || 0,
-          lastDaily: first.last_daily
-        });
-        return;
-      }
+      const cloudLike = first || row;
+      writeFunWalletLocal(reconcileLocalWithCloudRow(snap, cloudLike));
     } catch (_) {
-      // Old DB without RPC or transient error — mirror cloud wallet only.
+      writeFunWalletLocal(reconcileLocalWithCloudRow(snap, row));
     }
-
-    writeFunWalletLocal({
-      tokens: Number(row.tokens) || 0,
-      coinStreak: Number(row.coin_streak) || 0,
-      lastDaily: row.last_daily
-    });
   }
 
   async function requestMagicLink(email) {
