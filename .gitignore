@@ -2,3 +2,9 @@
 desktop.ini
 Thumbs.db
 .DS_Store
+
+# Supabase CLI (created after `supabase link` — local credentials)
+.supabase/
+
+# Supabase CLI link metadata (per-machine; do not commit)
+supabase/.temp/

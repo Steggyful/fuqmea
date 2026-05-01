@@ -1,3 +1,105 @@
+.games-cloud-lead {
+  margin: 0.5rem 0 0.35rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.games-cloud-legal-hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  opacity: 0.9;
+}
+
+.games-oauth-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.games-oauth-btn--google {
+  border-color: rgba(66, 133, 244, 0.55);
+}
+
+.games-oauth-btn--discord {
+  border-color: rgba(88, 101, 242, 0.6);
+}
+
+.games-cloud-signout-wrap {
+  margin-bottom: 0.6rem;
+}
+
+.games-cloud-profile-block {
+  margin-bottom: 0.75rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.games-cloud-profile-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.35rem;
+}
+
+.games-cloud-profile-row .games-cloud-email {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.games-cloud-panel,
+.games-leaderboard-panel {
+  margin-top: 0.9rem;
+  border: 1px solid rgba(57, 255, 20, 0.26);
+  border-radius: 12px;
+  padding: 0.8rem;
+  background: rgba(12, 16, 20, 0.5);
+}
+
+.games-cloud-status--on {
+  color: #39ff14;
+}
+
+.games-cloud-login-form {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.games-cloud-email {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+  padding: 0.45rem 0.6rem;
+}
+
+.games-cloud-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.games-leaderboard-table-wrap {
+  margin-top: 0.65rem;
+  overflow-x: auto;
+}
+
+.games-leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.games-leaderboard-table th,
+.games-leaderboard-table td {
+  padding: 0.42rem 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: left;
+  font-size: 0.86rem;
+}
 :root {
   --lime: #39ff14;
   --yellow: #ffff00;

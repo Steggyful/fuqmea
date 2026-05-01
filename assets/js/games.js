@@ -1,4 +1,4 @@
-// FuqMeA mini-games — fun tokens only (localStorage). Not synced or secured.
+// FuqMeA mini-games — local-first fun tokens with optional cloud sync + leaderboard.
 
 (function () {
   'use strict';
@@ -23,6 +23,8 @@
   let rpsRoundBusy = false;
   const MAX_HISTORY = 35;
   const BET_CHOICES = [5, 10, 25];
+  const cloudClient = window.FuqCloud || null;
+  let cloudHydrateOnceDone = false;
   const SLOT_SYMBOLS = [
     { id: 'ecat', label: 'E CAT', emoji: '🐱', image: 'assets/images/slots/e Cat - Floride.JPG' },
     { id: 'butt', label: 'BUTT', emoji: '🍑', image: 'assets/images/slots/Emoji - Butt.PNG' },
@@ -2171,7 +2173,7 @@
     }
   }
 
-  function saveWallet(w) {
+  function saveWallet(w, opts) {
     w.tokens = Math.max(0, Math.floor(w.tokens));
     w.coinStreak = Math.max(0, Math.floor(w.coinStreak));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
@@ -2354,6 +2356,19 @@
     const next = [row, ...loadHistory()].slice(0, MAX_HISTORY);
     saveHistory(next);
     renderHistory(next);
+    if (cloudClient?.enabled?.()) {
+      cloudClient
+        .recordSettlement({ game: row.game, detail: row.detail, delta: row.delta, balanceAfter: row.balance })
+        .then((wallet) => {
+          if (!wallet) return;
+          saveWallet(wallet, { skipCloud: true });
+          renderWallet(wallet);
+        })
+        .catch(() => {
+          // Client keeps local history/wallet if network settlement is unavailable.
+        });
+      cloudClient.refreshLeaderboard?.().catch(() => {});
+    }
   }
 
   function clearHistory() {
@@ -2585,6 +2600,20 @@
     });
 
     renderQuestPanels();
+
+    if (!cloudClient?.enabled?.() || cloudHydrateOnceDone) return;
+    cloudHydrateOnceDone = true;
+    cloudClient
+      .bootstrapFromCloud()
+      .then((remoteWallet) => {
+        if (!remoteWallet) return;
+        saveWallet(remoteWallet, { skipCloud: true });
+        renderWallet(remoteWallet);
+        renderWinStreakBars();
+      })
+      .catch(() => {
+        // Keep local fallback when cloud bootstrapping fails.
+      });
   }
 
   function coinNormRotateYDeg(deg) {
@@ -3074,6 +3103,9 @@
   initQuestCollapseControls();
   initGameRulesDisclosures();
   initHistoryDetailsOpen();
+  document.getElementById('games-leaderboard-refresh')?.addEventListener('click', () => {
+    cloudClient?.refreshLeaderboard?.().catch(() => {});
+  });
   initBlackjack();
   initCrashGame();
   initGameTabs();

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#39ff14">
   <meta name="description" content="FuqMeA arcade — aura farm (crash-style), blackjack, coin flip, RPS & slots · fun FUQ tokens">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com • GAMES</title>
   <link rel="stylesheet" href="assets/css/styles.css?v=2.2.37">
 </head>
@@ -51,7 +51,7 @@
     <div class="games-hero">
       <p class="games-hero-eyebrow" aria-hidden="true">/// FUQ ARCADE ///</p>
       <h1 class="games-title">MINI GAMES</h1>
-      <p class="games-lead">Pick a machine with the tabs below. <strong>FUQ coins</strong> are just for fun and stay on this device. Not real money.</p>
+      <p class="games-lead">Pick a machine with the tabs below. <strong>FUQ coins</strong> are just for fun and can sync across devices when cloud login is enabled. Not real money.</p>
     </div>
 
     <div class="games-layout">
@@ -95,6 +95,69 @@
             <span class="games-rakeback-sub"><span class="js-rakeback-claimed">0</span> FUQ</span>
           </div>
           <button type="button" class="button games-wallet-btn games-rakeback-btn" id="games-rakeback-claim" disabled>NO RAKEBACK YET</button>
+        </section>
+
+        <section class="games-cloud-panel" aria-label="Save progress and leaderboard">
+          <div class="games-rakeback-row">
+            <span class="games-rakeback-label">Account</span>
+            <strong class="games-rakeback-val" id="games-cloud-status">Cloud OFF</strong>
+          </div>
+          <p class="games-cloud-lead">Optional: save FUQ balance and leaderboard on this account. You can play everything without logging in. Logins do not use a password on this site&mdash;Google and Discord use their own sign-in, or we email you a one-time link.</p>
+          <p class="games-cloud-legal-hint"><a href="legal.html#privacy">Privacy</a> &middot; FUQ coins are for fun, not real money.</p>
+          <div class="games-oauth-row" id="games-oauth-row" hidden>
+            <button type="button" class="button games-wallet-btn games-oauth-btn games-oauth-btn--google" id="games-oauth-google" hidden>Continue with Google</button>
+            <button type="button" class="button games-wallet-btn games-oauth-btn games-oauth-btn--discord" id="games-oauth-discord" hidden>Continue with Discord</button>
+          </div>
+          <div class="games-cloud-signout-wrap">
+            <button type="button" class="button games-wallet-btn" id="games-cloud-logout-btn">Sign out</button>
+          </div>
+          <div id="games-cloud-profile-block" class="games-cloud-profile-block" hidden>
+            <label for="games-display-name" class="games-rakeback-label">Display name (leaderboard)</label>
+            <div class="games-cloud-profile-row">
+              <input id="games-display-name" type="text" class="games-cloud-email" maxlength="32" placeholder="2–32 characters" autocomplete="nickname">
+              <button type="button" class="button games-wallet-btn" id="games-display-name-save">Save</button>
+            </div>
+            <p class="games-history-hint" id="games-display-name-hint">Shown on the leaderboard instead of your handle when set. Leave blank to use your handle.</p>
+          </div>
+          <div id="games-cloud-email-block">
+            <details class="games-cloud-email-details" id="games-cloud-email-details">
+              <summary class="games-cloud-email-summary" id="games-cloud-email-summary">Email me a link instead</summary>
+              <form id="games-cloud-login-form" class="games-cloud-login-form" autocomplete="on">
+                <label for="games-cloud-email" class="games-rakeback-label">Email</label>
+                <input id="games-cloud-email" type="email" class="games-cloud-email" placeholder="you@example.com" required>
+                <div class="games-cloud-actions">
+                  <button type="submit" class="button games-wallet-btn">Send magic link</button>
+                </div>
+              </form>
+            </details>
+          </div>
+          <p class="games-history-hint" id="games-cloud-msg" role="status">Enable cloud in <code>cloud-config.js</code> to sync.</p>
+        </section>
+
+        <section class="games-leaderboard-panel" aria-labelledby="games-leaderboard-title">
+          <div class="games-quest-panel-head">
+            <h2 id="games-leaderboard-title" class="games-daily-quests-heading">LEADERBOARD</h2>
+            <div class="games-cloud-actions">
+              <button type="button" class="games-quest-toggle" id="games-leaderboard-scope-alltime">All-time</button>
+              <button type="button" class="games-quest-toggle" id="games-leaderboard-scope-weekly">Weekly</button>
+              <button type="button" class="games-quest-toggle" id="games-leaderboard-refresh">Refresh</button>
+            </div>
+          </div>
+          <div class="games-leaderboard-table-wrap">
+            <table class="games-leaderboard-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Balance</th>
+                  <th>Rounds</th>
+                </tr>
+              </thead>
+              <tbody id="games-leaderboard-body">
+                <tr><td colspan="4">Cloud leaderboard disabled.</td></tr>
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section class="games-daily-quests" aria-labelledby="daily-quests-title">
@@ -427,6 +490,8 @@
 
   <script src="assets/js/hub.js?v=2.1.7" defer></script>
   <script src="assets/js/init.js?v=2.1.6" defer></script>
+  <script src="assets/js/cloud-config.js?v=1.2.0" defer></script>
+  <script src="assets/js/cloud-sync.js?v=1.3.0" defer></script>
   <script src="assets/js/games.js?v=2.4.7" defer></script>
 </body>
 </html>
