@@ -2,10 +2,15 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.18.2';
+  const BUILD = '1.19.0';
 
   /** Same key as games.js — must stay in sync for offline→cloud one-time merge. */
   const FUN_WALLET_KEY = 'fuqmea_fun_wallet_v1';
+
+  /** Pre-sign-in guest wallet snapshot. Restored on sign-out so the cloud balance
+   *  never leaks into guest play (anti-abuse: kills sign-in -> sign-out -> drain ->
+   *  repeat farming). */
+  const GUEST_WALLET_BACKUP_KEY = 'fuqmea_guest_wallet_v1';
 
   /** Migrate once from legacy hand-rolled session storage (implicit / old boot). */
   const LEGACY_SESSION_KEY = 'fuqmea_cloud_session_v1';
@@ -653,6 +658,48 @@
     window.dispatchEvent(new CustomEvent('fuqmea-wallet-hydrated'));
   }
 
+  function readGuestBackup() {
+    try {
+      const raw = localStorage.getItem(GUEST_WALLET_BACKUP_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writeGuestBackup(snap) {
+    try {
+      localStorage.setItem(GUEST_WALLET_BACKUP_KEY, JSON.stringify(snap));
+    } catch (_) {
+      /**/
+    }
+  }
+
+  function clearGuestBackup() {
+    try {
+      localStorage.removeItem(GUEST_WALLET_BACKUP_KEY);
+    } catch (_) {
+      /**/
+    }
+  }
+
+  /** Idempotent: only the FIRST SIGNED_IN after a guest stretch saves the backup;
+   *  subsequent SIGNED_IN events (e.g. token-refresh re-emits) are no-ops. */
+  function snapshotGuestIfFirstSignIn() {
+    if (readGuestBackup()) return;
+    writeGuestBackup(readFunWalletSnapshot());
+  }
+
+  /** Restore the pre-sign-in guest wallet on sign-out, then drop the backup so the
+   *  next sign-in captures a fresh snapshot. Falls back to a fresh-guest 200 if no
+   *  backup exists (e.g. user cleared storage). */
+  function restoreGuestOrReset() {
+    const backup = readGuestBackup();
+    const target = backup || { tokens: 200, coinStreak: 0, lastDaily: '' };
+    writeFunWalletLocal(target);
+    clearGuestBackup();
+  }
+
   function mergeLastDaily(localD, remoteD) {
     const l = normalizeLastDailyForStorage(localD);
     const r = normalizeLastDailyForStorage(remoteD);
@@ -940,6 +987,23 @@
     }
   }
 
+  /** Floor between auto-hydrates so rapid Alt-Tab / focus toggles don't hammer Supabase. */
+  const AUTO_HYDRATE_MIN_MS = 30_000;
+  let lastAutoHydrateAt = 0;
+
+  /** Cross-device pull: when the user returns to the tab while signed in, refresh the
+   *  authoritative cloud wallet + leaderboard. Replaces the old manual "Sync now" button. */
+  async function autoHydrateOnFocus() {
+    if (document.visibilityState !== 'visible') return;
+    const now = Date.now();
+    if (now - lastAutoHydrateAt < AUTO_HYDRATE_MIN_MS) return;
+    const token = await getAccessToken().catch(() => null);
+    if (!token) return;
+    lastAutoHydrateAt = now;
+    await hydrateWalletAfterLogin().catch(() => {});
+    await loadLeaderboard().catch(() => {});
+  }
+
   function setupLoginLayout() {
     const oauthRow = byId('games-oauth-row');
     if (oauthRow) {
@@ -966,34 +1030,6 @@
     }
   }
 
-  async function syncProgressNow() {
-    const msg = byId('games-cloud-msg');
-    const token = await getAccessToken();
-    if (!token) {
-      setCloudAccountPanelMode({ signedIn: false, statusNote: 'Sign in first, then use Sync.' });
-      return false;
-    }
-    if (msg) msg.textContent = 'Syncing…';
-    try {
-      await maybeRefreshToken().catch(() => {});
-      await hydrateWalletAfterLogin();
-      await loadLeaderboard();
-      setCloudAccountPanelMode({
-        signedIn: true,
-        me: await getMe().catch(() => null),
-        statusNote: 'Synced with server.'
-      });
-      return true;
-    } catch {
-      setCloudAccountPanelMode({
-        signedIn: true,
-        me: await getMe().catch(() => null),
-        statusNote: 'Sync failed — try again.'
-      });
-      return false;
-    }
-  }
-
   async function initAuthUi() {
     setupLoginLayout();
     const loginForm = byId('games-cloud-login-form');
@@ -1006,9 +1042,6 @@
     });
     byId('games-display-name-save')?.addEventListener('click', () => {
       saveDisplayName();
-    });
-    byId('games-cloud-sync-now')?.addEventListener('click', () => {
-      void syncProgressNow();
     });
 
     if (loginForm) {
@@ -1195,14 +1228,19 @@
       sb.auth.onAuthStateChange((event, session) => {
         authLog('onAuthStateChange', event, !!session?.access_token);
         if (event === 'SIGNED_IN' && session?.access_token) {
+          snapshotGuestIfFirstSignIn();
           setOtpBlockVisible(false);
           pendingOtpEmail = '';
           void refreshSignedInChrome();
         } else if (event === 'SIGNED_OUT') {
+          restoreGuestOrReset();
           applyGuestChrome('');
           void loadLeaderboard().catch(() => {});
         }
       });
+
+      document.addEventListener('visibilitychange', () => void autoHydrateOnFocus());
+      window.addEventListener('focus', () => void autoHydrateOnFocus());
 
       await bootstrapAuthSession(sb);
 
@@ -1254,7 +1292,6 @@
     getLastSettlementResult,
     getSettlementInFlightCount,
     refreshLeaderboard: loadLeaderboard,
-    syncProgressNow,
     startOAuth
   };
 
