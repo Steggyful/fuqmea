@@ -2316,14 +2316,83 @@
     }
   }
 
-  function saveWinStreaks(s) {
+  function saveWinStreaks(s, opts) {
     localStorage.setItem(WIN_STREAK_KEY, JSON.stringify(s));
+    if (!opts || !opts.skipCloudPush) scheduleArcadeStreaksCloudPush();
+  }
+
+  const ARCADE_STREAKS_CLOUD_DEBOUNCE_MS = 450;
+  let arcadeStreaksCloudTimer = null;
+
+  function buildArcadeStreaksCloudPatch(s) {
+    const patch = {
+      rps: { best: Math.max(0, Math.floor(Number(s.rps?.best)) || 0) },
+      slots: { best: Math.max(0, Math.floor(Number(s.slots?.best)) || 0) },
+      bj: { best: Math.max(0, Math.floor(Number(s.bj?.best)) || 0) },
+      crash: {
+        best: Math.max(0, Math.floor(Number(s.crash?.best)) || 0)
+      }
+    };
+    const pk = Number(s.crash?.peakBankMult) || 0;
+    if (Number.isFinite(pk) && pk > 0) {
+      patch.crash.peakBankMult = Math.round(pk * 100) / 100;
+    }
+    return patch;
+  }
+
+  function scheduleArcadeStreaksCloudPush() {
+    if (!cloudClient?.mergeArcadeStreaks || !cloudClient.enabled?.() || !cloudClient.isSignedIn?.()) return;
+    if (arcadeStreaksCloudTimer) window.clearTimeout(arcadeStreaksCloudTimer);
+    arcadeStreaksCloudTimer = window.setTimeout(() => {
+      arcadeStreaksCloudTimer = null;
+      const patch = buildArcadeStreaksCloudPatch(loadWinStreaks());
+      void cloudClient.mergeArcadeStreaks(patch).catch(() => {});
+    }, ARCADE_STREAKS_CLOUD_DEBOUNCE_MS);
+  }
+
+  function applyArcadeStreaksFromCloud(cloud) {
+    if (!cloud || typeof cloud !== 'object') return;
+    const s = loadWinStreaks();
+    let changed = false;
+    ['rps', 'slots', 'bj'].forEach((slug) => {
+      const row = cloud[slug];
+      if (!row || typeof row !== 'object') return;
+      if (row.best == null) return;
+      const nb = Math.max(0, Math.floor(Number(row.best)) || 0);
+      if (nb > (s[slug].best || 0)) {
+        s[slug].best = nb;
+        changed = true;
+      }
+    });
+    if (cloud.crash && typeof cloud.crash === 'object') {
+      if (cloud.crash.best != null) {
+        const nb = Math.max(0, Math.floor(Number(cloud.crash.best)) || 0);
+        if (nb > (s.crash.best || 0)) {
+          s.crash.best = nb;
+          changed = true;
+        }
+      }
+      if (cloud.crash.peakBankMult != null) {
+        const np = Number(cloud.crash.peakBankMult);
+        if (Number.isFinite(np) && np > 0) {
+          const cur = Number(s.crash.peakBankMult) || 0;
+          if (np > cur) {
+            s.crash.peakBankMult = Math.round(np * 100) / 100;
+            changed = true;
+          }
+        }
+      }
+    }
+    if (changed) {
+      saveWinStreaks(s, { skipCloudPush: true });
+      renderWinStreakBars();
+    }
   }
 
   function syncCoinBestFromWallet(w) {
     const s = loadWinStreaks();
     s.coin.best = Math.max(s.coin.best || 0, w.coinStreak || 0);
-    saveWinStreaks(s);
+    saveWinStreaks(s, { skipCloudPush: true });
   }
 
   function applyArcadeWinStreak(slug, mood) {
@@ -2663,6 +2732,10 @@
       s.crash.peakBankMult = Math.max(Number(s.crash.peakBankMult) || 0, pk);
       saveWinStreaks(s);
       renderWinStreakBars();
+    });
+
+    window.addEventListener('fuqmea-arcade-streaks-cloud', (ev) => {
+      applyArcadeStreaksFromCloud(ev && ev.detail);
     });
 
     const w = loadWallet();

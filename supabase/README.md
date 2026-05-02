@@ -126,6 +126,7 @@ Canonical definitions live in **[`schema.sql`](schema.sql)** end-to-end. **[`sup
 | [`20260502160000_leaderboard_aggregate.sql`](migrations/20260502160000_leaderboard_aggregate.sql) | `public.leaderboard_aggregate` table + RLS + `tg_refresh_leaderboard_aggregate` triggers + backfill; replaces the SECURITY DEFINER leaderboard views with invoker views over the aggregate, and switches the leaderboard RPCs to SECURITY INVOKER |
 | [`20260502170000_rakeback_pool.sql`](migrations/20260502170000_rakeback_pool.sql) | `wallets.rakeback_pool numeric(12,2)` column, in-server rakeback accrual inside `apply_settlement` (10% of \|delta\| on coin/rps/slots/bj/crash losses), and a new `claim_rakeback()` RPC. **Apply on existing projects** so signed-in clients can read/claim rakeback after deploying `cloud-sync.js@1.20.0`. |
 | [`20260503120000_display_name_blocklist.sql`](migrations/20260503120000_display_name_blocklist.sql) | Replaces `profiles_before_write` with display-name substring moderation (`DISPLAY_NAME DISALLOWED`); pairs with `assets/js/display-name-policy.js` + `games.html` script order. |
+| [`20260503130000_arcade_streaks.sql`](migrations/20260503130000_arcade_streaks.sql) | `wallets.arcade_streaks jsonb` (per-game **best** streaks + Aura Farm **peakBankMult** only; running **current** streaks stay device-local) and `merge_arcade_streaks(p_patch jsonb)` for authenticated clients. Coin continues to use `wallets.coin_streak` / settlements — not duplicated in this JSON. Deploy before relying on `FuqCloud.mergeArcadeStreaks` / `cloud-sync.js@1.22.0`. |
 
 **SQL Editor workflow:** one full paste of **`schema.sql`** is sufficient. **CLI-only migrations** do not create the base tables/RPCs from scratch — run **`schema.sql`** once on a new project, then use migrations for small follow-ups, or keep re-pasting the full **`schema.sql`** when you change it.
 
@@ -252,6 +253,13 @@ Rakeback was previously tracked in the browser's `localStorage` and could leak b
 - **Migration:** [`supabase/migrations/20260502170000_rakeback_pool.sql`](migrations/20260502170000_rakeback_pool.sql) adds the column, drops + recreates `apply_settlement` with the new return shape (`tokens, coin_streak, last_daily, rakeback_pool, event_id`), and creates `claim_rakeback`. Idempotent — safe to re-apply.
 - **Edge function:** the legacy `rakeback` game key is rejected by `settle-game`. Old clients will see one failed claim until they refresh; the cache-bust in `games.html` forces a reload.
 - **Guests:** the panel shows "Sign in to earn 10% rakeback on losses." Nothing accrues without a session, which closes the abuse loop where a user signed in, drained tokens, signed out, and re-pulled the cloud balance into guest play.
+
+## Arcade streak bests (cross-device)
+
+- **Storage:** `public.wallets.arcade_streaks` (`jsonb`, default `{}`) holds per-game **best** win streaks and Aura Farm **peak bank multiplier** only. **Running “current” streak** values stay in `localStorage` on each browser.
+- **RPC:** `merge_arcade_streaks(p_patch jsonb)` (`SECURITY DEFINER`, granted to `authenticated`) merges patches with **`greatest`** per numeric field and server-side caps (same spirit as local UI). Clients call it via `FuqCloud.mergeArcadeStreaks` in **`assets/js/cloud-sync.js`** (debounced from **`assets/js/games.js`** after local streak updates).
+- **Coin flip:** continues to use **`wallets.coin_streak`** and settlement payloads — not duplicated inside `arcade_streaks`.
+- **Migration:** [`supabase/migrations/20260503130000_arcade_streaks.sql`](migrations/20260503130000_arcade_streaks.sql). Apply on existing projects before expecting cross-device arcade bests to sync.
 
 ## First-login device balance (once per account)
 

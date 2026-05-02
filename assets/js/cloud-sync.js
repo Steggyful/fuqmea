@@ -2,7 +2,7 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.21.0';
+  const BUILD = '1.22.0';
 
   /** Latest profile row from server — used to restore the display-name field on Cancel and keep preview in sync. */
   let lastLoadedProfileRow = null;
@@ -663,7 +663,8 @@
     const uid = me?.id;
     if (!uid) return null;
     const q = encodeURIComponent(uid);
-    const selFull = 'tokens,coin_streak,last_daily,aura_peak_multiplier';
+    const selFull =
+      'tokens,coin_streak,last_daily,aura_peak_multiplier,rakeback_pool,arcade_streaks';
     const selBase = 'tokens,coin_streak,last_daily';
     async function selectRow(sel) {
       return authFetch(`/rest/v1/wallets?select=${encodeURIComponent(sel)}&user_id=eq.${q}&limit=1`, {
@@ -783,6 +784,23 @@
     window.dispatchEvent(new CustomEvent('fuqmea-aura-cloud-peak', { detail: { peak: pk } }));
   }
 
+  /** Dispatched after wallet hydrate so games.js can merge server arcade bests into WIN_STREAK_KEY. */
+  function emitArcadeStreaksFromWalletRow(walletRow) {
+    if (!walletRow || typeof walletRow !== 'object') return;
+    const raw = walletRow.arcade_streaks ?? walletRow.arcadeStreaks;
+    if (raw == null || raw === '') return;
+    let parsed = raw;
+    if (typeof raw === 'string') {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (_) {
+        return;
+      }
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return;
+    window.dispatchEvent(new CustomEvent('fuqmea-arcade-streaks-cloud', { detail: parsed }));
+  }
+
   /** Cloud `tokens` are authoritative once we have a server row — server applies deltas; max(local,cloud) caused UI desync. */
   function reconcileLocalWithCloudRow(localSnap, cloudRow) {
     if (!cloudRow || typeof cloudRow !== 'object') {
@@ -828,6 +846,7 @@
         if (!ep) {
           writeFunWalletLocal(reconcileLocalWithCloudRow(readFunWalletSnapshot(), row));
           emitAuraCloudPeak(row);
+          emitArcadeStreaksFromWalletRow(row);
           return;
         }
 
@@ -852,6 +871,7 @@
 
       writeFunWalletLocal(reconcileLocalWithCloudRow(readFunWalletSnapshot(), cloudLike));
       emitAuraCloudPeak(cloudLike);
+      emitArcadeStreaksFromWalletRow(cloudLike);
     } catch (_) {
       writeFunWalletLocal(readFunWalletSnapshot());
     }
@@ -1385,11 +1405,30 @@
     const merged = reconcileLocalWithCloudRow(readFunWalletSnapshot(), row);
     writeFunWalletLocal(merged);
     emitAuraCloudPeak(row);
+    emitArcadeStreaksFromWalletRow(row);
     return {
       ok: true,
       paid: Math.max(0, Math.floor(Number(row.paid) || 0)),
       wallet: merged
     };
+  }
+
+  /** Merges arcade best streaks server-side (greatest per field). Dispatches `fuqmea-arcade-streaks-cloud` with merged JSON. */
+  async function mergeArcadeStreaks(patch) {
+    const sb = getSupabase();
+    if (!sb) return { ok: false, error: 'no_client' };
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      return { ok: false, error: 'invalid_patch' };
+    }
+    const { data, error } = await sb.rpc('merge_arcade_streaks', { p_patch: patch });
+    if (error) {
+      return { ok: false, error: shortErrText(error) };
+    }
+    const merged = data;
+    if (merged && typeof merged === 'object') {
+      window.dispatchEvent(new CustomEvent('fuqmea-arcade-streaks-cloud', { detail: merged }));
+    }
+    return { ok: true, arcade_streaks: merged };
   }
 
   window.FuqCloud = {
@@ -1400,6 +1439,7 @@
     getSettlementInFlightCount,
     refreshLeaderboard: loadLeaderboard,
     claimRakeback,
+    mergeArcadeStreaks,
     startOAuth
   };
 
