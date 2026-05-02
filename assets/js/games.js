@@ -375,8 +375,8 @@
     }
   };
 
-  /** Fast enough updates + ramp that climbs so the surge feels urgent */
-  const CRASH_TICK_MS = 48;
+  /** ~20 ticks/s; slight spacing vs 48ms reads smoother vs typical crypto crash UIs */
+  const CRASH_TICK_MS = 50;
   /** Perceptual Y curve; slightly lower = punchier-looking climb (fill/glow removed) */
   const CRASH_CHART_Y_CURVE = 0.53;
   /** Long surges trim oldest samples only */
@@ -414,6 +414,9 @@
     win: encodeURI('assets/images/aura farm/Fuq Yeah Board.png'),
     lose: encodeURI('assets/images/aura farm/Aura Lost Board.png')
   };
+
+  /** Profile gallery PFP for the rider badge; kept in sync with #games-pfp-img / fuqmea-avatar-changed. */
+  let crashRiderAvatarUrl = '';
 
   let crashPeakMarkers = [];
   let crashPeakMarkerEls = [];
@@ -2196,11 +2199,21 @@
     crashChartRender();
   }
 
+  function syncCrashRiderPfpFromPreview() {
+    const preview = document.getElementById('games-pfp-img');
+    const raw = preview && !preview.hidden && preview.getAttribute('src') ? preview.getAttribute('src') : '';
+    crashRiderAvatarUrl = safeMarkerSrc(raw);
+  }
+
   function crashRiderHide() {
+    const stack = document.getElementById('crash-rider-stack');
     const rider = document.getElementById('crash-rider');
-    if (rider) {
-      rider.hidden = true;
-      rider.removeAttribute('src');
+    const pfp = document.getElementById('crash-rider-pfp');
+    if (stack) stack.hidden = true;
+    if (rider) rider.removeAttribute('src');
+    if (pfp) {
+      pfp.hidden = true;
+      pfp.removeAttribute('src');
     }
   }
 
@@ -2209,8 +2222,10 @@
    */
   function crashRiderSync(pts, lastXY) {
     const chart = document.querySelector('.games-crash-chart');
+    const stack = document.getElementById('crash-rider-stack');
     const rider = document.getElementById('crash-rider');
-    if (!chart || !rider || !pts.length) {
+    const pfp = document.getElementById('crash-rider-pfp');
+    if (!chart || !stack || !rider || !pts.length) {
       crashRiderHide();
       return false;
     }
@@ -2261,9 +2276,18 @@
       return false;
     }
 
-    rider.hidden = false;
+    stack.hidden = false;
     rider.src = src;
     rider.alt = '';
+    if (pfp) {
+      if (crashRiderAvatarUrl) {
+        pfp.src = crashRiderAvatarUrl;
+        pfp.hidden = false;
+      } else {
+        pfp.hidden = true;
+        pfp.removeAttribute('src');
+      }
+    }
     return true;
   }
 
@@ -2451,9 +2475,13 @@
     wrap.classList.add(safeAfterBank ? 'games-crash-chart--bust-safe' : 'games-crash-chart--bust');
   }
 
+  /**
+   * Crash-point tail (~inverse-power); numerator near 1 targets competitive crash RTP (~97–99%).
+   * See scripts/aura-farm-monte-carlo.mjs for sampled stats.
+   */
   function sampleCrashPoint() {
     const u = Math.max(1e-9, Math.random());
-    let m = 0.97 / Math.pow(u, 0.92);
+    let m = 0.99 / Math.pow(u, 0.92);
     m = Math.min(88, Math.max(1.02, m));
     return Math.round(m * 100) / 100;
   }
@@ -2669,6 +2697,7 @@
     crashRuntime.bankMult = null;
     crashRuntime.roundLive = true;
     crashRuntime.active = true;
+    syncCrashRiderPfpFromPreview();
     crashUpdatePrimaryBtn(true);
     wireBetRadiosState('crash-bet', false);
     setGameOutcome('crash', 'pending', 'Aura climbing… farm carefully.');
@@ -2689,6 +2718,32 @@
     });
     wireBetRadios('crash-bet', 'crash');
     crashUpdatePrimaryBtn(false);
+
+    syncCrashRiderPfpFromPreview();
+    window.addEventListener('fuqmea-avatar-changed', (ev) => {
+      const raw = ev.detail && Object.prototype.hasOwnProperty.call(ev.detail, 'avatar_url')
+        ? ev.detail.avatar_url
+        : undefined;
+      const u =
+        raw == null || raw === ''
+          ? ''
+          : safeMarkerSrc(String(raw));
+      crashRiderAvatarUrl = u;
+      const stack = document.getElementById('crash-rider-stack');
+      const pfp = document.getElementById('crash-rider-pfp');
+      if (stack && !stack.hidden && pfp) {
+        if (u) {
+          pfp.src = u;
+          pfp.hidden = false;
+        } else {
+          pfp.hidden = true;
+          pfp.removeAttribute('src');
+        }
+      }
+    });
+    window.addEventListener('fuqmea-cloud-init-complete', () => {
+      syncCrashRiderPfpFromPreview();
+    });
   }
 
   function loadWallet() {

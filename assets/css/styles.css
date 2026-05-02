@@ -430,6 +430,7 @@
   left: 0;
   right: 0;
   bottom: 0;
+  z-index: 4;
   pointer-events: none;
 }
 
@@ -445,6 +446,14 @@
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.7), 0 0 3px rgba(255, 200, 80, 0.4);
   pointer-events: auto;
   cursor: default;
+}
+
+.crash-peak-marker:nth-child(3n + 2) {
+  transform: translateY(-50%) translateX(-9px);
+}
+
+.crash-peak-marker:nth-child(3n) {
+  transform: translateY(-50%) translateX(-18px);
 }
 
 .crash-peak-marker img {
@@ -3796,12 +3805,11 @@ button.js-games-daily[disabled] {
   z-index: 1;
 }
 
-.games-crash-rider {
+.games-crash-rider-stack {
   position: absolute;
   left: var(--crash-rider-x);
   top: var(--crash-rider-y);
   width: clamp(82px, 22.5vmin, 136px);
-  height: auto;
   z-index: 2;
   pointer-events: none;
   transform: translate(
@@ -3813,8 +3821,30 @@ button.js-games-daily[disabled] {
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
 }
 
+.games-crash-rider {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.games-crash-rider-pfp {
+  position: absolute;
+  top: 6%;
+  right: 10%;
+  width: 28%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(57, 255, 20, 0.72);
+  box-shadow:
+    0 0 8px rgba(0, 0, 0, 0.55),
+    0 0 6px rgba(57, 255, 20, 0.35);
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .games-crash-rider {
+  .games-crash-rider-stack {
     transition: none;
   }
 }
