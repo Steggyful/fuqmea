@@ -391,6 +391,8 @@ $$;
 
 -- First login only: copy device token balance into cloud if this account never played on-server.
 -- Sets profiles.wallet_import_completed; skipped if already true or any game_events exist.
+drop function if exists public.import_initial_device_wallet(integer, integer, text);
+
 create or replace function public.import_initial_device_wallet(
   p_tokens integer,
   p_coin_streak integer,
@@ -399,7 +401,10 @@ create or replace function public.import_initial_device_wallet(
 returns table (
   tokens integer,
   coin_streak integer,
-  last_daily date
+  last_daily date,
+  rakeback_pool numeric,
+  arcade_streaks jsonb,
+  aura_peak_multiplier double precision
 )
 language plpgsql
 security definer
@@ -434,7 +439,13 @@ begin
     where id = v_uid
       and not coalesce(wallet_import_completed, false);
     return query
-    select w.tokens, w.coin_streak, w.last_daily
+    select
+      w.tokens,
+      w.coin_streak,
+      w.last_daily,
+      w.rakeback_pool,
+      w.arcade_streaks,
+      w.aura_peak_multiplier
     from public.wallets w
     where w.user_id = v_uid;
     return;
@@ -442,7 +453,13 @@ begin
 
   if v_done then
     return query
-    select w.tokens, w.coin_streak, w.last_daily
+    select
+      w.tokens,
+      w.coin_streak,
+      w.last_daily,
+      w.rakeback_pool,
+      w.arcade_streaks,
+      w.aura_peak_multiplier
     from public.wallets w
     where w.user_id = v_uid;
     return;
@@ -475,7 +492,15 @@ begin
   where id = v_uid;
 
   return query
-  select w.tokens, w.coin_streak, w.last_daily from public.wallets w where w.user_id = v_uid;
+  select
+    w.tokens,
+    w.coin_streak,
+    w.last_daily,
+    w.rakeback_pool,
+    w.arcade_streaks,
+    w.aura_peak_multiplier
+  from public.wallets w
+  where w.user_id = v_uid;
 end;
 $$;
 

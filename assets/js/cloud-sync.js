@@ -2,7 +2,7 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.22.0';
+  const BUILD = '1.23.0';
 
   /** Latest profile row from server — used to restore the display-name field on Cancel and keep preview in sync. */
   let lastLoadedProfileRow = null;
@@ -864,7 +864,9 @@
           })
         });
         const j = ir.ok ? await ir.json().catch(() => null) : null;
-        if (j && typeof j === 'object' && j.wallet) cloudLike = j.wallet;
+        /** RPC returns tokens/coin_streak/last_daily; merge onto REST row so rakeback_pool,
+         *  arcade_streaks, aura_peak_multiplier are not wiped to missing/undefined. */
+        if (j && typeof j === 'object' && j.wallet) cloudLike = { ...row, ...j.wallet };
       } catch (_) {
         cloudLike = row;
       }
