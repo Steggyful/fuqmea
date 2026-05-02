@@ -311,6 +311,12 @@
   flex-shrink: 0;
 }
 
+.games-leaderboard-panel--refreshing {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
 @keyframes lb-shimmer {
   0%, 100% { opacity: 0.2; }
   50%       { opacity: 0.45; }

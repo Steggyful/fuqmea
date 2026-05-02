@@ -1128,17 +1128,8 @@
     if (!tbody) return;
     updateLeaderboardTableHeadLabels();
     syncLeaderboardScopeButtons();
-    const skeletonNameWidths = ['5rem', '4rem', '6rem', '3.5rem', '5.5rem', '4.5rem'];
-    tbody.innerHTML = skeletonNameWidths.map(() => `<tr class="lb-skeleton-row">
-      <td><span class="lb-skeleton-cell" style="width:0.8rem"></span></td>
-      <td><div class="lb-name-cell">
-        <span class="lb-pfp lb-pfp--empty"></span>
-        <span class="lb-skeleton-cell" style="width:${skeletonNameWidths[Math.floor(Math.random()*skeletonNameWidths.length)]}"></span>
-      </div></td>
-      <td><span class="lb-skeleton-cell" style="width:2.2rem"></span></td>
-      <td><span class="lb-skeleton-cell" style="width:1.4rem"></span></td>
-      <td><span class="lb-skeleton-cell" style="width:1.8rem"></span></td>
-    </tr>`).join('');
+    const lbPanel = tbody.closest('.games-leaderboard-panel');
+    if (lbPanel) lbPanel.classList.add('games-leaderboard-panel--refreshing');
     try {
       const lim = Number(CONFIG.leaderboardLimit || 25);
       const rows = await fetchLeaderboardRows(lim);
@@ -1174,6 +1165,8 @@
     } catch {
       tbody.innerHTML =
         '<tr><td colspan="5">Leaderboard unavailable. Deploy Edge <code>leaderboard</code> or run latest <code>schema.sql</code> (RPC); load <code>assets/js/vendor/supabase.umd.min.js</code>.</td></tr>';
+    } finally {
+      if (lbPanel) lbPanel.classList.remove('games-leaderboard-panel--refreshing');
     }
   }
 

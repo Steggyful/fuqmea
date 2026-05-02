@@ -1005,7 +1005,7 @@
         return;
       }
       bjState.handOutcomes = ['lose'];
-      bjFinishRound('Dealer blackjack', 'lose', 'Dealer has blackjack.');
+      bjFinishRound('Dealer blackjack', 'lose', `Dealer has blackjack. −${bet} FUQ.`);
       return;
     }
 
@@ -3349,6 +3349,7 @@
     const coin3d = document.getElementById('games-coin-3d');
 
     function settleCoinResult() {
+      const prevStreak = w.coinStreak;
       let detail = `${pick.toUpperCase()} vs ${outcome.toUpperCase()} · bet ${bet}`;
       if (win) {
         const streakBonus = Math.min(w.coinStreak, MAX_COIN_STREAK_BONUS);
@@ -3373,7 +3374,9 @@
         syncCoinBestFromWallet(w);
         setGameOutcome('coin', 'win', `You called ${pick.toUpperCase()} · landed ${outcome.toUpperCase()} · ${net >= 0 ? '+' : ''}${net} coins`);
       } else {
-        setGameOutcome('coin', 'lose', `Landed ${outcome.toUpperCase()} · ${net} coins · streak reset`);
+        setGameOutcome('coin', 'lose', prevStreak > 0
+          ? `Landed ${outcome.toUpperCase()} · ${net} coins · ${prevStreak}-win streak lost`
+          : `Landed ${outcome.toUpperCase()} · ${net} coins`);
       }
       renderWinStreakBars();
       coinFlipAnimating = false;
