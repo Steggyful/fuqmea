@@ -356,12 +356,24 @@
 
 .games-pfp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 7px;
   margin-top: 0.5rem;
-  max-height: 260px;
+  max-height: 320px;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding-right: 2px;
+}
+
+@media (max-width: 540px) {
+  .games-pfp-grid {
+    grid-template-columns: repeat(4, 1fr);
+    max-height: none;
+    overflow-y: visible;
+    gap: 6px;
+  }
 }
 
 .games-pfp-thumb {
@@ -373,6 +385,8 @@
   background: rgba(255, 255, 255, 0.06);
   cursor: pointer;
   padding: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   transition: border-color 0.15s ease, opacity 0.15s ease;
 }
 
@@ -384,8 +398,10 @@
   pointer-events: none;
 }
 
-.games-pfp-thumb:not(:disabled):hover {
-  border-color: rgba(57, 255, 20, 0.7);
+@media (hover: hover) {
+  .games-pfp-thumb:not(:disabled):hover {
+    border-color: rgba(57, 255, 20, 0.7);
+  }
 }
 
 .games-pfp-thumb--claimed {
@@ -3671,8 +3687,21 @@ button.js-games-daily[disabled] {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  /* One footprint for every Aura Farm state — inner copy swaps without resizing the card */
-  min-height: clamp(40rem, 75vh, 56rem);
+  /* svh = small viewport height (stable — doesn't change as browser chrome shows/hides).
+     Falls back to the 40rem floor on browsers without svh support. */
+  min-height: clamp(40rem, 75svh, 56rem);
+}
+/* Browsers without svh: keep the old vh value */
+@supports not (min-height: 1svh) {
+  .games-card--crash {
+    min-height: clamp(40rem, 75vh, 56rem);
+  }
+}
+/* On narrow mobile the card doesn't need a forced min-height — let content breathe naturally */
+@media (max-width: 540px) {
+  .games-card--crash {
+    min-height: 0;
+  }
 }
 
 .games-card--crash .games-crash-stage {
@@ -3705,8 +3734,8 @@ button.js-games-daily[disabled] {
   --crash-rider-ay: 87;
   margin: 0 0 0.75rem;
   width: 100%;
-  height: clamp(200px, 52vw, 304px);
-  min-height: 182px;
+  height: clamp(180px, 50vw, 304px);
+  min-height: 160px;
   border-radius: 10px;
   overflow: visible;
   border: 1px solid rgba(255, 130, 85, 0.45);
@@ -4011,9 +4040,22 @@ button.js-games-daily[disabled] {
   justify-content: center;
 }
 
+.games-crash-actions button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .games-crash-btn-main {
   min-width: clamp(148px, 52vw, 220px);
   font-weight: bold;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Bet labels: prevent double-tap zoom on rapid selections */
+.games-bet-row--crash label {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .games-crash-btn-main.games-crash-btn--cashout {
