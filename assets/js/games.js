@@ -58,8 +58,26 @@
     quest_weekly: 'WEEK'
   };
 
-  const QUEST_STATE_KEY = 'fuqmea_arcade_quests_v1';
-  const WEEKLY_QUEST_STATE_KEY = 'fuqmea_arcade_weekly_quests_v1';
+  /** Guest-only slots (legacy keys — unchanged for backward compatibility). */
+  const QUEST_STATE_KEY_GUEST = 'fuqmea_arcade_quests_v1';
+  const WEEKLY_QUEST_STATE_KEY_GUEST = 'fuqmea_arcade_weekly_quests_v1';
+  const QUEST_STATE_KEY_ACCOUNT = 'fuqmea_arcade_quests_account_v1';
+  const WEEKLY_QUEST_STATE_KEY_ACCOUNT = 'fuqmea_arcade_weekly_quests_account_v1';
+  /** Snapshot of guest quest JSON before sign-in (like wallet guest backup). */
+  const GUEST_QUEST_BUNDLE_KEY = 'fuqmea_guest_quest_bundle_v1';
+  const ACCOUNT_QUEST_MIGRATION_FLAG = 'fuqmea_account_quest_migrated_v2';
+
+  function isQuestAccountMode() {
+    return !!(cloudClient && cloudClient.isSignedIn && cloudClient.isSignedIn());
+  }
+
+  function questDailyStorageKey() {
+    return isQuestAccountMode() ? QUEST_STATE_KEY_ACCOUNT : QUEST_STATE_KEY_GUEST;
+  }
+
+  function questWeeklyStorageKey() {
+    return isQuestAccountMode() ? WEEKLY_QUEST_STATE_KEY_ACCOUNT : WEEKLY_QUEST_STATE_KEY_GUEST;
+  }
 
   /** Surge + grind + flex + full-floor sampler — four dailies, RNG’d per bucket */
   const QUEST_CAT_SURGE = [
@@ -1210,13 +1228,90 @@
 
   function loadWeeklyQuestStateRaw() {
     try {
-      const raw = localStorage.getItem(WEEKLY_QUEST_STATE_KEY);
+      const raw = localStorage.getItem(questWeeklyStorageKey());
       if (!raw) return null;
       const o = JSON.parse(raw);
       if (!o || typeof o.week !== 'string' || !Array.isArray(o.ids)) return null;
       return o;
     } catch {
       return null;
+    }
+  }
+
+  function readGuestQuestBackupBundle() {
+    try {
+      const raw = localStorage.getItem(GUEST_QUEST_BUNDLE_KEY);
+      if (!raw) return null;
+      const o = JSON.parse(raw);
+      return o && typeof o === 'object' ? o : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Idempotent: first sign-in after a guest stretch — called from cloud-sync before account keys are used. */
+  function snapshotGuestQuestBundleIfNeeded() {
+    if (readGuestQuestBackupBundle()) return;
+    const dailyRaw = localStorage.getItem(QUEST_STATE_KEY_GUEST);
+    const weeklyRaw = localStorage.getItem(WEEKLY_QUEST_STATE_KEY_GUEST);
+    try {
+      localStorage.setItem(
+        GUEST_QUEST_BUNDLE_KEY,
+        JSON.stringify({ dailyRaw: dailyRaw || null, weeklyRaw: weeklyRaw || null })
+      );
+    } catch (_) {
+      /**/
+    }
+  }
+
+  /** Sign-out: restore guest keys from bundle (same session shape as snapshot). */
+  function restoreGuestQuestBundleToGuestKeys() {
+    const b = readGuestQuestBackupBundle();
+    try {
+      localStorage.removeItem(GUEST_QUEST_BUNDLE_KEY);
+    } catch (_) {
+      /**/
+    }
+    if (!b || typeof b !== 'object') return;
+    if (typeof b.dailyRaw === 'string' && b.dailyRaw.length) {
+      try {
+        localStorage.setItem(QUEST_STATE_KEY_GUEST, b.dailyRaw);
+      } catch (_) {
+        /**/
+      }
+    }
+    if (typeof b.weeklyRaw === 'string' && b.weeklyRaw.length) {
+      try {
+        localStorage.setItem(WEEKLY_QUEST_STATE_KEY_GUEST, b.weeklyRaw);
+      } catch (_) {
+        /**/
+      }
+    }
+  }
+
+  /** One-time: pre-split users had quest progress only in legacy guest keys — seed account slot so cloud sync isn’t empty. */
+  function maybeSeedAccountQuestsFromLegacyOnce() {
+    if (!isQuestAccountMode()) return;
+    try {
+      if (localStorage.getItem(ACCOUNT_QUEST_MIGRATION_FLAG)) return;
+    } catch (_) {
+      return;
+    }
+    const accD = localStorage.getItem(QUEST_STATE_KEY_ACCOUNT);
+    const gD = localStorage.getItem(QUEST_STATE_KEY_GUEST);
+    if (!accD && gD) {
+      try {
+        localStorage.setItem(QUEST_STATE_KEY_ACCOUNT, gD);
+        const gW = localStorage.getItem(WEEKLY_QUEST_STATE_KEY_GUEST);
+        if (gW) localStorage.setItem(WEEKLY_QUEST_STATE_KEY_ACCOUNT, gW);
+      } catch (_) {
+        /**/
+      }
+    }
+    try {
+      localStorage.setItem(ACCOUNT_QUEST_MIGRATION_FLAG, '1');
+    } catch (_) {
+      /**/
     }
   }
 
@@ -1253,7 +1348,7 @@
   }
 
   function saveWeeklyQuestState(state, opts) {
-    localStorage.setItem(WEEKLY_QUEST_STATE_KEY, JSON.stringify(state));
+    localStorage.setItem(questWeeklyStorageKey(), JSON.stringify(state));
     if (!opts || !opts.skipCloudPush) scheduleQuestCloudPush();
   }
 
@@ -1347,7 +1442,7 @@
 
   function loadQuestStateRaw() {
     try {
-      const raw = localStorage.getItem(QUEST_STATE_KEY);
+      const raw = localStorage.getItem(questDailyStorageKey());
       if (!raw) return null;
       const o = JSON.parse(raw);
       if (!o || typeof o.day !== 'string' || !Array.isArray(o.ids)) return null;
@@ -1358,7 +1453,7 @@
   }
 
   function saveQuestState(state, opts) {
-    localStorage.setItem(QUEST_STATE_KEY, JSON.stringify(state));
+    localStorage.setItem(questDailyStorageKey(), JSON.stringify(state));
     if (!opts || !opts.skipCloudPush) scheduleQuestCloudPush();
   }
 
@@ -1507,6 +1602,7 @@
 
   function applyQuestCloudPayload(qs) {
     if (!qs || typeof qs !== 'object') return;
+    if (!isQuestAccountMode()) return;
     let changed = false;
     if (qs.daily && typeof qs.daily === 'object' && qs.daily.day) {
       const next = mergeDailyQuestRemote(loadQuestState(), qs.daily);
@@ -2873,6 +2969,7 @@
   }
 
   function initWalletUi() {
+    maybeSeedAccountQuestsFromLegacyOnce();
     function paintWalletFromStorage() {
       const nw = loadWallet();
       syncCoinBestFromWallet(nw);
@@ -2884,10 +2981,18 @@
     window.addEventListener('fuqmea-cloud-init-complete', paintWalletFromStorage, { once: true });
     window.addEventListener('fuqmea-cloud-init-complete', () => syncGamesResetButtonVisibility(), { once: true });
     window.addEventListener('fuqmea-cloud-init-complete', () => scheduleQuestCloudPush(), { once: true });
+    window.addEventListener('fuqmea-guest-quest-backup', () => snapshotGuestQuestBundleIfNeeded());
+    window.addEventListener('fuqmea-restore-guest-quests', () => {
+      restoreGuestQuestBundleToGuestKeys();
+    });
     // Auth state flips the rakeback panel between "Sign in to earn" and live pool readout.
-    window.addEventListener('fuqmea-cloud-auth-state', () => {
+    window.addEventListener('fuqmea-cloud-auth-state', (ev) => {
       renderRakeback();
       syncGamesResetButtonVisibility();
+      const signedIn = !!(ev && ev.detail && ev.detail.signedIn);
+      if (signedIn) maybeSeedAccountQuestsFromLegacyOnce();
+      renderQuestPanels();
+      if (signedIn) scheduleQuestCloudPush();
     });
 
     window.addEventListener('fuqmea-aura-cloud-peak', (ev) => {
@@ -2970,8 +3075,10 @@
         return;
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(WIN_STREAK_KEY);
-      localStorage.removeItem(QUEST_STATE_KEY);
-      localStorage.removeItem(WEEKLY_QUEST_STATE_KEY);
+      localStorage.removeItem(QUEST_STATE_KEY_GUEST);
+      localStorage.removeItem(WEEKLY_QUEST_STATE_KEY_GUEST);
+      localStorage.removeItem(GUEST_QUEST_BUNDLE_KEY);
+      localStorage.removeItem(QUEST_UI_KEY);
       // RAKEBACK_STATE_KEY removed: rakeback now lives on the server (wallets.rakeback_pool).
       try { localStorage.removeItem(RAKEBACK_STATE_KEY); } catch (_) { /* legacy clean-up */ }
       clearHistory();

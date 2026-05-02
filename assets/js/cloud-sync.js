@@ -2,7 +2,7 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.23.0';
+  const BUILD = '1.24.1';
 
   /** Latest profile row from server — used to restore the display-name field on Cancel and keep preview in sync. */
   let lastLoadedProfileRow = null;
@@ -757,6 +757,7 @@
   function snapshotGuestIfFirstSignIn() {
     if (readGuestBackup()) return;
     writeGuestBackup(readFunWalletSnapshot());
+    window.dispatchEvent(new CustomEvent('fuqmea-guest-quest-backup'));
   }
 
   /** Restore the pre-sign-in guest wallet on sign-out, then drop the backup so the
@@ -769,6 +770,7 @@
     target.rakebackPool = 0;
     writeFunWalletLocal(target);
     clearGuestBackup();
+    window.dispatchEvent(new CustomEvent('fuqmea-restore-guest-quests'));
   }
 
   function mergeLastDaily(localD, remoteD) {
