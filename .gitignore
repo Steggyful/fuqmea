@@ -11,3 +11,13 @@ Thumbs.db
 
 # Supabase CLI link metadata (per-machine; do not commit)
 supabase/.temp/
+
+# Claude Code project-local config (machine-specific, no sensitive data but not repo content)
+.claude/
+
+# Editor local config
+.vscode/settings.json
+.cursor/
+*.env
+.env.local
+.env.*.local
