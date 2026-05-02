@@ -92,6 +92,10 @@ alter table public.wallets
 alter table public.wallets
   add column if not exists arcade_streaks jsonb not null default '{}'::jsonb;
 
+-- Daily/weekly quest progress + claimed flags (MT day / ISO-ish week keys); sync via merge_quest_state RPC.
+alter table public.wallets
+  add column if not exists quest_state jsonb not null default '{}'::jsonb;
+
 create table if not exists public.game_events (
   id bigserial primary key,
   user_id uuid not null references auth.users (id) on delete cascade,

@@ -8,6 +8,10 @@ type SettlePayload = {
   last_daily?: string;
   /** Client-reported Aura Farm multiplier this round (clamped server-side). */
   crash_peak_mult?: number;
+  /** Quest claims only — MT day YYYY-MM-DD or weekly week key from games.js `weekKey()`. */
+  quest_period_key?: string;
+  /** Quest claims only — must match `QUEST_DEFS` / `WEEKLY_QUEST_DEFS` id on the client. */
+  quest_id?: string;
 };
 
 const corsHeaders = {
@@ -121,6 +125,64 @@ Deno.serve(async (req) => {
   }
 
   const gKey = game.toLowerCase();
+
+  const qpk =
+    typeof payload.quest_period_key === 'string' ? payload.quest_period_key.trim().slice(0, 32) : '';
+  const qid = typeof payload.quest_id === 'string' ? payload.quest_id.trim().slice(0, 48) : '';
+
+  if (gKey === 'quest' || gKey === 'quest_weekly') {
+    if (!qpk || !qid) {
+      return new Response(
+        JSON.stringify({
+          error:
+            'Quest settlements require quest_period_key (MT day or weekly week id) and quest_id — update games client.'
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+    const { data, error } = await client.rpc('apply_settlement_quest_claim', {
+      p_game: game,
+      p_detail: detail,
+      p_delta: delta,
+      p_period_key: qpk,
+      p_quest_id: qid
+    });
+
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const row = Array.isArray(data) ? data[0] : null;
+    if (!row) {
+      return new Response(JSON.stringify({ error: 'No settlement row returned' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        wallet: {
+          tokens: Number(row.tokens) || 0,
+          coinStreak: Number(row.coin_streak) || 0,
+          lastDaily: row.last_daily || '',
+          rakebackPool: Number(row.rakeback_pool) || 0
+        },
+        eventId: row.event_id || null
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
+  }
 
   /** Optional wallet fields — validated per game before RPC */
   type RpcArgs = {

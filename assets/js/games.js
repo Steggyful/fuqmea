@@ -1220,8 +1220,41 @@
     }
   }
 
-  function saveWeeklyQuestState(state) {
+  const QUEST_CLOUD_DEBOUNCE_MS = 450;
+  let questCloudTimer = null;
+
+  function buildQuestCloudPatch() {
+    const d = loadQuestState();
+    const w = loadWeeklyQuestState();
+    return {
+      daily: {
+        day: d.day,
+        ids: d.ids,
+        prog: d.prog,
+        claimed: d.claimed
+      },
+      weekly: {
+        week: w.week,
+        ids: w.ids,
+        prog: w.prog,
+        claimed: w.claimed
+      }
+    };
+  }
+
+  function scheduleQuestCloudPush() {
+    if (!cloudClient?.mergeQuestState || !cloudClient.enabled?.() || !cloudClient.isSignedIn?.()) return;
+    if (questCloudTimer) window.clearTimeout(questCloudTimer);
+    questCloudTimer = window.setTimeout(() => {
+      questCloudTimer = null;
+      const patch = buildQuestCloudPatch();
+      void cloudClient.mergeQuestState(patch).catch(() => {});
+    }, QUEST_CLOUD_DEBOUNCE_MS);
+  }
+
+  function saveWeeklyQuestState(state, opts) {
     localStorage.setItem(WEEKLY_QUEST_STATE_KEY, JSON.stringify(state));
+    if (!opts || !opts.skipCloudPush) scheduleQuestCloudPush();
   }
 
   function loadWeeklyQuestState() {
@@ -1324,8 +1357,9 @@
     }
   }
 
-  function saveQuestState(state) {
+  function saveQuestState(state, opts) {
     localStorage.setItem(QUEST_STATE_KEY, JSON.stringify(state));
+    if (!opts || !opts.skipCloudPush) scheduleQuestCloudPush();
   }
 
   function loadQuestState() {
@@ -1368,6 +1402,123 @@
     }
     if (!Array.isArray(o.claimed)) o.claimed = [];
     return o;
+  }
+
+  function unionQuestClaimed(a, b) {
+    const s = new Set([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]);
+    return [...s];
+  }
+
+  function mergeQuestProgObjects(loc, rem) {
+    const out = { ...defaultQuestProg(), ...(loc && typeof loc === 'object' ? loc : {}) };
+    const R = rem && typeof rem === 'object' ? rem : {};
+    const keys = new Set([...Object.keys(out), ...Object.keys(R)]);
+    keys.forEach((k) => {
+      if (k === 'playedSlugs') {
+        const pm = { ...(out.playedSlugs || {}) };
+        const ps = R.playedSlugs && typeof R.playedSlugs === 'object' ? R.playedSlugs : {};
+        Object.keys(ps).forEach((g) => {
+          pm[g] = Math.max(Math.floor(Number(pm[g]) || 0), Math.floor(Number(ps[g]) || 0));
+        });
+        out.playedSlugs = pm;
+      } else {
+        out[k] = Math.max(Math.floor(Number(out[k]) || 0), Math.floor(Number(R[k]) || 0));
+      }
+    });
+    return out;
+  }
+
+  function normalizeDailyQuestFromRemote(r, dayFallback) {
+    const day = (r && r.day) || dayFallback || todayKey();
+    const canon = pickDailyQuestIds(day);
+    const ids = Array.isArray(r?.ids) && r.ids.length === 4 ? r.ids.slice() : canon.slice();
+    return {
+      day,
+      ids,
+      prog: mergeQuestProgObjects(defaultQuestProg(), r?.prog),
+      claimed: unionQuestClaimed([], r?.claimed).filter((id) => ids.includes(id))
+    };
+  }
+
+  function mergeDailyQuestRemote(localSt, remoteDaily) {
+    if (!remoteDaily || typeof remoteDaily !== 'object' || !remoteDaily.day) return localSt;
+    const locDay = localSt.day;
+    const remDay = remoteDaily.day;
+    if (!locDay || locDay < remDay) {
+      return normalizeDailyQuestFromRemote(remoteDaily, remDay);
+    }
+    if (locDay > remDay) return localSt;
+    const canon = pickDailyQuestIds(locDay);
+    const ids =
+      Array.isArray(remoteDaily.ids) && remoteDaily.ids.length === 4 ? remoteDaily.ids.slice() : canon.slice();
+    return {
+      day: locDay,
+      ids,
+      prog: mergeQuestProgObjects(localSt.prog, remoteDaily.prog),
+      claimed: unionQuestClaimed(localSt.claimed, remoteDaily.claimed).filter((id) => ids.includes(id))
+    };
+  }
+
+  function normalizeWeeklyQuestFromRemote(r, weekFallback) {
+    const week = (r && r.week) || weekFallback || weekKey();
+    const canon = pickWeeklyQuestIds(week);
+    const ids = Array.isArray(r?.ids) && r.ids.length === 2 ? r.ids.slice() : canon.slice();
+    const pr = r?.prog && typeof r.prog === 'object' ? r.prog : {};
+    return {
+      week,
+      ids,
+      prog: {
+        totalRounds: Math.max(0, Math.floor(Number(pr.totalRounds) || 0)),
+        fuqEarned: Math.max(0, Math.floor(Number(pr.fuqEarned) || 0))
+      },
+      claimed: unionQuestClaimed([], r?.claimed).filter((id) => ids.includes(id))
+    };
+  }
+
+  function mergeWeeklyQuestRemote(localSt, remoteW) {
+    if (!remoteW || typeof remoteW !== 'object' || !remoteW.week) return localSt;
+    const locW = localSt.week;
+    const remW = remoteW.week;
+    if (!locW || locW < remW) {
+      return normalizeWeeklyQuestFromRemote(remoteW, remW);
+    }
+    if (locW > remW) return localSt;
+    const canon = pickWeeklyQuestIds(locW);
+    const ids =
+      Array.isArray(remoteW.ids) && remoteW.ids.length === 2 ? remoteW.ids.slice() : canon.slice();
+    const lp = localSt.prog || defaultWeeklyQuestProg();
+    const rp = remoteW.prog && typeof remoteW.prog === 'object' ? remoteW.prog : {};
+    return {
+      week: locW,
+      ids,
+      prog: {
+        totalRounds: Math.max(
+          Math.floor(Number(lp.totalRounds) || 0),
+          Math.floor(Number(rp.totalRounds) || 0)
+        ),
+        fuqEarned: Math.max(
+          Math.floor(Number(lp.fuqEarned) || 0),
+          Math.floor(Number(rp.fuqEarned) || 0)
+        )
+      },
+      claimed: unionQuestClaimed(localSt.claimed, remoteW.claimed).filter((id) => ids.includes(id))
+    };
+  }
+
+  function applyQuestCloudPayload(qs) {
+    if (!qs || typeof qs !== 'object') return;
+    let changed = false;
+    if (qs.daily && typeof qs.daily === 'object' && qs.daily.day) {
+      const next = mergeDailyQuestRemote(loadQuestState(), qs.daily);
+      saveQuestState(next, { skipCloudPush: true });
+      changed = true;
+    }
+    if (qs.weekly && typeof qs.weekly === 'object' && qs.weekly.week) {
+      const next = mergeWeeklyQuestRemote(loadWeeklyQuestState(), qs.weekly);
+      saveWeeklyQuestState(next, { skipCloudPush: true });
+      changed = true;
+    }
+    if (changed) renderQuestPanels();
   }
 
   function questProgressFor(id) {
@@ -1713,7 +1864,10 @@
     w.tokens += def.reward;
     saveWallet(w);
     renderWallet(w);
-    pushHistory('quest_weekly', `Weekly: ${def.title.slice(0, 36)}`, def.reward, w.tokens);
+    pushHistory('quest_weekly', `Weekly: ${def.title.slice(0, 36)}`, def.reward, w.tokens, {
+      quest_period_key: weekKey(),
+      quest_id: qid
+    });
     renderWeeklyQuests();
   }
 
@@ -1728,7 +1882,10 @@
     w.tokens += def.reward;
     saveWallet(w);
     renderWallet(w);
-    pushHistory('quest', `Quest: ${def.title.slice(0, 40)}`, def.reward, w.tokens);
+    pushHistory('quest', `Quest: ${def.title.slice(0, 40)}`, def.reward, w.tokens, {
+      quest_period_key: todayKey(),
+      quest_id: qid
+    });
     renderQuestPanels();
   }
 
@@ -2490,6 +2647,14 @@
         .then((result) => {
           if (!result || !result.ok || !result.wallet) {
             console.warn('[FuqMeA] settlement failed', result && result.error ? result.error : result);
+            const errTxt = result && result.error != null ? String(result.error) : '';
+            if (
+              (row.game === 'quest' || row.game === 'quest_weekly') &&
+              errTxt &&
+              /already_claimed|period_mismatch|quest_already|invalid_quest/i.test(errTxt)
+            ) {
+              void cloudClient.refreshQuestStateFromWallet?.();
+            }
             const msg = document.getElementById('games-cloud-msg');
             if (msg && result && result.status === 401) {
               msg.textContent = 'Session expired. Sign in again to save rounds.';
@@ -2718,6 +2883,7 @@
     window.addEventListener('fuqmea-wallet-hydrated', paintWalletFromStorage);
     window.addEventListener('fuqmea-cloud-init-complete', paintWalletFromStorage, { once: true });
     window.addEventListener('fuqmea-cloud-init-complete', () => syncGamesResetButtonVisibility(), { once: true });
+    window.addEventListener('fuqmea-cloud-init-complete', () => scheduleQuestCloudPush(), { once: true });
     // Auth state flips the rakeback panel between "Sign in to earn" and live pool readout.
     window.addEventListener('fuqmea-cloud-auth-state', () => {
       renderRakeback();
@@ -2736,6 +2902,10 @@
 
     window.addEventListener('fuqmea-arcade-streaks-cloud', (ev) => {
       applyArcadeStreaksFromCloud(ev && ev.detail);
+    });
+
+    window.addEventListener('fuqmea-quest-state-cloud', (ev) => {
+      applyQuestCloudPayload(ev && ev.detail);
     });
 
     const w = loadWallet();

@@ -667,7 +667,7 @@
     if (!uid) return null;
     const q = encodeURIComponent(uid);
     const selFull =
-      'tokens,coin_streak,last_daily,aura_peak_multiplier,rakeback_pool,arcade_streaks';
+      'tokens,coin_streak,last_daily,aura_peak_multiplier,rakeback_pool,arcade_streaks,quest_state';
     const selBase = 'tokens,coin_streak,last_daily';
     async function selectRow(sel) {
       return authFetch(`/rest/v1/wallets?select=${encodeURIComponent(sel)}&user_id=eq.${q}&limit=1`, {
@@ -804,6 +804,44 @@
     window.dispatchEvent(new CustomEvent('fuqmea-arcade-streaks-cloud', { detail: parsed }));
   }
 
+  /** Dispatched after wallet hydrate / refresh so games.js can merge quest progress + claimed flags. */
+  function emitQuestStateFromWalletRow(walletRow) {
+    if (!walletRow || typeof walletRow !== 'object') return;
+    const raw = walletRow.quest_state ?? walletRow.questState;
+    if (raw == null || raw === '') return;
+    let parsed = raw;
+    if (typeof raw === 'string') {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (_) {
+        return;
+      }
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return;
+    window.dispatchEvent(new CustomEvent('fuqmea-quest-state-cloud', { detail: parsed }));
+  }
+
+  async function refreshQuestStateFromWallet() {
+    const row = await ensureWallet();
+    if (row) emitQuestStateFromWalletRow(row);
+  }
+
+  async function mergeQuestState(patch) {
+    const sb = getSupabase();
+    if (!sb) return { ok: false, error: 'no_client' };
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      return { ok: false, error: 'invalid_patch' };
+    }
+    const { data, error } = await sb.rpc('merge_quest_state', { p_patch: patch });
+    if (error) {
+      return { ok: false, error: shortErrText(error) };
+    }
+    if (data && typeof data === 'object') {
+      window.dispatchEvent(new CustomEvent('fuqmea-quest-state-cloud', { detail: data }));
+    }
+    return { ok: true, quest_state: data };
+  }
+
   /** Cloud `tokens` are authoritative once we have a server row — server applies deltas; max(local,cloud) caused UI desync. */
   function reconcileLocalWithCloudRow(localSnap, cloudRow) {
     if (!cloudRow || typeof cloudRow !== 'object') {
@@ -850,6 +888,7 @@
           writeFunWalletLocal(reconcileLocalWithCloudRow(readFunWalletSnapshot(), row));
           emitAuraCloudPeak(row);
           emitArcadeStreaksFromWalletRow(row);
+          emitQuestStateFromWalletRow(row);
           return;
         }
 
@@ -877,6 +916,7 @@
       writeFunWalletLocal(reconcileLocalWithCloudRow(readFunWalletSnapshot(), cloudLike));
       emitAuraCloudPeak(cloudLike);
       emitArcadeStreaksFromWalletRow(cloudLike);
+      emitQuestStateFromWalletRow(cloudLike);
     } catch (_) {
       writeFunWalletLocal(readFunWalletSnapshot());
     }
@@ -957,6 +997,11 @@
     if (typeof cs === 'number' && Number.isFinite(cs)) body.coin_streak = Math.trunc(cs);
     const ld = evt.last_daily != null ? evt.last_daily : evt.lastDaily;
     if (typeof ld === 'string' && ld.trim()) body.last_daily = ld.trim().slice(0, 10);
+
+    const qpk = evt.quest_period_key != null ? String(evt.quest_period_key).trim().slice(0, 32) : '';
+    const qid = evt.quest_id != null ? String(evt.quest_id).trim().slice(0, 48) : '';
+    if (qpk) body.quest_period_key = qpk;
+    if (qid) body.quest_id = qid;
 
     const gKey = typeof evt.game === 'string' ? evt.game.trim().toLowerCase() : '';
     if (
@@ -1415,6 +1460,7 @@
     writeFunWalletLocal(merged);
     emitAuraCloudPeak(row);
     emitArcadeStreaksFromWalletRow(row);
+    emitQuestStateFromWalletRow(row);
     return {
       ok: true,
       paid: Math.max(0, Math.floor(Number(row.paid) || 0)),
@@ -1449,6 +1495,8 @@
     refreshLeaderboard: loadLeaderboard,
     claimRakeback,
     mergeArcadeStreaks,
+    mergeQuestState,
+    refreshQuestStateFromWallet,
     startOAuth
   };
 
