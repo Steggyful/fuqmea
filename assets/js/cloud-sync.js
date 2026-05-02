@@ -1128,7 +1128,17 @@
     if (!tbody) return;
     updateLeaderboardTableHeadLabels();
     syncLeaderboardScopeButtons();
-    tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+    const skeletonNameWidths = ['5rem', '4rem', '6rem', '3.5rem', '5.5rem', '4.5rem'];
+    tbody.innerHTML = skeletonNameWidths.map(() => `<tr class="lb-skeleton-row">
+      <td><span class="lb-skeleton-cell" style="width:0.8rem"></span></td>
+      <td><div class="lb-name-cell">
+        <span class="lb-pfp lb-pfp--empty"></span>
+        <span class="lb-skeleton-cell" style="width:${skeletonNameWidths[Math.floor(Math.random()*skeletonNameWidths.length)]}"></span>
+      </div></td>
+      <td><span class="lb-skeleton-cell" style="width:2.2rem"></span></td>
+      <td><span class="lb-skeleton-cell" style="width:1.4rem"></span></td>
+      <td><span class="lb-skeleton-cell" style="width:1.8rem"></span></td>
+    </tr>`).join('');
     try {
       const lim = Number(CONFIG.leaderboardLimit || 25);
       const rows = await fetchLeaderboardRows(lim);
@@ -1155,8 +1165,8 @@
           return `<tr>
             <td>${idx + 1}</td>
             <td><div class="lb-name-cell">${pfpHtml}<span>${name}</span></div></td>
-            <td>${score}</td>
-            <td>${rounds}</td>
+            <td>${score.toLocaleString()}</td>
+            <td>${rounds.toLocaleString()}</td>
             <td>${apCell}</td>
           </tr>`;
         })
