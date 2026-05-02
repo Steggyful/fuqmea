@@ -381,7 +381,8 @@
   const CRASH_CHART_Y_CURVE = 0.53;
   /** Long surges trim oldest samples only */
   const CRASH_CHART_MAX_POINTS = 380;
-  const CRASH_CHART_MULT_VIS_MAX = 22;
+  /** Matches server/game ceiling (~88 crash sample, ~89 clamp); avoids chart flatline above ~22× */
+  const CRASH_CHART_MULT_VIS_MAX = 89;
   const CRASH_CHART_X_LEFT = 2;
   const CRASH_CHART_X_RIGHT_CAP = 95;
   /** Curve ends at LEFT + span × ASYM × n/(n+H): approaches the right but never uses the full width */
@@ -1996,19 +1997,139 @@
 
   const crashRuntime = {
     active: false,
+    /** True from round start until crash or aborted for a new round (still ticks after BANK). */
+    roundLive: false,
     timerId: null,
     crashPoint: 2,
     mult: 1,
     bet: 0,
     crashed: false,
+    /** Multiplier at BANK AURA (for crash-after-bank copy only). */
+    bankMult: null,
     multHistory: [],
     wobblePhaseA: null,
     wobblePhaseB: null,
-    riderCelebrate: false
+    riderCelebrate: false,
+    /** Win-board rider after crash when player already banked this round. */
+    bustedAfterBank: false
   };
 
   function crashChartSetRunning(on) {
     document.querySelector('.games-crash-chart')?.classList.toggle('games-crash-chart--running', !!on);
+  }
+
+  function crashReadoutsSetAuraHeadline(on) {
+    document
+      .querySelector('.games-crash-readouts')
+      ?.classList.toggle('games-crash-readouts--aura-headline', !!on);
+  }
+
+  function crashReadoutsSetBankShown(on) {
+    document
+      .querySelector('.games-crash-readouts')
+      ?.classList.toggle('games-crash-readouts--bank-shown', !!on);
+  }
+
+  function crashClearCrashCheckDisplay() {
+    const el = document.getElementById('crash-crash-check');
+    if (el) {
+      el.textContent = '';
+      el.hidden = true;
+    }
+    crashReadoutsSetAuraHeadline(false);
+  }
+
+  function crashSetCrashCheckDisplay(bustAtFixed) {
+    const el = document.getElementById('crash-crash-check');
+    if (el) {
+      el.textContent = `Aura Check @ ${bustAtFixed}×`;
+      el.hidden = false;
+    }
+    crashReadoutsSetAuraHeadline(true);
+  }
+
+  function crashResetMultPresentation() {
+    const multEl = document.getElementById('crash-mult-display');
+    multEl?.classList.remove('games-crash-mult--spectate', 'games-crash-mult--concealed');
+  }
+
+  function crashBankSummaryHide() {
+    const wrap = document.getElementById('crash-bank-summary');
+    if (wrap) wrap.hidden = true;
+    const check = document.getElementById('crash-summary-check');
+    check?.classList.remove('games-crash-bank-summary-line--final');
+    crashReadoutsSetBankShown(false);
+  }
+
+  /** After BANK: show locked-out mult; crash line pending until Aura Check. */
+  function crashBankSummaryShowCashedOut(bankMult) {
+    const wrap = document.getElementById('crash-bank-summary');
+    const cashed = document.getElementById('crash-summary-cashed');
+    const check = document.getElementById('crash-summary-check');
+    if (!wrap || !cashed || !check) return;
+    wrap.hidden = false;
+    cashed.textContent = `Cashed out at ${bankMult.toFixed(2)}×`;
+    check.textContent = 'Aura Check: wave still running…';
+    check.classList.remove('games-crash-bank-summary-line--final');
+    crashReadoutsSetBankShown(true);
+  }
+
+  /** After crash (banked earlier): cashed mult + Aura Check only. */
+  function crashBankSummaryShowFinal(bankMult, bustAt) {
+    const wrap = document.getElementById('crash-bank-summary');
+    const cashed = document.getElementById('crash-summary-cashed');
+    const check = document.getElementById('crash-summary-check');
+    if (!wrap || !cashed || !check) return;
+    wrap.hidden = false;
+    cashed.textContent = `Cashed out at ${bankMult.toFixed(2)}×`;
+    check.textContent = `Aura Check @ ${bustAt.toFixed(2)}×`;
+    check.classList.add('games-crash-bank-summary-line--final');
+    crashReadoutsSetBankShown(true);
+  }
+
+  function crashUpdateSpectateUi() {
+    const hint = document.getElementById('crash-spectate-hint');
+    const summary = document.getElementById('crash-bank-summary');
+    const stage = document.querySelector('.games-crash-stage');
+    const multEl = document.getElementById('crash-mult-display');
+    const btn = document.getElementById('crash-main-btn');
+    const show =
+      crashRuntime.roundLive && !crashRuntime.active && !crashRuntime.crashed;
+    const summaryVisible = summary && !summary.hidden;
+    if (hint) hint.hidden = !show || !!summaryVisible;
+    stage?.classList.toggle('games-crash-stage--spectate', !!show);
+    multEl?.classList.toggle('games-crash-mult--spectate', !!show);
+    btn?.classList.toggle('games-crash-btn-main--spectate', !!show);
+  }
+
+  /** Stop an in-flight round (spectate or abandoned) when starting a new bet. */
+  function crashAbortInflightRound() {
+    if (crashRuntime.timerId) {
+      clearTimeout(crashRuntime.timerId);
+      crashRuntime.timerId = null;
+    }
+    crashRuntime.roundLive = false;
+    crashRuntime.active = false;
+    crashRuntime.crashed = false;
+    crashRuntime.bankMult = null;
+    crashRuntime.bustedAfterBank = false;
+    /* Keep chart “running” styling on — crashChartInitRound() sets it true next; toggling off/on caused a 1-frame flicker */
+    document.querySelector('.games-crash-chart')?.classList.remove(
+      'games-crash-chart--bust',
+      'games-crash-chart--bust-safe'
+    );
+    crashRuntime.multHistory = [];
+    crashClearCrashCheckDisplay();
+    crashBankSummaryHide();
+    crashResetMultPresentation();
+    crashUpdateSpectateUi();
+    const multEl = document.getElementById('crash-mult-display');
+    if (multEl) {
+      multEl.hidden = false;
+      multEl.classList.remove('games-crash-mult--concealed');
+      multEl.textContent = '1.00× aura';
+    }
+    crashChartRender();
   }
 
   function crashRiderHide() {
@@ -2056,9 +2177,12 @@
 
     let src = '';
     let on = false;
-    if (crashRuntime.active && !crashRuntime.crashed) {
+    if (crashRuntime.roundLive && !crashRuntime.crashed) {
       src =
         crashRuntime.mult >= CRASH_RIDER_HOT_MULT ? CRASH_RIDER_ART.farmHot : CRASH_RIDER_ART.farm;
+      on = true;
+    } else if (crashRuntime.crashed && crashRuntime.bustedAfterBank) {
+      src = CRASH_RIDER_ART.win;
       on = true;
     } else if (crashRuntime.crashed) {
       src = CRASH_RIDER_ART.lose;
@@ -2244,15 +2368,22 @@
     crashRuntime.wobblePhaseA = Math.random() * Math.PI * 2;
     crashRuntime.wobblePhaseB = Math.random() * Math.PI * 2;
     crashRuntime.riderCelebrate = false;
+    crashRuntime.bustedAfterBank = false;
+    crashClearCrashCheckDisplay();
+    crashBankSummaryHide();
+    crashResetMultPresentation();
     const wrap = document.querySelector('.games-crash-chart');
-    wrap?.classList.remove('games-crash-chart--bust');
+    wrap?.classList.remove('games-crash-chart--bust', 'games-crash-chart--bust-safe');
     crashChartSetRunning(true);
     crashChartRender();
   }
 
-  function crashChartSetBust() {
+  function crashChartSetBust(safeAfterBank) {
     crashChartSetRunning(false);
-    document.querySelector('.games-crash-chart')?.classList.add('games-crash-chart--bust');
+    const wrap = document.querySelector('.games-crash-chart');
+    if (!wrap) return;
+    wrap.classList.remove('games-crash-chart--bust', 'games-crash-chart--bust-safe');
+    wrap.classList.add(safeAfterBank ? 'games-crash-chart--bust-safe' : 'games-crash-chart--bust');
   }
 
   function sampleCrashPoint() {
@@ -2270,16 +2401,21 @@
   }
 
   function crashTick() {
-    if (!crashRuntime.active || crashRuntime.crashed) return;
+    if (!crashRuntime.roundLive || crashRuntime.crashed) return;
     crashRuntime.mult += 0.012 + crashRuntime.mult * 0.0048 + Math.random() * 0.01;
     crashRuntime.mult = Math.round(crashRuntime.mult * 100) / 100;
     const el = document.getElementById('crash-mult-display');
-    if (el) el.textContent = crashFmtAura(crashRuntime.mult);
+    if (el) {
+      el.hidden = false;
+      el.classList.remove('games-crash-mult--concealed');
+      el.textContent = crashFmtAura(crashRuntime.mult);
+    }
     crashRuntime.multHistory.push(crashRuntime.mult);
     while (crashRuntime.multHistory.length > CRASH_CHART_MAX_POINTS) {
       crashRuntime.multHistory.shift();
     }
     crashChartRender();
+    crashUpdateSpectateUi();
     if (crashRuntime.mult >= crashRuntime.crashPoint) {
       crashBust();
       return;
@@ -2309,37 +2445,76 @@
   }
 
   function crashBust() {
+    const alreadyBanked = !crashRuntime.active;
     crashRuntime.active = false;
+    crashRuntime.roundLive = false;
     crashRuntime.crashed = true;
     if (crashRuntime.timerId) {
       clearTimeout(crashRuntime.timerId);
       crashRuntime.timerId = null;
     }
     crashUpdatePrimaryBtn(false);
-    applyArcadeWinStreak('crash', 'lose');
-    const wBust = loadWallet();
     const bustAt = crashRuntime.crashPoint.toFixed(2);
     const stacked = crashRuntime.mult.toFixed(2);
-    pushHistory(
-      'crash',
-      `Aura Check @ ${bustAt}× — stacked ${stacked}×`,
-      -crashRuntime.bet,
-      wBust.tokens,
-      { crash_peak_mult: crashPeakForCloud(crashRuntime.mult) }
-    );
-    setGameOutcome(
-      'crash',
-      'lose',
-      `Aura Check hit at ${bustAt}× - you had ${stacked}× aura stacked`
-    );
-    addRakebackFromLoss(-crashRuntime.bet);
-    arcadeNoteRound('crash', crashRuntime.bet);
-    crashChartSetBust();
+
+    if (!alreadyBanked) {
+      crashBankSummaryHide();
+      applyArcadeWinStreak('crash', 'lose');
+      const wBust = loadWallet();
+      pushHistory(
+        'crash',
+        `Aura Check @ ${bustAt}× — stacked ${stacked}×`,
+        -crashRuntime.bet,
+        wBust.tokens,
+        { crash_peak_mult: crashPeakForCloud(crashRuntime.mult) }
+      );
+      setGameOutcome(
+        'crash',
+        'lose',
+        `Aura Check hit at ${bustAt}× - you had ${stacked}× aura stacked`
+      );
+      addRakebackFromLoss(-crashRuntime.bet);
+      arcadeNoteRound('crash', crashRuntime.bet);
+    } else {
+      const bankedStr =
+        crashRuntime.bankMult != null ? crashRuntime.bankMult.toFixed(2) : '—';
+      const bk = crashRuntime.bankMult != null ? crashRuntime.bankMult : 1;
+      crashBankSummaryShowFinal(bk, crashRuntime.crashPoint);
+      setGameOutcome(
+        'crash',
+        'win',
+        `Cashed out at ${bankedStr}× · Aura Check @ ${bustAt}×`
+      );
+    }
+
+    crashRuntime.bankMult = null;
+    if (alreadyBanked) {
+      crashRuntime.bustedAfterBank = true;
+      crashRuntime.riderCelebrate = true;
+    } else {
+      crashRuntime.bustedAfterBank = false;
+      crashRuntime.riderCelebrate = false;
+    }
+    crashChartSetBust(!!alreadyBanked);
+    if (alreadyBanked) {
+      crashClearCrashCheckDisplay();
+    } else {
+      crashSetCrashCheckDisplay(bustAt);
+    }
     const el = document.getElementById('crash-mult-display');
-    if (el) el.textContent = 'RIP AURA';
-    crashRuntime.riderCelebrate = false;
+    if (el) {
+      el.hidden = false;
+      crashResetMultPresentation();
+      if (alreadyBanked) {
+        el.textContent = '\u00a0';
+        el.classList.add('games-crash-mult--concealed');
+      } else {
+        el.textContent = 'RIP AURA';
+      }
+    }
+    crashUpdateSpectateUi();
     crashChartRender();
-    wireBetRadiosState('crash-bet', !crashRuntime.active);
+    wireBetRadiosState('crash-bet', true);
   }
 
   function crashCashOut() {
@@ -2347,13 +2522,12 @@
     const bet = crashRuntime.bet;
     const mult = crashRuntime.mult;
     crashRuntime.active = false;
-    if (crashRuntime.timerId) {
-      clearTimeout(crashRuntime.timerId);
-      crashRuntime.timerId = null;
-    }
+    crashRuntime.bankMult = mult;
     crashUpdatePrimaryBtn(false);
-    crashChartSetRunning(false);
+    crashChartSetRunning(true);
     wireBetRadiosState('crash-bet', true);
+    crashBankSummaryShowCashedOut(mult);
+    crashUpdateSpectateUi();
     const payout = crashCashPayoutTokens(bet, mult);
     const w = loadWallet();
     w.tokens += payout;
@@ -2396,8 +2570,6 @@
           ? `Farmed ${mult.toFixed(2)}× aura. ${net} FUQ (paid ${payout})`
           : `Farmed ${mult.toFixed(2)}× aura. break-even (${payout} FUQ)`
     );
-    const el = document.getElementById('crash-mult-display');
-    if (el) el.textContent = crashFmtAura(mult);
     crashRuntime.riderCelebrate = net >= 0;
     crashChartRender();
   }
@@ -2410,7 +2582,11 @@
 
   function crashStartRound() {
     if (crashRuntime.active) return;
+    if (crashRuntime.roundLive && !crashRuntime.crashed) {
+      crashAbortInflightRound();
+    }
     crashRuntime.riderCelebrate = false;
+    crashRuntime.bustedAfterBank = false;
     const bet = getBetAmount('crash-bet');
     const w = loadWallet();
     if (w.tokens < bet) {
@@ -2425,12 +2601,18 @@
     crashRuntime.crashPoint = sampleCrashPoint();
     crashRuntime.mult = 1;
     crashRuntime.crashed = false;
+    crashRuntime.bankMult = null;
+    crashRuntime.roundLive = true;
     crashRuntime.active = true;
     crashUpdatePrimaryBtn(true);
     wireBetRadiosState('crash-bet', false);
     setGameOutcome('crash', 'pending', 'Aura climbing… farm carefully.');
     const el = document.getElementById('crash-mult-display');
-    if (el) el.textContent = crashFmtAura(1);
+    if (el) {
+      el.hidden = false;
+      el.classList.remove('games-crash-mult--concealed');
+      el.textContent = crashFmtAura(1);
+    }
     crashChartInitRound();
     crashRuntime.timerId = window.setTimeout(crashTick, CRASH_TICK_MS);
   }

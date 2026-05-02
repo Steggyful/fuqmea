@@ -1,3 +1,6 @@
+# Local scratch (e.g. frame dumps from screen recordings)
+.tmp-frames/
+
 # OS / editor noise
 desktop.ini
 Thumbs.db

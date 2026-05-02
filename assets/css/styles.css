@@ -1513,10 +1513,6 @@ h1 {
     color: var(--yellow);
   }
 
-  body.games-page .games-card:active {
-    transform: translateY(1px) scale(0.998);
-  }
-
   .games-choice-row label:active,
   .games-bet-row label:active {
     border-color: var(--yellow);
@@ -3418,22 +3414,7 @@ button.js-games-daily[disabled] {
     inset 0 0 40px rgba(0, 0, 0, 0.35);
   position: relative;
   overflow: hidden;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-@media (hover: hover) {
-  body.games-page .games-card:hover {
-    transform: translateY(-2px);
-    box-shadow:
-      0 0 38px var(--games-card-glow),
-      inset 0 0 40px rgba(0, 0, 0, 0.3);
-  }
-}
-
-@media (hover: hover) and (prefers-reduced-motion: reduce) {
-  body.games-page .games-card:hover {
-    transform: none;
-  }
+  transition: box-shadow 0.2s ease;
 }
 
 .games-card::before {
@@ -3531,6 +3512,20 @@ button.js-games-daily[disabled] {
   overflow: visible;
   max-width: min(1020px, 100%);
   width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  /* One footprint for every Aura Farm state — inner copy swaps without resizing the card */
+  min-height: clamp(40rem, 75vh, 56rem);
+}
+
+.games-card--crash .games-crash-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.games-card--crash .games-result-dock {
+  margin-top: auto;
 }
 
 .games-card--crash .games-action-btn {
@@ -3578,6 +3573,23 @@ button.js-games-daily[disabled] {
     inset 0 0 26px rgba(255, 40, 40, 0.18),
     0 0 18px rgba(255, 50, 50, 0.2);
   animation: games-crash-bust-flash 0.45s ease-out 1;
+}
+
+.games-crash-chart--bust-safe {
+  border-color: rgba(100, 220, 150, 0.58);
+  box-shadow:
+    inset 0 0 22px rgba(60, 200, 120, 0.12),
+    0 0 20px rgba(70, 210, 130, 0.22);
+  animation: games-crash-bust-safe-glow 0.5s ease-out 1;
+}
+
+@keyframes games-crash-bust-safe-glow {
+  0% {
+    filter: brightness(1.15);
+  }
+  100% {
+    filter: brightness(1);
+  }
 }
 
 @keyframes games-crash-bust-flash {
@@ -3680,6 +3692,10 @@ button.js-games-daily[disabled] {
   .games-crash-chart--bust {
     animation: none;
   }
+
+  .games-crash-chart--bust-safe {
+    animation: none;
+  }
 }
 
 .games-crash-stage {
@@ -3689,6 +3705,44 @@ button.js-games-daily[disabled] {
   border: 2px solid rgba(255, 130, 85, 0.42);
   background: radial-gradient(ellipse 130% 90% at 50% 0%, rgba(255, 95, 45, 0.16), rgba(0, 0, 0, 0.52));
   text-align: center;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    background 0.25s ease;
+}
+
+.games-crash-stage--spectate {
+  border-color: rgba(80, 220, 140, 0.55);
+  box-shadow:
+    0 0 22px rgba(60, 200, 120, 0.18),
+    inset 0 0 0 1px rgba(100, 240, 160, 0.12);
+  background: radial-gradient(ellipse 130% 90% at 50% 0%, rgba(40, 140, 90, 0.18), rgba(0, 0, 0, 0.52));
+}
+
+.games-crash-readouts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+/* Slots reserve height only while panels are active (see games.js toggles) — avoids idle gaps */
+.games-crash-check-slot,
+.games-crash-bank-slot {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Always reserve worst-case height — BANK / Aura Check toggles no longer collapse these slots */
+.games-crash-check-slot {
+  min-height: clamp(2.65rem, 6.8vw, 3.35rem);
+}
+
+.games-crash-bank-slot {
+  min-height: clamp(5rem, 13.5vw, 6.85rem);
 }
 
 .games-crash-mult {
@@ -3699,7 +3753,92 @@ button.js-games-daily[disabled] {
   text-shadow: 0 0 26px rgba(255, 120, 60, 0.55);
   line-height: 1.05;
   letter-spacing: 0.03em;
-  margin: 0.15rem 0 0.65rem;
+  margin: 0.05rem 0 0.5rem;
+  min-height: clamp(3rem, 11vw, 4.25rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  transition:
+    color 0.2s ease,
+    text-shadow 0.2s ease;
+}
+
+.games-crash-mult--concealed {
+  visibility: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.games-crash-mult--spectate {
+  color: #9effc8;
+  text-shadow:
+    0 0 20px rgba(100, 240, 160, 0.45),
+    0 0 36px rgba(60, 200, 120, 0.25);
+}
+
+.games-crash-bank-summary {
+  max-width: 22rem;
+  margin: 0 auto;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  text-align: center;
+  background: rgba(20, 55, 38, 0.42);
+  border: 1px solid rgba(100, 210, 150, 0.38);
+  box-shadow: inset 0 1px 0 rgba(160, 255, 200, 0.06);
+}
+
+.games-crash-bank-summary-line {
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #d2ffe6;
+  line-height: 1.45;
+}
+
+.games-crash-bank-summary-line--crash {
+  opacity: 0.88;
+  font-weight: 500;
+}
+
+.games-crash-bank-summary-line--crash.games-crash-bank-summary-line--final {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #fffaf4;
+  text-shadow: 0 0 14px rgba(120, 255, 180, 0.35);
+  opacity: 1;
+}
+
+.games-crash-spectate-hint {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b4ffd0;
+  text-shadow: 0 0 16px rgba(100, 240, 170, 0.55);
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(30, 90, 55, 0.35);
+  border: 1px solid rgba(100, 220, 150, 0.35);
+}
+
+.games-crash-check {
+  font-size: clamp(1.35rem, 6vw, 2rem);
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  color: #fff2e6;
+  text-shadow:
+    0 0 22px rgba(255, 90, 40, 0.75),
+    0 0 38px rgba(255, 60, 20, 0.35);
+  letter-spacing: 0.04em;
+  margin: 0;
+  line-height: 1.15;
+  min-height: 0;
+}
+
+.games-crash-check[hidden] {
+  display: none !important;
 }
 
 .games-crash-hint {
@@ -3725,6 +3864,13 @@ button.js-games-daily[disabled] {
   border-color: #39ff14 !important;
   color: #c8ffc4 !important;
   box-shadow: 0 0 24px rgba(57, 255, 20, 0.38) !important;
+}
+
+.games-crash-btn-main.games-crash-btn-main--spectate {
+  opacity: 0.92;
+  border-color: rgba(120, 210, 160, 0.55) !important;
+  color: #b8efd0 !important;
+  box-shadow: 0 0 16px rgba(80, 200, 130, 0.22) !important;
 }
 
 @media (hover: hover) {
@@ -4191,6 +4337,10 @@ button.js-games-daily[disabled] {
 
 .games-card--crash .games-result-dock .games-outcome-badge {
   letter-spacing: 0.04em;
+}
+
+.games-card--crash #crash-outcome-sub {
+  min-height: 3.15em;
 }
 
 .games-result-dock .games-outcome--pending .games-outcome-badge {

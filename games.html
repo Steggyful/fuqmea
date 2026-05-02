@@ -352,7 +352,24 @@
                   hidden=""
                 >
               </div>
-              <div id="crash-mult-display" class="games-crash-mult">1.00× aura</div>
+              <div class="games-crash-readouts">
+                <div class="games-crash-check-slot">
+                  <div id="crash-crash-check" class="games-crash-check" hidden aria-live="polite"></div>
+                </div>
+                <div class="games-crash-bank-slot">
+                  <div id="crash-bank-summary" class="games-crash-bank-summary" hidden aria-live="polite">
+                    <div class="games-crash-bank-summary-line" id="crash-summary-cashed"></div>
+                    <div
+                      class="games-crash-bank-summary-line games-crash-bank-summary-line--crash"
+                      id="crash-summary-check"
+                    ></div>
+                  </div>
+                </div>
+                <div id="crash-mult-display" class="games-crash-mult">1.00× aura</div>
+                <p id="crash-spectate-hint" class="games-crash-spectate-hint" hidden>
+                  Out of the bet — FUQs locked. Wave still running.
+                </p>
+              </div>
               <p class="games-crash-hint">
                 <strong>FARM AURA</strong> = impress the huzz • <strong>BANK AURA</strong> = lock in your FUQs before the huzz gets bored
               </p>
