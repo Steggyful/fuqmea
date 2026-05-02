@@ -1489,7 +1489,6 @@
           applyGuestChrome('');
         }
         await loadLeaderboard().catch(() => {});
-        await loadCrashPeakMarkers().catch(() => {});
         return;
       }
 
@@ -1499,7 +1498,6 @@
       } else {
         authLog('skipping post-bootstrap refresh (callback or in-flight)');
       }
-      await loadCrashPeakMarkers().catch(() => {});
     } finally {
       signalInitDone();
     }
@@ -1582,7 +1580,6 @@
       if (lastLoadedProfileRow) lastLoadedProfileRow.avatar_url = safe;
       syncAvatarPreview(safe);
       window.dispatchEvent(new CustomEvent('fuqmea-avatar-changed', { detail: { avatar_url: safe } }));
-      await loadCrashPeakMarkers().catch(() => {});
       return { ok: true };
     } catch (err) {
       const msg = String(err?.message || err || '');
@@ -1604,7 +1601,6 @@
       if (lastLoadedProfileRow) lastLoadedProfileRow.avatar_url = null;
       syncAvatarPreview(null);
       window.dispatchEvent(new CustomEvent('fuqmea-avatar-changed', { detail: { avatar_url: null } }));
-      await loadCrashPeakMarkers().catch(() => {});
       return { ok: true };
     } catch (err) {
       return { ok: false, error: 'save_failed' };
@@ -1669,26 +1665,6 @@
       });
     } catch (_) {
       grid.innerHTML = '<span class="games-history-hint">Could not load gallery.</span>';
-    }
-  }
-
-  async function loadCrashPeakMarkers() {
-    if (!isEnabledBasics()) return;
-    const sb = getSupabase();
-    if (!sb) return;
-    try {
-      const { data } = await sb
-        .from('leaderboard_aggregate')
-        .select('leaderboard_name,aura_peak_multiplier,avatar_url')
-        .not('avatar_url', 'is', null)
-        .gt('aura_peak_multiplier', 1)
-        .order('aura_peak_multiplier', { ascending: false })
-        .limit(12);
-      if (Array.isArray(data)) {
-        window.dispatchEvent(new CustomEvent('fuqmea-crash-peak-markers', { detail: data }));
-      }
-    } catch (_) {
-      /**/
     }
   }
 

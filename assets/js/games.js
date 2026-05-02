@@ -415,73 +415,6 @@
     lose: encodeURI('assets/images/aura farm/Aura Lost Board.png')
   };
 
-  /** Profile gallery PFP for the rider badge; kept in sync with #games-pfp-img / fuqmea-avatar-changed. */
-  let crashRiderAvatarUrl = '';
-
-  let crashPeakMarkers = [];
-  let crashPeakMarkerEls = [];
-
-  function safeMarkerSrc(raw) {
-    if (typeof raw !== 'string' || !raw) return '';
-    if (!raw.startsWith('assets/images/') || raw.includes('..') || raw.includes('//')) return '';
-    return raw;
-  }
-
-  function crashChartInitPeakMarkers() {
-    const chart = document.querySelector('.games-crash-chart');
-    if (!chart) return;
-    let container = chart.querySelector('.crash-peak-markers');
-    if (!container) {
-      container = document.createElement('div');
-      container.className = 'crash-peak-markers';
-      chart.appendChild(container);
-    }
-    container.innerHTML = '';
-    crashPeakMarkerEls = [];
-    crashPeakMarkers.forEach(m => {
-      const src = safeMarkerSrc(m.avatar_url);
-      if (!src) return;
-      const peak = Number(m.aura_peak_multiplier);
-      if (!Number.isFinite(peak) || peak <= 1) return;
-      const el = document.createElement('div');
-      el.className = 'crash-peak-marker';
-      el.style.top = '-999%';
-      el.dataset.peak = String(peak);
-      const name = String(m.leaderboard_name || 'player')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      el.title = `${name}: ${peak.toFixed(2)}×`;
-      const img = document.createElement('img');
-      img.src = src;
-      img.alt = '';
-      img.loading = 'lazy';
-      el.appendChild(img);
-      container.appendChild(el);
-      crashPeakMarkerEls.push({ el, peak });
-    });
-    crashChartUpdatePeakMarkers(CRASH_CHART_MULT_VIS_MAX);
-  }
-
-  function crashChartUpdatePeakMarkers(multCap) {
-    if (!crashPeakMarkers.length) return;
-    if (!crashPeakMarkerEls.length) {
-      crashChartInitPeakMarkers();
-      if (!crashPeakMarkerEls.length) return;
-    }
-    const viewH = 56;
-    crashPeakMarkerEls.forEach(({ el, peak }) => {
-      const y = crashChartYFromMult(peak, multCap);
-      const yPct = (y / viewH) * 100;
-      el.style.top = (yPct < 3 || yPct > 97) ? '-999%' : `${yPct}%`;
-    });
-  }
-
-  window.addEventListener('fuqmea-crash-peak-markers', ev => {
-    if (Array.isArray(ev.detail)) {
-      crashPeakMarkers = ev.detail;
-      crashChartInitPeakMarkers();
-    }
-  });
-
   const BJ_RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
   const BJ_SUITS = ['\u2660', '\u2665', '\u2666', '\u2663'];
   const BJ_DEALER_DRAW_DELAY_MS = 1050;
@@ -2199,21 +2132,11 @@
     crashChartRender();
   }
 
-  function syncCrashRiderPfpFromPreview() {
-    const preview = document.getElementById('games-pfp-img');
-    const raw = preview && !preview.hidden && preview.getAttribute('src') ? preview.getAttribute('src') : '';
-    crashRiderAvatarUrl = safeMarkerSrc(raw);
-  }
-
   function crashRiderHide() {
-    const stack = document.getElementById('crash-rider-stack');
     const rider = document.getElementById('crash-rider');
-    const pfp = document.getElementById('crash-rider-pfp');
-    if (stack) stack.hidden = true;
-    if (rider) rider.removeAttribute('src');
-    if (pfp) {
-      pfp.hidden = true;
-      pfp.removeAttribute('src');
+    if (rider) {
+      rider.hidden = true;
+      rider.removeAttribute('src');
     }
   }
 
@@ -2222,10 +2145,8 @@
    */
   function crashRiderSync(pts, lastXY) {
     const chart = document.querySelector('.games-crash-chart');
-    const stack = document.getElementById('crash-rider-stack');
     const rider = document.getElementById('crash-rider');
-    const pfp = document.getElementById('crash-rider-pfp');
-    if (!chart || !stack || !rider || !pts.length) {
+    if (!chart || !rider || !pts.length) {
       crashRiderHide();
       return false;
     }
@@ -2276,18 +2197,9 @@
       return false;
     }
 
-    stack.hidden = false;
+    rider.hidden = false;
     rider.src = src;
     rider.alt = '';
-    if (pfp) {
-      if (crashRiderAvatarUrl) {
-        pfp.src = crashRiderAvatarUrl;
-        pfp.hidden = false;
-      } else {
-        pfp.hidden = true;
-        pfp.removeAttribute('src');
-      }
-    }
     return true;
   }
 
@@ -2449,7 +2361,6 @@
     head.setAttribute('opacity', riderOn ? '0' : '1');
 
     crashChartRebuildDynamicGrids(multCap);
-    crashChartUpdatePeakMarkers(multCap);
   }
 
   function crashChartInitRound() {
@@ -2697,7 +2608,6 @@
     crashRuntime.bankMult = null;
     crashRuntime.roundLive = true;
     crashRuntime.active = true;
-    syncCrashRiderPfpFromPreview();
     crashUpdatePrimaryBtn(true);
     wireBetRadiosState('crash-bet', false);
     setGameOutcome('crash', 'pending', 'Aura climbing… farm carefully.');
@@ -2718,32 +2628,6 @@
     });
     wireBetRadios('crash-bet', 'crash');
     crashUpdatePrimaryBtn(false);
-
-    syncCrashRiderPfpFromPreview();
-    window.addEventListener('fuqmea-avatar-changed', (ev) => {
-      const raw = ev.detail && Object.prototype.hasOwnProperty.call(ev.detail, 'avatar_url')
-        ? ev.detail.avatar_url
-        : undefined;
-      const u =
-        raw == null || raw === ''
-          ? ''
-          : safeMarkerSrc(String(raw));
-      crashRiderAvatarUrl = u;
-      const stack = document.getElementById('crash-rider-stack');
-      const pfp = document.getElementById('crash-rider-pfp');
-      if (stack && !stack.hidden && pfp) {
-        if (u) {
-          pfp.src = u;
-          pfp.hidden = false;
-        } else {
-          pfp.hidden = true;
-          pfp.removeAttribute('src');
-        }
-      }
-    });
-    window.addEventListener('fuqmea-cloud-init-complete', () => {
-      syncCrashRiderPfpFromPreview();
-    });
   }
 
   function loadWallet() {
@@ -2976,11 +2860,6 @@
     const coinBestEl = document.getElementById('games-coin-streak-best');
     if (coinBestEl) {
       coinBestEl.textContent = String(Math.max(s.coin.best || 0, w.coinStreak || 0));
-    }
-    const peakMultEl = document.getElementById('crash-peak-bank-mult');
-    if (peakMultEl) {
-      const pm = Number(s.crash?.peakBankMult) || 0;
-      peakMultEl.textContent = pm > 0 ? `${pm.toFixed(2)}×` : '—';
     }
     const curCrash = document.getElementById('crash-win-streak-current');
     if (curCrash && s.crash) curCrash.textContent = String(s.crash.current);
