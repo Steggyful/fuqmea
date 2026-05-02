@@ -415,6 +415,70 @@
     lose: encodeURI('assets/images/aura farm/Aura Lost Board.png')
   };
 
+  let crashPeakMarkers = [];
+  let crashPeakMarkerEls = [];
+
+  function safeMarkerSrc(raw) {
+    if (typeof raw !== 'string' || !raw) return '';
+    if (!raw.startsWith('assets/images/') || raw.includes('..') || raw.includes('//')) return '';
+    return raw;
+  }
+
+  function crashChartInitPeakMarkers() {
+    const chart = document.querySelector('.games-crash-chart');
+    if (!chart) return;
+    let container = chart.querySelector('.crash-peak-markers');
+    if (!container) {
+      container = document.createElement('div');
+      container.className = 'crash-peak-markers';
+      chart.appendChild(container);
+    }
+    container.innerHTML = '';
+    crashPeakMarkerEls = [];
+    crashPeakMarkers.forEach(m => {
+      const src = safeMarkerSrc(m.avatar_url);
+      if (!src) return;
+      const peak = Number(m.aura_peak_multiplier);
+      if (!Number.isFinite(peak) || peak <= 1) return;
+      const el = document.createElement('div');
+      el.className = 'crash-peak-marker';
+      el.style.top = '-999%';
+      el.dataset.peak = String(peak);
+      const name = String(m.leaderboard_name || 'player')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      el.title = `${name}: ${peak.toFixed(2)}×`;
+      const img = document.createElement('img');
+      img.src = src;
+      img.alt = '';
+      img.loading = 'lazy';
+      el.appendChild(img);
+      container.appendChild(el);
+      crashPeakMarkerEls.push({ el, peak });
+    });
+    crashChartUpdatePeakMarkers(CRASH_CHART_MULT_VIS_MAX);
+  }
+
+  function crashChartUpdatePeakMarkers(multCap) {
+    if (!crashPeakMarkers.length) return;
+    if (!crashPeakMarkerEls.length) {
+      crashChartInitPeakMarkers();
+      if (!crashPeakMarkerEls.length) return;
+    }
+    const viewH = 56;
+    crashPeakMarkerEls.forEach(({ el, peak }) => {
+      const y = crashChartYFromMult(peak, multCap);
+      const yPct = (y / viewH) * 100;
+      el.style.top = (yPct < 3 || yPct > 97) ? '-999%' : `${yPct}%`;
+    });
+  }
+
+  window.addEventListener('fuqmea-crash-peak-markers', ev => {
+    if (Array.isArray(ev.detail)) {
+      crashPeakMarkers = ev.detail;
+      crashChartInitPeakMarkers();
+    }
+  });
+
   const BJ_RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'T', 'J', 'Q', 'K', 'A'];
   const BJ_SUITS = ['\u2660', '\u2665', '\u2666', '\u2663'];
   const BJ_DEALER_DRAW_DELAY_MS = 1050;
@@ -2361,6 +2425,7 @@
     head.setAttribute('opacity', riderOn ? '0' : '1');
 
     crashChartRebuildDynamicGrids(multCap);
+    crashChartUpdatePeakMarkers(multCap);
   }
 
   function crashChartInitRound() {

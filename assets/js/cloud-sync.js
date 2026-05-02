@@ -2,10 +2,16 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.24.2';
+  const BUILD = '1.25.0';
 
   /** Latest profile row from server — used to restore the display-name field on Cancel and keep preview in sync. */
   let lastLoadedProfileRow = null;
+
+  function safeAvatarSrc(raw) {
+    if (typeof raw !== 'string' || !raw) return '';
+    if (!raw.startsWith('assets/images/') || raw.includes('..') || raw.includes('//')) return '';
+    return raw;
+  }
 
   /** Same key as games.js — must stay in sync for offline→cloud one-time merge. */
   const FUN_WALLET_KEY = 'fuqmea_fun_wallet_v1';
@@ -404,6 +410,11 @@
       if (ed) ed.hidden = true;
       const toggleBtn = byId('games-display-name-toggle');
       if (toggleBtn) toggleBtn.textContent = 'Change';
+      const pfpEd = byId('games-pfp-editor');
+      if (pfpEd) pfpEd.hidden = true;
+      const pfpToggle = byId('games-pfp-toggle');
+      if (pfpToggle) pfpToggle.textContent = 'Choose';
+      syncAvatarPreview(null);
     }
   }
 
@@ -456,8 +467,8 @@
     const metric = leaderboardScope === 'weekly' ? 'weekly_net_delta.desc' : 'current_balance.desc';
     const withAura =
       leaderboardScope === 'weekly'
-        ? 'leaderboard_name,weekly_net_delta,weekly_rounds,aura_peak'
-        : 'leaderboard_name,current_balance,total_rounds,net_delta,aura_peak';
+        ? 'leaderboard_name,weekly_net_delta,weekly_rounds,aura_peak,avatar_url'
+        : 'leaderboard_name,current_balance,total_rounds,net_delta,aura_peak,avatar_url';
     const legacy =
       leaderboardScope === 'weekly'
         ? 'leaderboard_name,weekly_net_delta,weekly_rounds'
@@ -553,6 +564,24 @@
     if (wk) wk.classList.toggle('games-quest-toggle--active', leaderboardScope === 'weekly');
   }
 
+  function syncAvatarPreview(url) {
+    const img = byId('games-pfp-img');
+    const placeholder = byId('games-pfp-placeholder');
+    const clearBtn = byId('games-pfp-clear');
+    const safe = safeAvatarSrc(url);
+    if (img) {
+      if (safe) {
+        img.src = safe;
+        img.hidden = false;
+      } else {
+        img.src = '';
+        img.hidden = true;
+      }
+    }
+    if (placeholder) placeholder.hidden = !!safe;
+    if (clearBtn) clearBtn.hidden = !safe;
+  }
+
   function syncProfileForm(profile) {
     const inp = byId('games-display-name');
     const preview = byId('games-leaderboard-name-preview');
@@ -571,6 +600,7 @@
     }
     inp.value = dnRaw.length >= 2 ? dnRaw : '';
     collapseProfileEditor();
+    syncAvatarPreview(profile?.avatar_url || null);
     setProfileBlockVisible(true);
   }
 
@@ -633,7 +663,7 @@
     const uid = u?.id;
     if (!uid) return null;
     const existing = await authFetch(
-      `/rest/v1/profiles?id=eq.${encodeURIComponent(uid)}&select=id,handle,display_name&limit=1`,
+      `/rest/v1/profiles?id=eq.${encodeURIComponent(uid)}&select=id,handle,display_name,avatar_url&limit=1`,
       {
         method: 'GET'
       }
@@ -1114,10 +1144,15 @@
             leaderboardScope === 'weekly' ? Number(row.weekly_rounds || 0) : Number(row.total_rounds || 0);
           const apRaw = Number(row.aura_peak ?? row.aura_peak_multiplier ?? 0);
           const apCell = Number.isFinite(apRaw) && apRaw > 0 ? `${apRaw.toFixed(2)}×` : '—';
-          const name = String(row.leaderboard_name || row.handle || 'player');
+          const name = String(row.leaderboard_name || row.handle || 'player')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const avatarSrc = safeAvatarSrc(row.avatar_url);
+          const pfpHtml = avatarSrc
+            ? `<img class="lb-pfp" src="${avatarSrc}" alt="" loading="lazy">`
+            : `<span class="lb-pfp lb-pfp--empty" aria-hidden="true"></span>`;
           return `<tr>
             <td>${idx + 1}</td>
-            <td>${name}</td>
+            <td><div class="lb-name-cell">${pfpHtml}<span>${name}</span></div></td>
             <td>${score}</td>
             <td>${rounds}</td>
             <td>${apCell}</td>
@@ -1185,6 +1220,31 @@
     });
     byId('games-display-name-save')?.addEventListener('click', () => {
       saveDisplayName();
+    });
+
+    byId('games-pfp-toggle')?.addEventListener('click', async () => {
+      const ed = byId('games-pfp-editor');
+      const tb = byId('games-pfp-toggle');
+      if (!ed) return;
+      if (!ed.hidden) {
+        ed.hidden = true;
+        if (tb) tb.textContent = 'Choose';
+        return;
+      }
+      ed.hidden = false;
+      if (tb) tb.textContent = 'Close';
+      await openAvatarPicker();
+    });
+
+    byId('games-pfp-clear')?.addEventListener('click', async () => {
+      const hint = byId('games-pfp-hint');
+      const res = await clearAvatar();
+      if (res.ok) {
+        if (hint) hint.textContent = 'Picture removed.';
+        await loadLeaderboard().catch(() => {});
+      } else {
+        if (hint) hint.textContent = 'Could not remove — try again.';
+      }
     });
     byId('games-display-name-toggle')?.addEventListener('click', () => {
       const ed = byId('games-display-name-editor');
@@ -1429,6 +1489,7 @@
           applyGuestChrome('');
         }
         await loadLeaderboard().catch(() => {});
+        await loadCrashPeakMarkers().catch(() => {});
         return;
       }
 
@@ -1438,6 +1499,7 @@
       } else {
         authLog('skipping post-bootstrap refresh (callback or in-flight)');
       }
+      await loadCrashPeakMarkers().catch(() => {});
     } finally {
       signalInitDone();
     }
@@ -1490,6 +1552,146 @@
     return { ok: true, arcade_streaks: merged };
   }
 
+  async function loadClaimedAvatars() {
+    if (!isEnabledBasics()) return new Set();
+    try {
+      const res = await fetch(
+        `${CONFIG.supabaseUrl}/rest/v1/profiles?select=avatar_url&avatar_url=not.is.null`,
+        { headers: { apikey: CONFIG.supabaseAnonKey } }
+      );
+      if (!res.ok) return new Set();
+      const rows = await res.json();
+      return new Set(Array.isArray(rows) ? rows.map(r => r.avatar_url).filter(Boolean) : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  async function claimAvatar(url) {
+    if (!isEnabledBasics()) return { ok: false, error: 'disabled' };
+    const safe = safeAvatarSrc(url);
+    if (!safe) return { ok: false, error: 'invalid_url' };
+    try {
+      const me = await getMe();
+      if (!me?.id) return { ok: false, error: 'not_signed_in' };
+      await authFetch(`/rest/v1/profiles?id=eq.${encodeURIComponent(me.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ avatar_url: safe })
+      });
+      if (lastLoadedProfileRow) lastLoadedProfileRow.avatar_url = safe;
+      syncAvatarPreview(safe);
+      window.dispatchEvent(new CustomEvent('fuqmea-avatar-changed', { detail: { avatar_url: safe } }));
+      await loadCrashPeakMarkers().catch(() => {});
+      return { ok: true };
+    } catch (err) {
+      const msg = String(err?.message || err || '');
+      const dup = /23505|duplicate key|unique constraint/i.test(msg);
+      return { ok: false, error: dup ? 'already_claimed' : 'save_failed' };
+    }
+  }
+
+  async function clearAvatar() {
+    if (!isEnabledBasics()) return { ok: false, error: 'disabled' };
+    try {
+      const me = await getMe();
+      if (!me?.id) return { ok: false, error: 'not_signed_in' };
+      await authFetch(`/rest/v1/profiles?id=eq.${encodeURIComponent(me.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+        body: JSON.stringify({ avatar_url: null })
+      });
+      if (lastLoadedProfileRow) lastLoadedProfileRow.avatar_url = null;
+      syncAvatarPreview(null);
+      window.dispatchEvent(new CustomEvent('fuqmea-avatar-changed', { detail: { avatar_url: null } }));
+      await loadCrashPeakMarkers().catch(() => {});
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: 'save_failed' };
+    }
+  }
+
+  async function openAvatarPicker() {
+    const grid = byId('games-pfp-grid');
+    const hint = byId('games-pfp-hint');
+    if (!grid) return;
+    grid.innerHTML = '<span class="games-history-hint">Loading gallery…</span>';
+    try {
+      const [galleryResp, claimedSet] = await Promise.all([
+        fetch('assets/images/gallery.json').then(r => r.json()),
+        loadClaimedAvatars()
+      ]);
+      const images = Array.isArray(galleryResp?.images) ? galleryResp.images : [];
+      const myUrl = lastLoadedProfileRow?.avatar_url || null;
+      grid.innerHTML = '';
+      images.forEach(imgPath => {
+        if (!safeAvatarSrc(imgPath)) return;
+        const isClaimed = claimedSet.has(imgPath);
+        const isMine = imgPath === myUrl;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        let cls = 'games-pfp-thumb';
+        if (isClaimed) cls += ' games-pfp-thumb--claimed';
+        if (isMine) cls += ' games-pfp-thumb--mine';
+        btn.className = cls;
+        if (isClaimed && !isMine) btn.disabled = true;
+        btn.title = isMine
+          ? 'Your current picture'
+          : isClaimed
+          ? 'Claimed by another player'
+          : imgPath.split('/').pop().replace(/\.[^.]+$/, '');
+        const img = document.createElement('img');
+        img.src = imgPath;
+        img.alt = '';
+        img.loading = 'lazy';
+        btn.appendChild(img);
+        if (!isClaimed || isMine) {
+          btn.addEventListener('click', async () => {
+            if (isMine) return;
+            if (hint) hint.textContent = 'Claiming…';
+            const res = await claimAvatar(imgPath);
+            if (res.ok) {
+              const ed = byId('games-pfp-editor');
+              const tb = byId('games-pfp-toggle');
+              if (ed) ed.hidden = true;
+              if (tb) tb.textContent = 'Choose';
+              if (hint) hint.textContent = 'Pick a meme — each one can only be claimed once.';
+              await loadLeaderboard().catch(() => {});
+            } else if (res.error === 'already_claimed') {
+              if (hint) hint.textContent = 'Someone just grabbed that one! Pick another.';
+              await openAvatarPicker();
+            } else {
+              if (hint) hint.textContent = 'Could not save — try again.';
+            }
+          });
+        }
+        grid.appendChild(btn);
+      });
+    } catch (_) {
+      grid.innerHTML = '<span class="games-history-hint">Could not load gallery.</span>';
+    }
+  }
+
+  async function loadCrashPeakMarkers() {
+    if (!isEnabledBasics()) return;
+    const sb = getSupabase();
+    if (!sb) return;
+    try {
+      const { data } = await sb
+        .from('leaderboard_aggregate')
+        .select('leaderboard_name,aura_peak_multiplier,avatar_url')
+        .not('avatar_url', 'is', null)
+        .gt('aura_peak_multiplier', 1)
+        .order('aura_peak_multiplier', { ascending: false })
+        .limit(12);
+      if (Array.isArray(data)) {
+        window.dispatchEvent(new CustomEvent('fuqmea-crash-peak-markers', { detail: data }));
+      }
+    } catch (_) {
+      /**/
+    }
+  }
+
   window.FuqCloud = {
     enabled: isEnabled,
     isSignedIn,
@@ -1501,7 +1703,10 @@
     mergeArcadeStreaks,
     mergeQuestState,
     refreshQuestStateFromWallet,
-    startOAuth
+    startOAuth,
+    claimAvatar,
+    clearAvatar,
+    loadClaimedAvatars
   };
 
   if (document.readyState === 'loading') {

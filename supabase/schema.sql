@@ -12,6 +12,18 @@ create table if not exists public.profiles (
 
 alter table public.profiles add column if not exists display_name text;
 
+-- Profile picture: unique claim per meme (UNIQUE constraint enforces one-meme-one-user).
+alter table public.profiles
+  add column if not exists avatar_url text unique
+    check (
+      avatar_url is null
+      or (
+        avatar_url like 'assets/images/%'
+        and avatar_url not like '%..%'
+        and avatar_url not like '%//%'
+      )
+    );
+
 -- One-time merge of offline device wallet into cloud (see import_initial_device_wallet).
 alter table public.profiles add column if not exists wallet_import_completed boolean not null default false;
 
@@ -521,8 +533,12 @@ create table if not exists public.leaderboard_aggregate (
   weekly_week_start date not null default date_trunc('week', now())::date,
   weekly_net_delta integer not null default 0,
   weekly_rounds integer not null default 0,
+  avatar_url text,
   updated_at timestamptz not null default now()
 );
+
+alter table public.leaderboard_aggregate
+  add column if not exists avatar_url text;
 
 create index if not exists leaderboard_aggregate_balance_idx
   on public.leaderboard_aggregate (current_balance desc);
@@ -541,14 +557,15 @@ declare
   v_name text;
   v_balance integer;
   v_aura double precision;
+  v_avatar text;
   v_total_rounds integer;
   v_net_delta integer;
   v_week_start date := date_trunc('week', now())::date;
   v_weekly_net integer;
   v_weekly_rounds integer;
 begin
-  select coalesce(nullif(trim(p.display_name), ''), p.handle), w.tokens, w.aura_peak_multiplier
-  into v_name, v_balance, v_aura
+  select coalesce(nullif(trim(p.display_name), ''), p.handle), w.tokens, w.aura_peak_multiplier, p.avatar_url
+  into v_name, v_balance, v_aura, v_avatar
   from public.profiles p
   join public.wallets w on w.user_id = p.id
   where p.id = p_user_id;
@@ -570,10 +587,12 @@ begin
 
   insert into public.leaderboard_aggregate (
     user_id, leaderboard_name, current_balance, total_rounds, net_delta,
-    aura_peak_multiplier, weekly_week_start, weekly_net_delta, weekly_rounds, updated_at
+    aura_peak_multiplier, weekly_week_start, weekly_net_delta, weekly_rounds,
+    avatar_url, updated_at
   ) values (
     p_user_id, v_name, v_balance, v_total_rounds, v_net_delta,
-    coalesce(v_aura, 0), v_week_start, v_weekly_net, v_weekly_rounds, now()
+    coalesce(v_aura, 0), v_week_start, v_weekly_net, v_weekly_rounds,
+    v_avatar, now()
   )
   on conflict (user_id) do update set
     leaderboard_name = excluded.leaderboard_name,
@@ -584,6 +603,7 @@ begin
     weekly_week_start = excluded.weekly_week_start,
     weekly_net_delta = excluded.weekly_net_delta,
     weekly_rounds = excluded.weekly_rounds,
+    avatar_url = excluded.avatar_url,
     updated_at = now();
 end;
 $$;
@@ -636,13 +656,14 @@ create trigger wallets_lb_refresh
 
 drop trigger if exists profiles_lb_refresh on public.profiles;
 create trigger profiles_lb_refresh
-  after insert or update of handle, display_name on public.profiles
+  after insert or update of handle, display_name, avatar_url on public.profiles
   for each row execute function public.tg_lb_after_profile();
 
 -- One-shot backfill from existing rows (idempotent via ON CONFLICT). Safe to re-run.
 insert into public.leaderboard_aggregate (
   user_id, leaderboard_name, current_balance, total_rounds, net_delta,
-  aura_peak_multiplier, weekly_week_start, weekly_net_delta, weekly_rounds, updated_at
+  aura_peak_multiplier, weekly_week_start, weekly_net_delta, weekly_rounds,
+  avatar_url, updated_at
 )
 select
   p.id,
@@ -654,11 +675,12 @@ select
   date_trunc('week', now())::date,
   coalesce(sum(ge.delta) filter (where ge.created_at >= date_trunc('week', now())), 0)::integer,
   count(ge.id) filter (where ge.created_at >= date_trunc('week', now()))::integer,
+  p.avatar_url,
   now()
 from public.profiles p
 join public.wallets w on w.user_id = p.id
 left join public.game_events ge on ge.user_id = p.id
-group by p.id, p.handle, p.display_name, w.tokens, w.aura_peak_multiplier
+group by p.id, p.handle, p.display_name, p.avatar_url, w.tokens, w.aura_peak_multiplier
 on conflict (user_id) do update set
   leaderboard_name = excluded.leaderboard_name,
   current_balance = excluded.current_balance,
@@ -668,10 +690,10 @@ on conflict (user_id) do update set
   weekly_week_start = excluded.weekly_week_start,
   weekly_net_delta = excluded.weekly_net_delta,
   weekly_rounds = excluded.weekly_rounds,
+  avatar_url = excluded.avatar_url,
   updated_at = now();
 
 -- Invoker views over the aggregate. RLS on leaderboard_aggregate handles the read; no SECURITY DEFINER bypass.
--- Same column shapes as the previous definer views so the client REST fallback continues to work unchanged.
 drop view if exists public.leaderboard_all_time;
 create view public.leaderboard_all_time
 with (security_invoker = true)
@@ -682,7 +704,8 @@ select
   current_balance,
   total_rounds,
   net_delta,
-  aura_peak_multiplier as aura_peak
+  aura_peak_multiplier as aura_peak,
+  avatar_url
 from public.leaderboard_aggregate;
 
 -- Weekly view zeros out stale-week rows so users who haven't played this week show 0/0 in weekly columns.
@@ -698,7 +721,8 @@ select
     then weekly_net_delta else 0 end as weekly_net_delta,
   case when weekly_week_start = date_trunc('week', now())::date
     then weekly_rounds else 0 end as weekly_rounds,
-  aura_peak_multiplier as aura_peak
+  aura_peak_multiplier as aura_peak,
+  avatar_url
 from public.leaderboard_aggregate;
 
 -- RPCs read the aggregate via SECURITY INVOKER (RLS on the aggregate is public-read).
@@ -712,7 +736,8 @@ returns table (
   current_balance integer,
   total_rounds integer,
   net_delta integer,
-  aura_peak double precision
+  aura_peak double precision,
+  avatar_url text
 )
 language sql
 security invoker
@@ -724,7 +749,8 @@ as $$
     a.current_balance,
     a.total_rounds,
     a.net_delta,
-    a.aura_peak_multiplier
+    a.aura_peak_multiplier,
+    a.avatar_url
   from public.leaderboard_aggregate a
   order by a.current_balance desc nulls last
   limit least(greatest(coalesce(p_limit, 50), 1), 100);
@@ -735,7 +761,8 @@ returns table (
   leaderboard_name text,
   weekly_net_delta integer,
   weekly_rounds integer,
-  aura_peak double precision
+  aura_peak double precision,
+  avatar_url text
 )
 language sql
 security invoker
@@ -749,10 +776,11 @@ as $$
         then a.weekly_net_delta else 0 end as weekly_net_delta,
       case when a.weekly_week_start = date_trunc('week', now())::date
         then a.weekly_rounds else 0 end as weekly_rounds,
-      a.aura_peak_multiplier as aura_peak
+      a.aura_peak_multiplier as aura_peak,
+      a.avatar_url
     from public.leaderboard_aggregate a
   )
-  select c.leaderboard_name, c.weekly_net_delta, c.weekly_rounds, c.aura_peak
+  select c.leaderboard_name, c.weekly_net_delta, c.weekly_rounds, c.aura_peak, c.avatar_url
   from current c
   order by c.weekly_net_delta desc nulls last
   limit least(greatest(coalesce(p_limit, 50), 1), 100);

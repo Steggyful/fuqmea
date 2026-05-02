@@ -166,6 +166,21 @@
               </div>
               <p class="games-history-hint" id="games-display-name-hint">Leave blank to use your handle.</p>
             </div>
+            <div class="games-cloud-profile-line games-cloud-profile-line--pfp">
+              <div class="games-cloud-profile-summary games-pfp-summary">
+                <span class="games-rakeback-label">Profile picture</span>
+                <div id="games-pfp-preview" class="games-pfp-preview">
+                  <span id="games-pfp-placeholder" class="games-pfp-placeholder" aria-hidden="true"></span>
+                  <img id="games-pfp-img" class="games-pfp-img" src="" alt="" hidden>
+                </div>
+              </div>
+              <button type="button" class="games-quest-toggle" id="games-pfp-toggle">Choose</button>
+            </div>
+            <div id="games-pfp-editor" class="games-cloud-profile-editor games-pfp-editor" hidden>
+              <p class="games-history-hint" id="games-pfp-hint">Pick a meme — each one can only be claimed once. Yours glows.</p>
+              <div class="games-pfp-grid" id="games-pfp-grid"></div>
+              <button type="button" class="games-quest-toggle games-pfp-clear-btn" id="games-pfp-clear" hidden>Remove picture</button>
+            </div>
           </div>
           <div class="games-account-toolbar" id="games-account-toolbar" hidden>
             <button type="button" class="button games-wallet-btn games-account-signout-btn" id="games-cloud-logout-btn">Sign out</button>
