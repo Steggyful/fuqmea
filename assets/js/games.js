@@ -773,7 +773,7 @@
     renderWallet(w);
     const delta = w.tokens - bjState.roundStartBalance;
     bumpWeeklyFuqEarnedFromGames(delta);
-    pushHistory('bj', detail, delta, w.tokens);
+    pushHistory('bj', detail, delta, w.tokens, { wager_amount: bjState.baseBet });
     setGameOutcome('bj', mood, sub);
     bjState.phase = 'done';
     bjState.holeHidden = false;
@@ -2470,7 +2470,7 @@
         `Aura Check @ ${bustAt}× — stacked ${stacked}×`,
         -crashRuntime.bet,
         wBust.tokens,
-        { crash_peak_mult: crashPeakForCloud(crashRuntime.mult) }
+        { crash_peak_mult: crashPeakForCloud(crashRuntime.mult), wager_amount: crashRuntime.bet }
       );
       setGameOutcome(
         'crash',
@@ -2563,7 +2563,7 @@
           : `Farmed ${mult.toFixed(2)}× · even (paid ${payout})`,
       net,
       w.tokens,
-      { crash_peak_mult: crashPeakForCloud(mult) }
+      { crash_peak_mult: crashPeakForCloud(mult), wager_amount: bet }
     );
     setGameOutcome(
       'crash',
@@ -3368,7 +3368,7 @@
       const net = w.tokens - before;
       addRakebackFromLoss(net);
       bumpWeeklyFuqEarnedFromGames(net);
-      pushHistory('coin', detail, net, w.tokens, { coinStreak: w.coinStreak });
+      pushHistory('coin', detail, net, w.tokens, { coinStreak: w.coinStreak, wager_amount: bet });
       if (win) {
         syncCoinBestFromWallet(w);
         setGameOutcome('coin', 'win', `You called ${pick.toUpperCase()} · landed ${outcome.toUpperCase()} · ${net >= 0 ? '+' : ''}${net} coins`);
@@ -3468,7 +3468,7 @@
     const net = w.tokens - before;
     addRakebackFromLoss(net);
     bumpWeeklyFuqEarnedFromGames(net);
-    pushHistory('rps', detail, net, w.tokens);
+    pushHistory('rps', detail, net, w.tokens, { wager_amount: bet });
     if (pick === house) {
       applyArcadeWinStreak('rps', 'tie');
       setGameOutcome('rps', 'tie', `Both played ${pick.toUpperCase()} · bet returned`);
@@ -3609,7 +3609,7 @@
     bumpWeeklyFuqEarnedFromGames(net);
     if (net > 0) arcadeNoteWin('slots');
     line += ` (${net >= 0 ? '+' : ''}${net})`;
-    pushHistory('slots', line, net, cur.tokens);
+    pushHistory('slots', line, net, cur.tokens, { wager_amount: bet });
     const spinBtn = document.getElementById('slots-spin-btn');
     if (spinBtn) spinBtn.disabled = false;
 

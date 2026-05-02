@@ -464,15 +464,15 @@
 
   async function fetchLeaderboardViaRest(limit) {
     const view = leaderboardScope === 'weekly' ? 'leaderboard_weekly' : 'leaderboard_all_time';
-    const metric = leaderboardScope === 'weekly' ? 'weekly_net_delta.desc' : 'current_balance.desc';
+    const metric = leaderboardScope === 'weekly' ? 'weekly_wagered.desc' : 'lifetime_wagered.desc';
     const withAura =
       leaderboardScope === 'weekly'
-        ? 'leaderboard_name,weekly_net_delta,weekly_rounds,aura_peak,avatar_url'
-        : 'leaderboard_name,current_balance,total_rounds,net_delta,aura_peak,avatar_url';
+        ? 'leaderboard_name,weekly_wagered,weekly_rounds,aura_peak,avatar_url'
+        : 'leaderboard_name,lifetime_wagered,total_rounds,net_delta,aura_peak,avatar_url';
     const legacy =
       leaderboardScope === 'weekly'
-        ? 'leaderboard_name,weekly_net_delta,weekly_rounds'
-        : 'leaderboard_name,current_balance,total_rounds,net_delta';
+        ? 'leaderboard_name,weekly_wagered,weekly_rounds'
+        : 'leaderboard_name,lifetime_wagered,total_rounds,net_delta';
     const headers = { apikey: CONFIG.supabaseAnonKey };
     const sb = getSupabase();
     if (sb) {
@@ -544,7 +544,7 @@
   function updateLeaderboardTableHeadLabels() {
     const scoreCol = byId('games-lb-head-score');
     if (scoreCol) {
-      scoreCol.textContent = leaderboardScope === 'weekly' ? 'Week net ±' : 'Balance';
+      scoreCol.textContent = leaderboardScope === 'weekly' ? 'Week wagered' : 'Lifetime wagered';
     }
     const rndCol = byId('games-lb-head-rounds');
     if (rndCol) {
@@ -1029,6 +1029,8 @@
     if (typeof cs === 'number' && Number.isFinite(cs)) body.coin_streak = Math.trunc(cs);
     const ld = evt.last_daily != null ? evt.last_daily : evt.lastDaily;
     if (typeof ld === 'string' && ld.trim()) body.last_daily = ld.trim().slice(0, 10);
+    const wa = evt.wager_amount != null ? Number(evt.wager_amount) : null;
+    if (wa != null && Number.isFinite(wa) && wa >= 0) body.wager_amount = Math.trunc(wa);
 
     const qpk = evt.quest_period_key != null ? String(evt.quest_period_key).trim().slice(0, 32) : '';
     const qid = evt.quest_id != null ? String(evt.quest_id).trim().slice(0, 48) : '';
@@ -1138,8 +1140,8 @@
         .map((row, idx) => {
           const score =
             leaderboardScope === 'weekly'
-              ? Number(row.weekly_net_delta || 0)
-              : Number(row.current_balance || 0);
+              ? Number(row.weekly_wagered || 0)
+              : Number(row.lifetime_wagered || 0);
           const rounds =
             leaderboardScope === 'weekly' ? Number(row.weekly_rounds || 0) : Number(row.total_rounds || 0);
           const apRaw = Number(row.aura_peak ?? row.aura_peak_multiplier ?? 0);

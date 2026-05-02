@@ -115,6 +115,7 @@ create table if not exists public.game_events (
   detail text not null default '',
   delta integer not null,
   balance_after integer not null check (balance_after >= 0),
+  wager integer not null default 0,
   created_at timestamptz not null default now()
 );
 
@@ -155,6 +156,7 @@ $$;
 drop function if exists public.apply_settlement(text, text, integer);
 drop function if exists public.apply_settlement(text, text, integer, integer, text);
 drop function if exists public.apply_settlement(text, text, integer, integer, text, double precision);
+drop function if exists public.apply_settlement(text, text, integer, integer, text, double precision, integer);
 
 create or replace function public.apply_settlement(
   p_game text,
@@ -162,7 +164,8 @@ create or replace function public.apply_settlement(
   p_delta integer,
   p_coin_streak integer default null,
   p_last_daily text default null,
-  p_crash_peak double precision default null
+  p_crash_peak double precision default null,
+  p_wager integer default 0
 )
 returns table (
   tokens integer,
@@ -187,6 +190,7 @@ declare
   v_streak_cap integer;
   v_crash_peak double precision;
   v_rb_accrue numeric(12,2) := 0;
+  v_wager integer := greatest(coalesce(p_wager, 0), 0);
 begin
   v_uid := auth.uid();
   if v_uid is null then
@@ -212,6 +216,13 @@ begin
   v_crash_peak := null;
   if v_game = 'crash' and p_crash_peak is not null then
     v_crash_peak := least(greatest(p_crash_peak::double precision, 1.0), 89.0);
+  end if;
+
+  -- Clamp wager to reasonable bounds; non-arcade games cannot wager.
+  if v_game in ('coin', 'rps', 'slots', 'bj', 'crash') then
+    v_wager := least(v_wager, 250);
+  else
+    v_wager := 0;
   end if;
 
   -- Server-side rakeback: 10% of net loss on arcade games, fractional cents preserved.
@@ -245,8 +256,8 @@ begin
   returning w.tokens, w.coin_streak, w.last_daily, w.rakeback_pool
   into v_tokens, v_coin_streak, v_last_daily, v_rakeback_pool;
 
-  insert into public.game_events (user_id, game, detail, delta, balance_after)
-  values (v_uid, p_game, left(coalesce(p_detail, ''), 160), p_delta, v_tokens)
+  insert into public.game_events (user_id, game, detail, delta, balance_after, wager)
+  values (v_uid, p_game, left(coalesce(p_detail, ''), 160), p_delta, v_tokens, v_wager)
   returning id into v_event_id;
 
   return query
@@ -533,17 +544,27 @@ create table if not exists public.leaderboard_aggregate (
   weekly_week_start date not null default date_trunc('week', now())::date,
   weekly_net_delta integer not null default 0,
   weekly_rounds integer not null default 0,
+  lifetime_wagered bigint not null default 0,
+  weekly_wagered bigint not null default 0,
   avatar_url text,
   updated_at timestamptz not null default now()
 );
 
 alter table public.leaderboard_aggregate
   add column if not exists avatar_url text;
+alter table public.leaderboard_aggregate
+  add column if not exists lifetime_wagered bigint not null default 0;
+alter table public.leaderboard_aggregate
+  add column if not exists weekly_wagered bigint not null default 0;
 
 create index if not exists leaderboard_aggregate_balance_idx
   on public.leaderboard_aggregate (current_balance desc);
 create index if not exists leaderboard_aggregate_weekly_idx
   on public.leaderboard_aggregate (weekly_week_start, weekly_net_delta desc);
+create index if not exists leaderboard_aggregate_lifetime_wagered_idx
+  on public.leaderboard_aggregate (lifetime_wagered desc);
+create index if not exists leaderboard_aggregate_weekly_wagered_idx
+  on public.leaderboard_aggregate (weekly_week_start, weekly_wagered desc);
 
 -- Single source of truth: recompute one user's aggregate row from profiles + wallets + game_events.
 -- Cheap because all lookups are indexed; weekly columns are gated by weekly_week_start at read time.
@@ -560,9 +581,11 @@ declare
   v_avatar text;
   v_total_rounds integer;
   v_net_delta integer;
+  v_lifetime_wagered bigint;
   v_week_start date := date_trunc('week', now())::date;
   v_weekly_net integer;
   v_weekly_rounds integer;
+  v_weekly_wagered bigint;
 begin
   select coalesce(nullif(trim(p.display_name), ''), p.handle), w.tokens, w.aura_peak_multiplier, p.avatar_url
   into v_name, v_balance, v_aura, v_avatar
@@ -575,24 +598,24 @@ begin
     return;
   end if;
 
-  select count(*)::integer, coalesce(sum(delta), 0)::integer
-  into v_total_rounds, v_net_delta
+  select count(*)::integer, coalesce(sum(delta), 0)::integer, coalesce(sum(wager), 0)::bigint
+  into v_total_rounds, v_net_delta, v_lifetime_wagered
   from public.game_events
   where user_id = p_user_id;
 
-  select count(*)::integer, coalesce(sum(delta), 0)::integer
-  into v_weekly_rounds, v_weekly_net
+  select count(*)::integer, coalesce(sum(delta), 0)::integer, coalesce(sum(wager), 0)::bigint
+  into v_weekly_rounds, v_weekly_net, v_weekly_wagered
   from public.game_events
   where user_id = p_user_id and created_at >= v_week_start;
 
   insert into public.leaderboard_aggregate (
     user_id, leaderboard_name, current_balance, total_rounds, net_delta,
     aura_peak_multiplier, weekly_week_start, weekly_net_delta, weekly_rounds,
-    avatar_url, updated_at
+    lifetime_wagered, weekly_wagered, avatar_url, updated_at
   ) values (
     p_user_id, v_name, v_balance, v_total_rounds, v_net_delta,
     coalesce(v_aura, 0), v_week_start, v_weekly_net, v_weekly_rounds,
-    v_avatar, now()
+    v_lifetime_wagered, v_weekly_wagered, v_avatar, now()
   )
   on conflict (user_id) do update set
     leaderboard_name = excluded.leaderboard_name,
@@ -603,6 +626,8 @@ begin
     weekly_week_start = excluded.weekly_week_start,
     weekly_net_delta = excluded.weekly_net_delta,
     weekly_rounds = excluded.weekly_rounds,
+    lifetime_wagered = excluded.lifetime_wagered,
+    weekly_wagered = excluded.weekly_wagered,
     avatar_url = excluded.avatar_url,
     updated_at = now();
 end;
@@ -663,7 +688,7 @@ create trigger profiles_lb_refresh
 insert into public.leaderboard_aggregate (
   user_id, leaderboard_name, current_balance, total_rounds, net_delta,
   aura_peak_multiplier, weekly_week_start, weekly_net_delta, weekly_rounds,
-  avatar_url, updated_at
+  lifetime_wagered, weekly_wagered, avatar_url, updated_at
 )
 select
   p.id,
@@ -675,6 +700,8 @@ select
   date_trunc('week', now())::date,
   coalesce(sum(ge.delta) filter (where ge.created_at >= date_trunc('week', now())), 0)::integer,
   count(ge.id) filter (where ge.created_at >= date_trunc('week', now()))::integer,
+  coalesce(sum(ge.wager), 0)::bigint,
+  coalesce(sum(ge.wager) filter (where ge.created_at >= date_trunc('week', now())), 0)::bigint,
   p.avatar_url,
   now()
 from public.profiles p
@@ -690,6 +717,8 @@ on conflict (user_id) do update set
   weekly_week_start = excluded.weekly_week_start,
   weekly_net_delta = excluded.weekly_net_delta,
   weekly_rounds = excluded.weekly_rounds,
+  lifetime_wagered = excluded.lifetime_wagered,
+  weekly_wagered = excluded.weekly_wagered,
   avatar_url = excluded.avatar_url,
   updated_at = now();
 
@@ -701,7 +730,7 @@ as
 select
   user_id,
   leaderboard_name,
-  current_balance,
+  lifetime_wagered,
   total_rounds,
   net_delta,
   aura_peak_multiplier as aura_peak,
@@ -718,7 +747,7 @@ select
   user_id,
   leaderboard_name,
   case when weekly_week_start = date_trunc('week', now())::date
-    then weekly_net_delta else 0 end as weekly_net_delta,
+    then weekly_wagered else 0 end as weekly_wagered,
   case when weekly_week_start = date_trunc('week', now())::date
     then weekly_rounds else 0 end as weekly_rounds,
   aura_peak_multiplier as aura_peak,
@@ -733,7 +762,7 @@ drop function if exists public.leaderboard_weekly_rows(integer);
 create or replace function public.leaderboard_all_time_rows(p_limit integer default 50)
 returns table (
   leaderboard_name text,
-  current_balance integer,
+  lifetime_wagered bigint,
   total_rounds integer,
   net_delta integer,
   aura_peak double precision,
@@ -746,20 +775,20 @@ stable
 as $$
   select
     a.leaderboard_name,
-    a.current_balance,
+    a.lifetime_wagered,
     a.total_rounds,
     a.net_delta,
     a.aura_peak_multiplier,
     a.avatar_url
   from public.leaderboard_aggregate a
-  order by a.current_balance desc nulls last
+  order by a.lifetime_wagered desc nulls last
   limit least(greatest(coalesce(p_limit, 50), 1), 100);
 $$;
 
 create or replace function public.leaderboard_weekly_rows(p_limit integer default 50)
 returns table (
   leaderboard_name text,
-  weekly_net_delta integer,
+  weekly_wagered bigint,
   weekly_rounds integer,
   aura_peak double precision,
   avatar_url text
@@ -773,16 +802,16 @@ as $$
     select
       a.leaderboard_name,
       case when a.weekly_week_start = date_trunc('week', now())::date
-        then a.weekly_net_delta else 0 end as weekly_net_delta,
+        then a.weekly_wagered else 0 end as weekly_wagered,
       case when a.weekly_week_start = date_trunc('week', now())::date
         then a.weekly_rounds else 0 end as weekly_rounds,
       a.aura_peak_multiplier as aura_peak,
       a.avatar_url
     from public.leaderboard_aggregate a
   )
-  select c.leaderboard_name, c.weekly_net_delta, c.weekly_rounds, c.aura_peak, c.avatar_url
+  select c.leaderboard_name, c.weekly_wagered, c.weekly_rounds, c.aura_peak, c.avatar_url
   from current c
-  order by c.weekly_net_delta desc nulls last
+  order by c.weekly_wagered desc nulls last
   limit least(greatest(coalesce(p_limit, 50), 1), 100);
 $$;
 
@@ -843,7 +872,7 @@ using (auth.uid() = user_id);
 grant usage on schema public to anon, authenticated;
 grant select on public.leaderboard_all_time to anon, authenticated;
 grant select on public.leaderboard_weekly to anon, authenticated;
-grant execute on function public.apply_settlement(text, text, integer, integer, text, double precision) to authenticated;
+grant execute on function public.apply_settlement(text, text, integer, integer, text, double precision, integer) to authenticated;
 grant execute on function public.claim_rakeback() to authenticated;
 grant execute on function public.merge_arcade_streaks(jsonb) to authenticated;
 grant execute on function public.ensure_wallet_exists(uuid) to authenticated;

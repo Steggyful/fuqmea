@@ -12,6 +12,8 @@ type SettlePayload = {
   quest_period_key?: string;
   /** Quest claims only — must match `QUEST_DEFS` / `WEEKLY_QUEST_DEFS` id on the client. */
   quest_id?: string;
+  /** Bet amount placed before the outcome (arcade games only; 0 for daily/quest/reset). */
+  wager_amount?: number;
 };
 
 const corsHeaders = {
@@ -192,8 +194,17 @@ Deno.serve(async (req) => {
     p_coin_streak?: number;
     p_last_daily?: string;
     p_crash_peak?: number;
+    p_wager?: number;
   };
   const rpcArgs: RpcArgs = { p_game: game, p_detail: detail, p_delta: delta };
+
+  if (['coin', 'rps', 'slots', 'bj', 'crash'].includes(gKey)) {
+    const raw = payload.wager_amount;
+    if (raw != null && Number.isFinite(Number(raw))) {
+      const w = Math.trunc(Math.max(0, Math.min(Number(raw), 250)));
+      rpcArgs.p_wager = w;
+    }
+  }
 
   if (gKey === 'coin' && payload.coin_streak != null && Number.isFinite(Number(payload.coin_streak))) {
     const cs = Math.trunc(Number(payload.coin_streak));
