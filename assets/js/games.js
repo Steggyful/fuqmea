@@ -22,7 +22,7 @@
   const RPS_GLYPHS = { rock: '✊', paper: '✋', scissors: '✌' };
   let rpsRoundBusy = false;
   const MAX_HISTORY = 35;
-  const BET_CHOICES = [5, 10, 25];
+  const BET_CHOICES = [5, 10, 25, 50, 100];
   const cloudClient = window.FuqCloud || null;
   const LEADERBOARD_REFRESH_DEBOUNCE_MS = 900;
   let leaderboardRefreshTimer = null;
@@ -3083,9 +3083,7 @@
     document.querySelectorAll('.js-rakeback-pool').forEach((el) => {
       el.textContent = signedIn ? poolDisplay : '0';
     });
-    document.querySelectorAll('.js-rakeback-claimed').forEach((el) => {
-      el.textContent = signedIn ? pool.toLocaleString() : '—';
-    });
+
     const panel = document.querySelector('.games-rakeback-stage');
     if (panel) {
       panel.classList.toggle('games-rakeback-stage--active', hasPool);
