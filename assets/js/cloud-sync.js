@@ -2,7 +2,7 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.24.1';
+  const BUILD = '1.24.2';
 
   /** Latest profile row from server — used to restore the display-name field on Cancel and keep preview in sync. */
   let lastLoadedProfileRow = null;
@@ -1331,14 +1331,16 @@
       await maybeRefreshToken().catch(() => {});
       const me = await getMe();
       const prof = await ensureProfile(me);
-      await hydrateWalletAfterLogin().catch(() => {});
-      syncProfileForm(prof);
-      updateCloudBadge('Signed in', true);
+      // Must run before hydrateWalletAfterLogin: games.js applyQuestCloudPayload gates on isSignedIn()
+      // (signedInCached), and hydrate dispatches fuqmea-quest-state-cloud synchronously.
       setCloudAccountPanelMode({
         signedIn: true,
         me,
         statusNote: 'Rounds save automatically while you are signed in.'
       });
+      updateCloudBadge('Signed in', true);
+      syncProfileForm(prof);
+      await hydrateWalletAfterLogin().catch(() => {});
     } catch (err) {
       const txt = String(err?.message || err || '');
       if (isAuthRevokedError(txt)) {
