@@ -167,6 +167,29 @@
 
 .games-account-msg {
   margin-top: 0.55rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.games-account-msg--panel:not(:empty) {
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.games-cloud-auth-inline-msg {
+  margin: 0.55rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.92);
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(57, 255, 20, 0.22);
+}
+
+.games-cloud-auth-inline-msg:empty {
+  display: none;
 }
 
 .games-account-signout-btn {

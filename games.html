@@ -7,7 +7,7 @@
   <meta name="description" content="FuqMeA arcade — aura farm (crash-style), blackjack, coin flip, RPS & slots · fun FUQ tokens">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://*.functions.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com • GAMES</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.47">
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.48">
 </head>
 <body class="games-page">
   <header>
@@ -136,6 +136,7 @@
                     </button>
                   </div>
                 </form>
+                <p class="games-cloud-auth-inline-msg" id="games-cloud-auth-inline-msg" role="status" aria-live="polite"></p>
                 <div id="games-cloud-otp-block" class="games-cloud-otp-block" hidden>
                   <label for="games-cloud-otp-code" class="games-rakeback-label">Enter the 6-digit code</label>
                   <div class="games-cloud-profile-row">
@@ -170,7 +171,7 @@
             <button type="button" class="button games-wallet-btn games-account-signout-btn" id="games-cloud-logout-btn">Sign out</button>
           </div>
           <p class="games-cloud-legal-hint"><a href="legal.html#privacy">Privacy</a> &middot; FUQ coins are fun tokens only, not cash.</p>
-          <p class="games-history-hint games-account-msg" id="games-cloud-msg" role="status"></p>
+          <p class="games-account-msg games-account-msg--panel" id="games-cloud-msg" role="status"></p>
         </section>
 
         <section class="games-leaderboard-panel" aria-labelledby="games-leaderboard-title">

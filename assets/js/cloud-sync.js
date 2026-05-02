@@ -348,7 +348,7 @@
     return signedInCached;
   }
 
-  /** Guest blurb vs signed-in line + optional status strip (games-cloud-msg). */
+  /** Guest blurb vs signed-in line + optional status strip (games-cloud-msg + games-cloud-auth-inline-msg). */
   function setCloudAccountPanelMode(opts) {
     if (!opts || typeof opts !== 'object') return;
     const signedIn = Boolean(opts.signedIn);
@@ -356,6 +356,7 @@
     const guestLead = byId('games-cloud-lead-guest');
     const signedLine = byId('games-cloud-signed-line');
     const msgEl = byId('games-cloud-msg');
+    const inlineMsgEl = byId('games-cloud-auth-inline-msg');
     if (guestLead) guestLead.hidden = signedIn;
     if (signedLine) {
       signedLine.hidden = !signedIn;
@@ -367,8 +368,10 @@
         signedLine.textContent = '';
       }
     }
-    if (msgEl && Object.prototype.hasOwnProperty.call(opts, 'statusNote')) {
-      msgEl.textContent = opts.statusNote == null ? '' : String(opts.statusNote);
+    if (Object.prototype.hasOwnProperty.call(opts, 'statusNote')) {
+      const note = opts.statusNote == null ? '' : String(opts.statusNote);
+      if (msgEl) msgEl.textContent = note;
+      if (inlineMsgEl) inlineMsgEl.textContent = signedIn ? '' : note;
     }
     if (signedInCached !== signedIn) {
       signedInCached = signedIn;
@@ -1162,6 +1165,8 @@
         try {
           await requestEmailCode(email);
           setOtpBlockVisible(true);
+          const det = byId('games-cloud-email-details');
+          if (det) det.open = true;
           setCloudAccountPanelMode({
             signedIn: false,
             statusNote: 'Code sent. Enter the 6 digits from your email below.'
@@ -1224,6 +1229,8 @@
       }
       try {
         await requestEmailCode(targetEmail);
+        const det = byId('games-cloud-email-details');
+        if (det) det.open = true;
         setCloudAccountPanelMode({
           signedIn: false,
           statusNote: 'New code sent. Check your email.'
