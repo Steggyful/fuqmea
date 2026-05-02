@@ -234,7 +234,7 @@ begin
   set
     tokens = greatest(w.tokens + p_delta, 0),
     coin_streak = case
-      when v_streak_cap is not null then greatest(coalesce(w.coin_streak, 0), v_streak_cap)
+      when v_streak_cap is not null then v_streak_cap
       else w.coin_streak
     end,
     last_daily = case
