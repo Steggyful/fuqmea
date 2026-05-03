@@ -5,22 +5,32 @@ on:
     paths-ignore:
       - 'assets/images/gallery.json'
 
+permissions:
+  contents: write
+
 jobs:
   update-gallery:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node generate-gallery.js
-      - run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git diff --quiet || (
+      - name: Regenerate gallery.json
+        run: node generate-gallery.js
+      - name: Log image count
+        run: |
+          node -e "const g=require('./assets/images/gallery.json'); console.log('Image count:', (g.images||[]).length);"
+      - name: Commit if manifest drift
+        run: |
+          if ! git diff --quiet -- assets/images/gallery.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add assets/images/gallery.json
-            git commit -m "chore: update gallery.json"
+            git commit -m "chore: update gallery.json [skip ci]"
             git push
-          )
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

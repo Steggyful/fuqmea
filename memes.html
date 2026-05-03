@@ -9,7 +9,7 @@
   <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
   <title>fuqmea.com • MEME VAULT</title>
   <link rel="preload" href="assets/images/gallery.json" as="fetch">
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.16">
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.3.3">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" defer></script>
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-MNCNNCQ7XX"></script>
@@ -56,15 +56,35 @@
   <div class="main-content">
     <div class="vault-sticky-header">
       <h1>MEME VAULT</h1>
-      <p style="font-size:1.4rem; opacity:0.9; margin-bottom:1.5rem;">
-        Click to select • Yellow = ready to download
+      <p class="vault-hero-hint">
+        Click to select &bull; Yellow = ready to download &bull; <strong id="selected-count"></strong>
       </p>
 
+      <div class="vault-controls vault-controls--filter">
+        <div class="vault-filter-cluster">
+          <div class="vault-filter-bar">
+            <button type="button" id="filter-toggle-btn" class="filter-toggle-btn"
+                    aria-haspopup="dialog" aria-expanded="false"
+                    aria-controls="filter-panel">
+              <span class="filter-toggle-icon" aria-hidden="true"></span>
+              <span class="filter-toggle-label">FILTER</span>
+              <span id="filter-toggle-summary" class="filter-toggle-summary"></span>
+              <span id="filter-toggle-count" class="filter-toggle-count" aria-label="Active filter count" hidden>0</span>
+            </button>
+            <div id="filter-active-pills" class="filter-active-pills" hidden></div>
+            <p id="filter-result-count" class="filter-result-count" aria-live="polite"></p>
+          </div>
+        </div>
+      </div>
+
       <div class="button-group">
-        <button id="random-meme-btn" class="button" style="font-size:1.4rem; padding:18px 50px;">
+        <button id="shuffle-meme-btn" type="button" class="button vault-primary-btn">
+          SHUFFLE
+        </button>
+        <button id="random-meme-btn" class="button vault-primary-btn">
           RANDOM MEME
         </button>
-        <button id="download-zip-btn" class="button" style="font-size:1.4rem; padding:18px 50px; display:none;">
+        <button id="download-zip-btn" class="button vault-primary-btn" style="display:none;">
           DOWNLOAD ZIP
         </button>
       </div>
@@ -82,7 +102,41 @@
     <p class="legal-footer"><a href="legal.html">Legal</a></p>
   </div>
 
-  <script src="assets/js/hub.js?v=2.1.7" defer></script>
+  <div id="filter-backdrop" class="filter-backdrop" hidden aria-hidden="true"></div>
+
+  <div id="filter-panel" class="filter-panel" role="dialog"
+       aria-modal="false" aria-labelledby="filter-panel-title" hidden>
+    <div class="filter-panel-inner">
+      <header class="filter-panel-head">
+        <span class="filter-panel-grip" aria-hidden="true"></span>
+        <h2 id="filter-panel-title" class="filter-panel-title">Filter memes</h2>
+        <button type="button" id="filter-panel-close" class="filter-panel-close" aria-label="Close filters">×</button>
+      </header>
+      <div class="filter-panel-scroll">
+        <section class="filter-panel-section" aria-labelledby="filter-type-heading">
+          <h3 id="filter-type-heading" class="filter-section-heading">Type</h3>
+          <div class="filter-type-row" role="group" aria-label="File type">
+            <button type="button" class="filter-type-pill is-active" data-type="all" aria-pressed="true">All</button>
+            <button type="button" class="filter-type-pill" data-type="gif" aria-pressed="false">GIFs</button>
+            <button type="button" class="filter-type-pill" data-type="image" aria-pressed="false">Images</button>
+          </div>
+        </section>
+        <section class="filter-panel-section" aria-labelledby="filter-cat-heading">
+          <h3 id="filter-cat-heading" class="filter-section-heading">Categories</h3>
+          <div id="filter-chips" class="filter-chips" role="group" aria-label="Meme categories"></div>
+        </section>
+      </div>
+      <footer class="filter-panel-foot">
+        <button type="button" id="filter-clear-btn" class="filter-clear-btn">Clear all</button>
+        <button type="button" id="filter-apply-btn" class="filter-apply-btn">Show <span id="filter-apply-count">0</span> memes</button>
+      </footer>
+    </div>
+  </div>
+
+  <button id="scroll-top-btn" class="scroll-top-btn" aria-label="Back to top">&#8679;</button>
+
+  <script src="tools/extract-categories.js?v=1.0.1" defer></script>
+  <script src="assets/js/hub.js?v=2.3.6" defer></script>
   <script src="assets/js/init.js?v=2.1.6" defer></script>
 </body>
 </html>
