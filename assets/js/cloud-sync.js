@@ -697,7 +697,7 @@
     if (!uid) return null;
     const q = encodeURIComponent(uid);
     const selFull =
-      'tokens,coin_streak,last_daily,aura_peak_multiplier,rakeback_pool,arcade_streaks,quest_state';
+      'tokens,coin_streak,last_daily,aura_peak_multiplier,rakeback_pool,rakeback_lifetime,arcade_streaks,quest_state';
     const selBase = 'tokens,coin_streak,last_daily';
     async function selectRow(sel) {
       return authFetch(`/rest/v1/wallets?select=${encodeURIComponent(sel)}&user_id=eq.${q}&limit=1`, {
@@ -727,16 +727,17 @@
   function readFunWalletSnapshot() {
     try {
       const raw = localStorage.getItem(FUN_WALLET_KEY);
-      if (!raw) return { tokens: 200, coinStreak: 0, lastDaily: '', rakebackPool: 0 };
+      if (!raw) return { tokens: 200, coinStreak: 0, lastDaily: '', rakebackPool: 0, rakebackLifetime: 0 };
       const w = JSON.parse(raw);
       return {
         tokens: Math.max(0, Math.floor(Number(w.tokens) || 0)),
         coinStreak: Math.max(0, Math.floor(Number(w.coinStreak) || 0)),
         lastDaily: typeof w.lastDaily === 'string' ? w.lastDaily : '',
-        rakebackPool: Math.max(0, Math.round(Number(w.rakebackPool) * 100) / 100) || 0
+        rakebackPool: Math.max(0, Math.round(Number(w.rakebackPool) * 100) / 100) || 0,
+        rakebackLifetime: Math.max(0, Math.round(Number(w.rakebackLifetime) * 100) / 100) || 0
       };
     } catch {
-      return { tokens: 200, coinStreak: 0, lastDaily: '', rakebackPool: 0 };
+      return { tokens: 200, coinStreak: 0, lastDaily: '', rakebackPool: 0, rakebackLifetime: 0 };
     }
   }
 
@@ -751,7 +752,8 @@
       tokens: Math.max(0, Math.floor(Number(w.tokens) || 0)),
       coinStreak: Math.max(0, Math.floor(Number(w.coinStreak) || 0)),
       lastDaily: normalizeLastDailyForStorage(w.lastDaily),
-      rakebackPool: Math.max(0, Math.round(Number(w.rakebackPool) * 100) / 100) || 0
+      rakebackPool: Math.max(0, Math.round(Number(w.rakebackPool) * 100) / 100) || 0,
+      rakebackLifetime: Math.max(0, Math.round(Number(w.rakebackLifetime) * 100) / 100) || 0
     };
     localStorage.setItem(FUN_WALLET_KEY, JSON.stringify(out));
     window.dispatchEvent(new CustomEvent('fuqmea-wallet-hydrated'));
@@ -795,9 +797,11 @@
    *  backup exists (e.g. user cleared storage). */
   function restoreGuestOrReset() {
     const backup = readGuestBackup();
-    const target = backup || { tokens: 200, coinStreak: 0, lastDaily: '', rakebackPool: 0 };
-    // Guest mode never has rakeback (server-side feature for signed-in users only).
+    const target = backup || { tokens: 200, coinStreak: 0, lastDaily: '', rakebackPool: 0, rakebackLifetime: 0 };
+    // Guest mode never accrues rakeback (server-side feature for signed-in users only);
+    // the lifetime counter belongs to the account, so it doesn't survive sign-out either.
     target.rakebackPool = 0;
+    target.rakebackLifetime = 0;
     writeFunWalletLocal(target);
     clearGuestBackup();
     window.dispatchEvent(new CustomEvent('fuqmea-restore-guest-quests'));
@@ -881,7 +885,8 @@
         tokens: localSnap.tokens,
         coinStreak: localSnap.coinStreak,
         lastDaily: localSnap.lastDaily,
-        rakebackPool: localSnap.rakebackPool || 0
+        rakebackPool: localSnap.rakebackPool || 0,
+        rakebackLifetime: localSnap.rakebackLifetime || 0
       };
     }
     const cTok = Math.max(0, Math.floor(Number(cloudRow.tokens) || 0));
@@ -890,11 +895,20 @@
     const ldRemote = cloudRow.last_daily ?? cloudRow.lastDaily;
     const rbSrc = cloudRow.rakeback_pool ?? cloudRow.rakebackPool;
     const cRake = Math.max(0, Math.round(Number(rbSrc) * 100) / 100) || 0;
+    /** Lifetime is server-authoritative: only the server bumps it, and on a stale local
+     *  snapshot we'd otherwise display a value behind the truth. Fall back to local only
+     *  when the cloud row omits the field (e.g. older REST select). */
+    const lifeSrc = cloudRow.rakeback_lifetime ?? cloudRow.rakebackLifetime;
+    const cLifetime =
+      lifeSrc !== undefined && lifeSrc !== null && lifeSrc !== ''
+        ? Math.max(0, Math.round(Number(lifeSrc) * 100) / 100) || 0
+        : (localSnap.rakebackLifetime || 0);
     return {
       tokens: cTok,
       coinStreak: Math.max(cStreak, localSnap.coinStreak),
       lastDaily: mergeLastDaily(localSnap.lastDaily, ldRemote),
-      rakebackPool: cRake
+      rakebackPool: cRake,
+      rakebackLifetime: cLifetime
     };
   }
 
