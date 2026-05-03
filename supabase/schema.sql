@@ -100,6 +100,12 @@ alter table public.wallets
   add column if not exists rakeback_pool numeric(12,2) not null default 0
     check (rakeback_pool >= 0);
 
+-- Lifetime rakeback: non-decreasing per-wallet total of all rakeback ever
+-- accrued. Pool resets on claim; this counter does not.
+alter table public.wallets
+  add column if not exists rakeback_lifetime numeric(12,2) not null default 0
+    check (rakeback_lifetime >= 0);
+
 -- Cross-device arcade bests (RPS / slots / BJ / Aura Farm peak). Current-run streaks stay client-only.
 alter table public.wallets
   add column if not exists arcade_streaks jsonb not null default '{}'::jsonb;
@@ -172,6 +178,7 @@ returns table (
   coin_streak integer,
   last_daily date,
   rakeback_pool numeric,
+  rakeback_lifetime numeric,
   event_id bigint
 )
 language plpgsql
@@ -184,6 +191,7 @@ declare
   v_coin_streak integer;
   v_last_daily date;
   v_rakeback_pool numeric(12,2);
+  v_rakeback_lifetime numeric(12,2);
   v_event_id bigint;
   v_parsed_daily date;
   v_game text := lower(trim(coalesce(p_game, '')));
@@ -251,17 +259,18 @@ begin
         greatest(coalesce(w.aura_peak_multiplier, 0)::double precision, v_crash_peak)
       else coalesce(w.aura_peak_multiplier, 0)::double precision
     end,
-    rakeback_pool = coalesce(w.rakeback_pool, 0) + v_rb_accrue
+    rakeback_pool = coalesce(w.rakeback_pool, 0) + v_rb_accrue,
+    rakeback_lifetime = coalesce(w.rakeback_lifetime, 0) + v_rb_accrue
   where w.user_id = v_uid
-  returning w.tokens, w.coin_streak, w.last_daily, w.rakeback_pool
-  into v_tokens, v_coin_streak, v_last_daily, v_rakeback_pool;
+  returning w.tokens, w.coin_streak, w.last_daily, w.rakeback_pool, w.rakeback_lifetime
+  into v_tokens, v_coin_streak, v_last_daily, v_rakeback_pool, v_rakeback_lifetime;
 
   insert into public.game_events (user_id, game, detail, delta, balance_after, wager)
   values (v_uid, p_game, left(coalesce(p_detail, ''), 160), p_delta, v_tokens, v_wager)
   returning id into v_event_id;
 
   return query
-  select v_tokens, v_coin_streak, v_last_daily, v_rakeback_pool, v_event_id;
+  select v_tokens, v_coin_streak, v_last_daily, v_rakeback_pool, v_rakeback_lifetime, v_event_id;
 end;
 $$;
 
@@ -276,6 +285,7 @@ returns table (
   last_daily date,
   aura_peak_multiplier double precision,
   rakeback_pool numeric,
+  rakeback_lifetime numeric,
   paid integer
 )
 language plpgsql
@@ -323,7 +333,7 @@ begin
   values (v_uid, 'rakeback_claim', concat('Claimed ', v_pay::text, ' FUQ'), v_pay, v_balance_after);
 
   return query
-  select w.tokens, w.coin_streak, w.last_daily, w.aura_peak_multiplier, w.rakeback_pool, v_pay
+  select w.tokens, w.coin_streak, w.last_daily, w.aura_peak_multiplier, w.rakeback_pool, w.rakeback_lifetime, v_pay
   from public.wallets w
   where w.user_id = v_uid;
 end;

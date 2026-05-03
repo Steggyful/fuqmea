@@ -175,7 +175,8 @@ Deno.serve(async (req) => {
           tokens: Number(row.tokens) || 0,
           coinStreak: Number(row.coin_streak) || 0,
           lastDaily: row.last_daily || '',
-          rakebackPool: Number(row.rakeback_pool) || 0
+          rakebackPool: Number(row.rakeback_pool) || 0,
+          rakebackLifetime: Number(row.rakeback_lifetime) || 0
         },
         eventId: row.event_id || null
       }),

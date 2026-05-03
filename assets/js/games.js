@@ -2634,17 +2634,18 @@
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        return { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '', rakebackPool: 0 };
+        return { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '', rakebackPool: 0, rakebackLifetime: 0 };
       }
       const w = JSON.parse(raw);
       return {
         tokens: Math.max(0, Math.floor(Number(w.tokens)) || 0),
         coinStreak: Math.max(0, Math.floor(Number(w.coinStreak)) || 0),
         lastDaily: typeof w.lastDaily === 'string' ? w.lastDaily : '',
-        rakebackPool: Math.max(0, Math.round(Number(w.rakebackPool) * 100) / 100) || 0
+        rakebackPool: Math.max(0, Math.round(Number(w.rakebackPool) * 100) / 100) || 0,
+        rakebackLifetime: Math.max(0, Math.round(Number(w.rakebackLifetime) * 100) / 100) || 0
       };
     } catch {
-      return { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '', rakebackPool: 0 };
+      return { tokens: DEFAULT_TOKENS, coinStreak: 0, lastDaily: '', rakebackPool: 0, rakebackLifetime: 0 };
     }
   }
 
@@ -2652,6 +2653,7 @@
     w.tokens = Math.max(0, Math.floor(w.tokens));
     w.coinStreak = Math.max(0, Math.floor(w.coinStreak));
     if (typeof w.rakebackPool !== 'number') w.rakebackPool = 0;
+    if (typeof w.rakebackLifetime !== 'number') w.rakebackLifetime = 0;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(w));
   }
 
@@ -2686,11 +2688,21 @@
         sRake = Math.max(0, Math.round(n * 100) / 100);
       }
     }
+    /** Lifetime is monotonic on the server; mirror it locally for instant UI updates. */
+    const rlSrc = st.rakebackLifetime ?? st.rakeback_lifetime;
+    let sLife = localNow.rakebackLifetime ?? 0;
+    if (rlSrc !== undefined && rlSrc !== null && rlSrc !== '') {
+      const n = Number(rlSrc);
+      if (Number.isFinite(n)) {
+        sLife = Math.max(0, Math.round(n * 100) / 100);
+      }
+    }
     const merged = {
       tokens: trustServerTokens ? sTok : Math.max(localNow.tokens || 0, sTok),
       coinStreak: Math.max(localNow.coinStreak || 0, sStreak),
       lastDaily: mergeLastDailyStr(localNow.lastDaily, typeof sDaily === 'string' ? sDaily : ''),
-      rakebackPool: trustServerTokens ? sRake : Math.max(localNow.rakebackPool || 0, sRake)
+      rakebackPool: trustServerTokens ? sRake : Math.max(localNow.rakebackPool || 0, sRake),
+      rakebackLifetime: Math.max(localNow.rakebackLifetime || 0, sLife)
     };
     saveWallet(merged);
     return merged;
@@ -3082,6 +3094,18 @@
     const hasPool = signedIn && pool > 0;
     document.querySelectorAll('.js-rakeback-pool').forEach((el) => {
       el.textContent = signedIn ? poolDisplay : '0';
+    });
+
+    const lifeRaw = Math.max(0, Number(w.rakebackLifetime) || 0);
+    const lifeWhole = Math.floor(lifeRaw);
+    const lifeDisplay =
+      lifeRaw > 0 && lifeRaw < 1
+        ? lifeRaw.toFixed(1)
+        : lifeWhole >= 1
+          ? lifeWhole.toLocaleString()
+          : lifeRaw.toFixed(1);
+    document.querySelectorAll('.js-rakeback-lifetime').forEach((el) => {
+      el.textContent = signedIn ? lifeDisplay : '0';
     });
 
     const panel = document.querySelector('.games-rakeback-stage');
