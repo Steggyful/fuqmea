@@ -1,0 +1,17 @@
+#!/bin/sh
+# Regenerates assets/images/gallery.json and includes new images in the same push.
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+node generate-gallery.js
+git add assets/images
+if git diff --cached --quiet; then
+  exit 0
+fi
+ADDED="$(git diff --cached --name-only --diff-filter=A 2>/dev/null | wc -l | tr -d ' ')"
+git commit -m "chore: refresh gallery manifest"
+if [ -n "$ADDED" ] && [ "$ADDED" != "0" ]; then
+  echo "Refreshed manifest (+${ADDED} new), included in this push."
+else
+  echo "Refreshed manifest, included in this push."
+fi

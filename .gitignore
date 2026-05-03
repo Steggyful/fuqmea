@@ -21,3 +21,15 @@ supabase/.temp/
 *.env
 .env.local
 .env.*.local
+
+# Node (gallery scripts use plain `node`; no install required today)
+node_modules/
+.npm/
+
+# Logs / local tooling noise
+*.log
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc

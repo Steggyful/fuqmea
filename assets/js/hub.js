@@ -8,9 +8,9 @@ const GALLERY_JSON_URL = 'assets/images/gallery.json';
 
 /** If gallery.json is missing or fails to load; paths must exist in the repo. */
 const FALLBACK_GALLERY_PATHS = [
-  'assets/images/01 Vivid.jpg',
-  'assets/images/Emoji - Butt.png',
-  'assets/images/The Fifi.jpg'
+  'assets/images/01 Vivid - Shocked.jpg',
+  'assets/images/Cat - Smile.JPG',
+  'assets/images/Emoji - Bonk.png'
 ];
 
 let galleryListLoadPromise = null;
@@ -77,6 +77,7 @@ function shuffleArray(array) {
     const j = Math.floor(Math.random() * (i + 1));
     [array[i], array[j]] = [array[j], array[i]];
   }
+  return array;
 }
 
 // Validate image path to prevent directory traversal attacks
@@ -141,6 +142,10 @@ async function loadGalleryList() {
 const GALLERY_FIRST_EAGER = 12;
 const GALLERY_FETCH_PRIORITY_HIGH = 4;
 
+function getFileType(src) {
+  return /\.gif$/i.test(src) ? 'gif' : 'image';
+}
+
 function renderGallery(memes) {
   const container = document.getElementById('gallery');
   if (!container) return;
@@ -153,10 +158,17 @@ function renderGallery(memes) {
     const card = document.createElement('div');
     card.className = 'meme-card';
     card.dataset.src = src;
-    
+    const displayName = filenameToDisplay(src);
+    const cats = extractCategories(src);
+    if (cats.length) {
+      card.dataset.categories = cats.join('|');
+      card.dataset.category = cats[0];
+    }
+    card.dataset.type = getFileType(src);
+
     const img = document.createElement('img');
     img.src = src;
-    img.alt = 'FuqMeA Meme';
+    img.alt = displayName;
     if (index < GALLERY_FIRST_EAGER) {
       img.loading = 'eager';
       img.decoding = index === 0 ? 'sync' : 'async';
@@ -185,24 +197,587 @@ function renderGallery(memes) {
   });
 }
 
+// ====================== SEARCH + FILTER ======================
+
+const FILTER_STORAGE_KEY = 'meme-vault-filters';
+const filterState = {
+  categories: new Set(),
+  type: 'all',
+};
+let filterPanelOpen = false;
+let filterPanelListenersBound = false;
+
+/** Active ordering on Meme Vault (shuffled copy of gallery list). */
+let currentGalleryOrder = [];
+
+function filenameToDisplay(src) {
+  return src.split('/').pop().replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ').trim();
+}
+
+/**
+ * Tag rules live in `tools/extract-categories.js` (loaded before hub.js on each page).
+ * Fallback mirrors that logic if the script is missing (should not happen on shipped pages).
+ */
+function normalizeCategoryLabel(label) {
+  if (typeof FuqmeaCategories !== 'undefined' && FuqmeaCategories.normalizeCategoryLabel) {
+    return FuqmeaCategories.normalizeCategoryLabel(label);
+  }
+  return label.replace(/^[a-z]{1,3}\s+(?=[A-Za-z0-9])/, '').trim();
+}
+
+function extractCategories(src) {
+  if (typeof FuqmeaCategories !== 'undefined' && FuqmeaCategories.extractCategories) {
+    return FuqmeaCategories.extractCategories(src);
+  }
+  const name = src.split('/').pop().replace(/\.[^.]+$/, '');
+  const parts = name.split(' - ');
+  if (parts.length < 2) return [];
+  const rawTags = parts.slice(0, -1).map((p) => normalizeCategoryLabel(p.trim())).filter(Boolean);
+  return [...new Set(rawTags)];
+}
+
+function loadFilterState() {
+  try {
+    const raw = localStorage.getItem(FILTER_STORAGE_KEY);
+    if (!raw) return;
+    const o = JSON.parse(raw);
+    if (o && Array.isArray(o.categories)) {
+      filterState.categories = new Set(o.categories);
+    }
+    if (o && (o.type === 'all' || o.type === 'gif' || o.type === 'image')) {
+      filterState.type = o.type;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function saveFilterState() {
+  try {
+    localStorage.setItem(
+      FILTER_STORAGE_KEY,
+      JSON.stringify({
+        categories: Array.from(filterState.categories),
+        type: filterState.type,
+      })
+    );
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function pruneFilterStateToMemes(memes) {
+  const validCats = new Set();
+  let uncategorised = 0;
+  memes.forEach(src => {
+    const cats = extractCategories(src);
+    if (cats.length) cats.forEach(c => validCats.add(c));
+    else uncategorised++;
+  });
+  const next = new Set();
+  filterState.categories.forEach(key => {
+    if (key === '__other__') {
+      if (uncategorised > 0) next.add(key);
+    } else if (validCats.has(key)) {
+      next.add(key);
+    }
+  });
+  filterState.categories = next;
+}
+
+function syncCategoryChipsFromState() {
+  document.querySelectorAll('#filter-chips .filter-chip').forEach(btn => {
+    const v = btn.dataset.value;
+    if (v === undefined) return;
+    const on = filterState.categories.has(v);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+function syncTypePillsUI() {
+  document.querySelectorAll('.filter-type-pill').forEach(btn => {
+    const t = btn.dataset.type;
+    const on = filterState.type === t;
+    btn.classList.toggle('is-active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+function buildFilterChips(memes) {
+  const container = document.getElementById('filter-chips');
+  if (!container) return;
+
+  const catCounts = {};
+  let uncategorised = 0;
+  memes.forEach(src => {
+    const cats = extractCategories(src);
+    if (cats.length) {
+      cats.forEach(cat => {
+        catCounts[cat] = (catCounts[cat] || 0) + 1;
+      });
+    } else uncategorised++;
+  });
+
+  const hasCats = Object.keys(catCounts).length > 0;
+  const hasOther = uncategorised > 0;
+  if (!hasCats && !hasOther) return;
+
+  const addChip = (label, count, value) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'filter-chip';
+    btn.dataset.value = value;
+    btn.textContent = `${label} (${count})`;
+    const pressed = filterState.categories.has(value);
+    btn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    btn.addEventListener('click', () => {
+      if (filterState.categories.has(value)) {
+        filterState.categories.delete(value);
+      } else {
+        filterState.categories.add(value);
+      }
+      btn.setAttribute('aria-pressed', filterState.categories.has(value) ? 'true' : 'false');
+      saveFilterState();
+      applyFilters();
+      renderActivePills();
+    });
+    container.appendChild(btn);
+  };
+
+  Object.entries(catCounts)
+    .sort((a, b) => b[1] - a[1])
+    .forEach(([cat, count]) => addChip(cat, count, cat));
+
+  if (hasOther) {
+    addChip('OTHER', uncategorised, '__other__');
+  }
+}
+
+function initTypePills(memes) {
+  const gifCount = memes.filter(s => getFileType(s) === 'gif').length;
+  const imageCount = memes.length - gifCount;
+  document.querySelectorAll('.filter-type-pill').forEach(btn => {
+    const t = btn.dataset.type;
+    if (t === 'gif') btn.textContent = `GIFs (${gifCount})`;
+    else if (t === 'image') btn.textContent = `Images (${imageCount})`;
+    else btn.textContent = 'All';
+  });
+  syncTypePillsUI();
+}
+
+function applyFilters() {
+  document.querySelectorAll('.meme-card').forEach(card => {
+    const cats = (card.dataset.categories || '')
+      .split('|')
+      .filter(Boolean);
+    const type = card.dataset.type || 'image';
+
+    let catMatches = filterState.categories.size === 0;
+    if (!catMatches) {
+      if (cats.length && cats.some(c => filterState.categories.has(c))) catMatches = true;
+      if (!cats.length && filterState.categories.has('__other__')) catMatches = true;
+    }
+
+    const typeMatches = filterState.type === 'all' || filterState.type === type;
+    card.classList.toggle('hidden', !(catMatches && typeMatches));
+  });
+  updateCountDisplay();
+  updateFilterSummary();
+}
+
+function updateFilterSummary() {
+  const summary = document.getElementById('filter-toggle-summary');
+  const badge = document.getElementById('filter-toggle-count');
+  const applyCount = document.getElementById('filter-apply-count');
+  const toggle = document.getElementById('filter-toggle-btn');
+
+  const visible = document.querySelectorAll('.meme-card:not(.hidden)').length;
+
+  const nCat = filterState.categories.size;
+  const typeExtra = filterState.type !== 'all';
+  const activeCount = nCat + (typeExtra ? 1 : 0);
+
+  const parts = [];
+  if (typeExtra) parts.push(filterState.type === 'gif' ? 'GIFs' : 'Images');
+  if (nCat > 0) {
+    parts.push(nCat === 1 ? '1 category' : `${nCat} categories`);
+  }
+
+  if (summary) summary.textContent = parts.length ? ` · ${parts.join(' · ')}` : '';
+
+  if (badge) {
+    if (activeCount > 0) {
+      badge.hidden = false;
+      badge.textContent = String(activeCount);
+    } else {
+      badge.hidden = true;
+    }
+  }
+
+  if (toggle) toggle.classList.toggle('filter-active', activeCount > 0);
+
+  if (applyCount) applyCount.textContent = String(visible);
+}
+
+function renderActivePills() {
+  const wrap = document.getElementById('filter-active-pills');
+  if (!wrap) return;
+  wrap.textContent = '';
+  let any = false;
+
+  if (filterState.type !== 'all') {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'filter-active-pill';
+    pill.dataset.removeType = '1';
+    pill.setAttribute(
+      'aria-label',
+      `Remove ${filterState.type === 'gif' ? 'GIF' : 'image'} type filter`
+    );
+    const span = document.createElement('span');
+    span.textContent = filterState.type === 'gif' ? 'GIFs' : 'Images';
+    const x = document.createElement('span');
+    x.className = 'filter-active-pill-x';
+    x.setAttribute('aria-hidden', 'true');
+    x.textContent = '\u00d7';
+    pill.appendChild(span);
+    pill.appendChild(x);
+    wrap.appendChild(pill);
+    any = true;
+  }
+
+  filterState.categories.forEach(catKey => {
+    const label = catKey === '__other__' ? 'OTHER' : catKey;
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'filter-active-pill';
+    pill.dataset.category = catKey;
+    pill.setAttribute('aria-label', `Remove ${label} category filter`);
+    const span = document.createElement('span');
+    span.textContent = label;
+    const x = document.createElement('span');
+    x.className = 'filter-active-pill-x';
+    x.setAttribute('aria-hidden', 'true');
+    x.textContent = '\u00d7';
+    pill.appendChild(span);
+    pill.appendChild(x);
+    wrap.appendChild(pill);
+    any = true;
+  });
+
+  wrap.hidden = !any;
+}
+
+function updateCountDisplay() {
+  const total = document.querySelectorAll('.meme-card').length;
+  const visible = document.querySelectorAll('.meme-card:not(.hidden)').length;
+  const shortText = visible < total ? `${visible} of ${total} memes` : `${total} memes`;
+
+  const el = document.getElementById('selected-count');
+  if (el) el.textContent = shortText;
+
+  const fr = document.getElementById('filter-result-count');
+  if (fr) {
+    fr.textContent =
+      visible < total ? `Showing ${visible} of ${total} memes` : `Showing all ${total} memes`;
+  }
+}
+
+function isMobileFilterViewport() {
+  return window.matchMedia && window.matchMedia('(max-width: 767px)').matches;
+}
+
+function syncFilterPanelAria() {
+  const panel = document.getElementById('filter-panel');
+  if (!panel || panel.hasAttribute('hidden')) return;
+  panel.setAttribute('aria-modal', isMobileFilterViewport() ? 'true' : 'false');
+}
+
+/** Clear JS-set placement so mobile CSS (bottom sheet) is not overridden by desktop inline coords */
+function clearDesktopPopoverPosition() {
+  const panel = document.getElementById('filter-panel');
+  if (!panel) return;
+  panel.style.top = '';
+  panel.style.left = '';
+  panel.style.width = '';
+  panel.style.maxHeight = '';
+  panel.style.transform = '';
+}
+
+/**
+ * Desktop: pin filter popunder below FILTER toggle using fixed viewport coords.
+ * Must run while #filter-panel is outside .vault-sticky-header so position:fixed is not trapped by backdrop-filter.
+ */
+function positionDesktopPopover() {
+  const panel = document.getElementById('filter-panel');
+  const toggle = document.getElementById('filter-toggle-btn');
+  if (!panel || !toggle) return;
+  if (isMobileFilterViewport()) {
+    clearDesktopPopoverPosition();
+    return;
+  }
+
+  const r = toggle.getBoundingClientRect();
+  const margin = 12;
+  const width = Math.min(520, window.innerWidth - margin * 2);
+  const left = Math.max(
+    margin,
+    Math.min(window.innerWidth - width - margin, r.left + r.width / 2 - width / 2)
+  );
+  const top = r.bottom + 6;
+  const bottomLimit = window.innerHeight - margin;
+  const roomBelow = Math.max(0, bottomLimit - top);
+  const maxHeight = Math.min(520, window.innerHeight * 0.7, Math.max(200, roomBelow));
+
+  panel.style.top = `${Math.round(top)}px`;
+  panel.style.left = `${Math.round(left)}px`;
+  panel.style.width = `${Math.round(width)}px`;
+  panel.style.maxHeight = `${Math.round(maxHeight)}px`;
+  panel.style.transform = '';
+}
+
+function onFilterPanelReposition() {
+  if (!filterPanelOpen) return;
+  positionDesktopPopover();
+}
+
+function openFilterPanel() {
+  const panel = document.getElementById('filter-panel');
+  const backdrop = document.getElementById('filter-backdrop');
+  const toggle = document.getElementById('filter-toggle-btn');
+  if (!panel || !toggle) return;
+
+  panel.removeAttribute('hidden');
+  if (backdrop) backdrop.removeAttribute('hidden');
+
+  syncFilterPanelAria();
+
+  if (isMobileFilterViewport()) {
+    clearDesktopPopoverPosition();
+    document.body.style.overflow = 'hidden';
+  } else {
+    document.body.style.overflow = '';
+    requestAnimationFrame(() => {
+      positionDesktopPopover();
+    });
+  }
+
+  toggle.setAttribute('aria-expanded', 'true');
+  filterPanelOpen = true;
+
+  requestAnimationFrame(() => {
+    const closeBtn = document.getElementById('filter-panel-close');
+    if (closeBtn) closeBtn.focus();
+  });
+}
+
+function closeFilterPanel() {
+  if (!filterPanelOpen) return;
+  const panel = document.getElementById('filter-panel');
+  const backdrop = document.getElementById('filter-backdrop');
+  const toggle = document.getElementById('filter-toggle-btn');
+  if (!panel) return;
+
+  clearDesktopPopoverPosition();
+  panel.setAttribute('hidden', '');
+  if (backdrop) backdrop.setAttribute('hidden', '');
+  document.body.style.overflow = '';
+  if (toggle) {
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.focus();
+  }
+  filterPanelOpen = false;
+}
+
+function clearAllFilters() {
+  filterState.categories.clear();
+  filterState.type = 'all';
+  syncCategoryChipsFromState();
+  syncTypePillsUI();
+  saveFilterState();
+  applyFilters();
+  renderActivePills();
+}
+
+function onFilterPanelTabTrap(e) {
+  if (e.key !== 'Tab' || !filterPanelOpen || !isMobileFilterViewport()) return;
+  const panel = document.getElementById('filter-panel');
+  if (!panel || panel.hasAttribute('hidden')) return;
+
+  const sel =
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  const focusables = Array.from(panel.querySelectorAll(sel)).filter(el => {
+    return el.offsetParent !== null || el.getClientRects().length > 0;
+  });
+  if (focusables.length === 0) return;
+
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+
+  if (e.shiftKey) {
+    if (document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    }
+  } else if (document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+function onFilterDocumentClick(e) {
+  if (!filterPanelOpen) return;
+  const cluster = document.querySelector('.vault-filter-cluster');
+  const panel = document.getElementById('filter-panel');
+  const backdrop = document.getElementById('filter-backdrop');
+  const t = e.target;
+  if (cluster && cluster.contains(t)) return;
+  if (panel && panel.contains(t)) return;
+  if (backdrop && (t === backdrop || backdrop.contains(t))) return;
+  closeFilterPanel();
+}
+
+function onFilterDocumentKeydown(e) {
+  if (e.key !== 'Escape' || !filterPanelOpen) return;
+  const lb = document.getElementById('meme-lightbox');
+  if (lb && lb.classList.contains('open')) return;
+  e.preventDefault();
+  closeFilterPanel();
+}
+
+function onFilterViewportChange() {
+  syncFilterPanelAria();
+  if (!filterPanelOpen) return;
+  clearDesktopPopoverPosition();
+  if (isMobileFilterViewport()) {
+    document.body.style.overflow = 'hidden';
+  } else {
+    document.body.style.overflow = '';
+    requestAnimationFrame(() => positionDesktopPopover());
+  }
+}
+
+function setupFilterPanel() {
+  if (filterPanelListenersBound) return;
+  filterPanelListenersBound = true;
+
+  const toggle = document.getElementById('filter-toggle-btn');
+  const panel = document.getElementById('filter-panel');
+  const backdrop = document.getElementById('filter-backdrop');
+  const closeBtn = document.getElementById('filter-panel-close');
+  const clearBtn = document.getElementById('filter-clear-btn');
+  const applyBtn = document.getElementById('filter-apply-btn');
+  const typeRow = document.querySelector('.filter-type-row');
+  const pillsWrap = document.getElementById('filter-active-pills');
+
+  if (toggle && panel) {
+    toggle.addEventListener('click', e => {
+      e.stopPropagation();
+      if (filterPanelOpen) closeFilterPanel();
+      else openFilterPanel();
+    });
+  }
+
+  if (closeBtn) closeBtn.addEventListener('click', () => closeFilterPanel());
+  if (applyBtn) applyBtn.addEventListener('click', () => closeFilterPanel());
+  if (clearBtn) clearBtn.addEventListener('click', () => clearAllFilters());
+
+  if (backdrop) {
+    backdrop.addEventListener('click', () => closeFilterPanel());
+  }
+
+  if (typeRow && !typeRow.dataset.wired) {
+    typeRow.dataset.wired = '1';
+    typeRow.addEventListener('click', e => {
+      const pill = e.target.closest('.filter-type-pill');
+      if (!pill || !pill.dataset.type) return;
+      const t = pill.dataset.type;
+      filterState.type = t;
+      typeRow.querySelectorAll('.filter-type-pill').forEach(p => {
+        const on = p === pill;
+        p.classList.toggle('is-active', on);
+        p.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      saveFilterState();
+      applyFilters();
+      renderActivePills();
+    });
+  }
+
+  if (pillsWrap && !pillsWrap.dataset.bound) {
+    pillsWrap.dataset.bound = '1';
+    pillsWrap.addEventListener('click', e => {
+      const btn = e.target.closest('.filter-active-pill');
+      if (!btn) return;
+      if (btn.dataset.removeType === '1') {
+        filterState.type = 'all';
+        syncTypePillsUI();
+      } else if (btn.dataset.category != null) {
+        filterState.categories.delete(btn.dataset.category);
+        syncCategoryChipsFromState();
+      }
+      saveFilterState();
+      applyFilters();
+      renderActivePills();
+    });
+  }
+
+  if (panel) {
+    panel.addEventListener('keydown', onFilterPanelTabTrap);
+  }
+
+  document.addEventListener('click', onFilterDocumentClick);
+  document.addEventListener('keydown', onFilterDocumentKeydown);
+
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = () => onFilterViewportChange();
+    if (mq.addEventListener) mq.addEventListener('change', handler);
+    else mq.addListener(handler);
+  }
+
+  window.addEventListener('resize', onFilterPanelReposition);
+  window.addEventListener('scroll', onFilterPanelReposition, { capture: true, passive: true });
+}
+
 async function initGallery() {
   const memes = await loadGalleryList();
+  currentGalleryOrder = shuffleArray([...memes]);
   setupLightbox();
   setupSelectedPreviewModal();
-  renderGallery(memes);
+  renderGallery(currentGalleryOrder);
+  loadFilterState();
+  pruneFilterStateToMemes(currentGalleryOrder);
+  buildFilterChips(currentGalleryOrder);
+  initTypePills(currentGalleryOrder);
+  setupFilterPanel();
+  applyFilters();
+  renderActivePills();
 
   const randomBtn = document.getElementById('random-meme-btn');
   if (randomBtn) {
-    randomBtn.addEventListener('click', () => openRandomMeme(memes));
+    randomBtn.addEventListener('click', () => openRandomMeme(currentGalleryOrder));
+  }
+
+  const shuffleBtn = document.getElementById('shuffle-meme-btn');
+  if (shuffleBtn) {
+    shuffleBtn.addEventListener('click', () => {
+      currentGalleryOrder = shuffleArray([...memes]);
+      renderGallery(currentGalleryOrder);
+      restoreSelectionAfterRender();
+      applyFilters();
+      updateCountDisplay();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
   }
 
   const params = new URLSearchParams(window.location.search);
   const openMeme = params.get('openMeme');
   if (openMeme && validateImagePath(openMeme)) {
-    const openIndex = memes.indexOf(openMeme);
+    const openIndex = currentGalleryOrder.indexOf(openMeme);
     if (openIndex >= 0) {
       scrollToMemeCard(openMeme);
-      openLightboxAt(openIndex, memes);
+      openLightboxAt(openIndex, currentGalleryOrder);
     }
     // Consume one-time deep link so refresh doesn't reopen repeatedly.
     params.delete('openMeme');
@@ -213,7 +788,7 @@ async function initGallery() {
   }
 
   if (params.get('randomMeme') === '1') {
-    openRandomMeme(memes, { jumpToCard: true });
+    openRandomMeme(currentGalleryOrder, { jumpToCard: true });
     // Consume one-time random trigger so refresh doesn't reopen repeatedly.
     params.delete('randomMeme');
     const nextQuery = params.toString();
@@ -305,6 +880,15 @@ async function startRotator() {
 let selected = new Set();
 let lightboxMemes = [];
 let lightboxIndex = 0;
+
+function restoreSelectionAfterRender() {
+  document.querySelectorAll('.meme-card').forEach(card => {
+    const src = card.dataset.src;
+    if (!src) return;
+    card.classList.toggle('selected', selected.has(src));
+  });
+  updateSelectedUI();
+}
 
 function setupLightbox() {
   if (document.getElementById('meme-lightbox')) return;
@@ -667,6 +1251,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const deselectBtn = document.getElementById('deselect-all-btn');
   if (deselectBtn) {
     deselectBtn.addEventListener('click', deselectAll);
+  }
+
+  const scrollBtn = document.getElementById('scroll-top-btn');
+  if (scrollBtn) {
+    window.addEventListener('scroll', throttle(() => {
+      scrollBtn.classList.toggle('visible', window.scrollY > 600);
+    }, 100));
+    scrollBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   }
 
   const selectAllBtn = document.getElementById('select-all-btn');
