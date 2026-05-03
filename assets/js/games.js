@@ -1991,6 +1991,35 @@
     return Math.max(0, Math.round(bet * mult));
   }
 
+  /**
+   * Shared payout / copy for result dock, history, and bank summary (Aura Farm).
+   * @returns {{ payout: number, net: number, dockSub: string, historyDetail: string, summaryLine: string }}
+   */
+  function crashFuqSettlementCopy(bet, mult) {
+    const payout = crashCashPayoutTokens(bet, mult);
+    const net = payout - bet;
+    const m = mult.toFixed(2);
+    const dockSub =
+      net > 0
+        ? `Farmed ${m}× aura. +${net} FUQ (paid ${payout})`
+        : net < 0
+          ? `Farmed ${m}× aura. ${net} FUQ (paid ${payout})`
+          : `Farmed ${m}× aura. break-even (${payout} FUQ)`;
+    const historyDetail =
+      net > 0
+        ? `Farmed ${m}× · +${net} FUQ (paid ${payout})`
+        : net < 0
+          ? `Farmed ${m}× · ${net} FUQ (paid ${payout})`
+          : `Farmed ${m}× · even (paid ${payout})`;
+    const summaryLine =
+      net > 0
+        ? `Cashed out at ${m}× · +${net} FUQ (paid ${payout})`
+        : net < 0
+          ? `Cashed out at ${m}× · ${net} FUQ (paid ${payout})`
+          : `Cashed out at ${m}× · break-even (${payout} FUQ)`;
+    return { payout, net, dockSub, historyDetail, summaryLine };
+  }
+
   function crashFmtAura(mult) {
     return `${mult.toFixed(2)}× aura`;
   }
@@ -2068,7 +2097,8 @@
     const check = document.getElementById('crash-summary-check');
     if (!wrap || !cashed || !check) return;
     wrap.hidden = false;
-    cashed.textContent = `Cashed out at ${bankMult.toFixed(2)}×`;
+    const { summaryLine } = crashFuqSettlementCopy(crashRuntime.bet, bankMult);
+    cashed.textContent = summaryLine;
     check.textContent = 'Aura Check: wave still running…';
     check.classList.remove('games-crash-bank-summary-line--final');
     crashReadoutsSetBankShown(true);
@@ -2081,7 +2111,8 @@
     const check = document.getElementById('crash-summary-check');
     if (!wrap || !cashed || !check) return;
     wrap.hidden = false;
-    cashed.textContent = `Cashed out at ${bankMult.toFixed(2)}×`;
+    const { summaryLine } = crashFuqSettlementCopy(crashRuntime.bet, bankMult);
+    cashed.textContent = summaryLine;
     check.textContent = `Aura Check @ ${bustAt.toFixed(2)}×`;
     check.classList.add('games-crash-bank-summary-line--final');
     crashReadoutsSetBankShown(true);
@@ -2460,6 +2491,7 @@
     crashUpdatePrimaryBtn(false);
     const bustAt = crashRuntime.crashPoint.toFixed(2);
     const stacked = crashRuntime.mult.toFixed(2);
+    let riderCelebrateAfterBank = false;
 
     if (!alreadyBanked) {
       crashBankSummaryHide();
@@ -2480,21 +2512,23 @@
       addRakebackFromLoss(-crashRuntime.bet);
       arcadeNoteRound('crash', crashRuntime.bet);
     } else {
-      const bankedStr =
-        crashRuntime.bankMult != null ? crashRuntime.bankMult.toFixed(2) : '—';
+      const betBanked = crashRuntime.bet;
       const bk = crashRuntime.bankMult != null ? crashRuntime.bankMult : 1;
+      const { net, dockSub } = crashFuqSettlementCopy(betBanked, bk);
+      riderCelebrateAfterBank = net >= 0;
+      const moodPostBank = net > 0 ? 'win' : net < 0 ? 'lose' : 'tie';
       crashBankSummaryShowFinal(bk, crashRuntime.crashPoint);
       setGameOutcome(
         'crash',
-        'win',
-        `Cashed out at ${bankedStr}× · Aura Check @ ${bustAt}×`
+        moodPostBank,
+        `${dockSub} · Aura Check @ ${bustAt}×`
       );
     }
 
     crashRuntime.bankMult = null;
     if (alreadyBanked) {
       crashRuntime.bustedAfterBank = true;
-      crashRuntime.riderCelebrate = true;
+      crashRuntime.riderCelebrate = riderCelebrateAfterBank;
     } else {
       crashRuntime.bustedAfterBank = false;
       crashRuntime.riderCelebrate = false;
@@ -2532,12 +2566,11 @@
     wireBetRadiosState('crash-bet', true);
     crashBankSummaryShowCashedOut(mult);
     crashUpdateSpectateUi();
-    const payout = crashCashPayoutTokens(bet, mult);
+    const { payout, net, dockSub, historyDetail } = crashFuqSettlementCopy(bet, mult);
     const w = loadWallet();
     w.tokens += payout;
     saveWallet(w);
     renderWallet(w);
-    const net = payout - bet;
     arcadeNoteSurgeCash(mult);
     arcadeNoteRound('crash', bet);
     bumpWeeklyFuqEarnedFromGames(net);
@@ -2556,24 +2589,12 @@
     applyArcadeWinStreak('crash', mood === 'tie' ? 'tie' : mood);
     pushHistory(
       'crash',
-      net > 0
-        ? `Farmed ${mult.toFixed(2)}× · +${net} FUQ (paid ${payout})`
-        : net < 0
-          ? `Farmed ${mult.toFixed(2)}× · ${net} FUQ (paid ${payout})`
-          : `Farmed ${mult.toFixed(2)}× · even (paid ${payout})`,
+      historyDetail,
       net,
       w.tokens,
       { crash_peak_mult: crashPeakForCloud(mult), wager_amount: bet }
     );
-    setGameOutcome(
-      'crash',
-      mood,
-      net > 0
-        ? `Farmed ${mult.toFixed(2)}× aura. +${net} FUQ (paid ${payout})`
-        : net < 0
-          ? `Farmed ${mult.toFixed(2)}× aura. ${net} FUQ (paid ${payout})`
-          : `Farmed ${mult.toFixed(2)}× aura. break-even (${payout} FUQ)`
-    );
+    setGameOutcome('crash', mood, dockSub);
     crashRuntime.riderCelebrate = net >= 0;
     crashChartRender();
   }
