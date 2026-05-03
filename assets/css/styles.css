@@ -3471,6 +3471,18 @@ h1 {
   text-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
 }
 
+/** Lifetime row is informational, not actionable — keep it muted even when the
+ *  panel lights up for a claimable pool, so the cyan glow stays a CTA cue. */
+.games-rakeback-row--life {
+  margin-top: 0.15rem;
+  opacity: 0.78;
+}
+
+.games-rakeback-stage--active .games-rakeback-row--life .games-rakeback-val {
+  color: #9ca3b7;
+  text-shadow: none;
+}
+
 .games-rakeback-sub {
   font-size: 0.74rem;
 }
