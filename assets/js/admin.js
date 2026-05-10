@@ -72,6 +72,21 @@
     await Promise.all([loadLiveStatus(), loadUsers()]);
   }
 
+  // ── OAuth (preferred — bypasses the captcha flow that's been flaky) ──────
+  async function signInWithProvider(provider) {
+    const errEl = $id('login-error');
+    errEl.textContent = '';
+    const { error } = await getClient().auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.href }
+    });
+    // signInWithOAuth navigates away on success; only get here on error.
+    if (error) errEl.textContent = error.message;
+  }
+
+  $id('login-google-btn').addEventListener('click', () => signInWithProvider('google'));
+  $id('login-discord-btn').addEventListener('click', () => signInWithProvider('discord'));
+
   let pendingEmail = '';
 
   $id('login-step1').addEventListener('submit', async (e) => {

@@ -446,6 +446,16 @@
 <div id="admin-login">
   <h1>FUQMEA</h1>
   <div class="login-card">
+    <!-- OAuth (recommended path — no captcha needed) -->
+    <button type="button" class="btn" id="login-google-btn" style="width:100%">CONTINUE WITH GOOGLE</button>
+    <button type="button" class="btn" id="login-discord-btn" style="width:100%">CONTINUE WITH DISCORD</button>
+
+    <div style="display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11px;margin:4px 0">
+      <span style="flex:1;height:1px;background:var(--border)"></span>
+      <span>or email code</span>
+      <span style="flex:1;height:1px;background:var(--border)"></span>
+    </div>
+
     <!-- Step 1: email -->
     <form id="login-step1" autocomplete="on">
       <div class="form-group" style="margin-bottom:20px">
