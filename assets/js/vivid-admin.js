@@ -162,6 +162,16 @@
     $id('va-login-error').textContent = '';
   });
 
+  const emailToggle = $id('va-email-toggle');
+  const emailSection = $id('va-email-section');
+  if (emailToggle && emailSection) {
+    emailToggle.addEventListener('click', () => {
+      const open = !emailSection.hidden;
+      emailSection.hidden = open;
+      emailToggle.setAttribute('aria-expanded', String(!open));
+    });
+  }
+
   async function vaLogout() { await getClient().auth.signOut(); }
   $id('va-logout-btn').addEventListener('click', vaLogout);
   const deniedLogout = $id('va-denied-logout');
