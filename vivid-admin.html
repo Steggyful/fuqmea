@@ -306,6 +306,107 @@
       min-width: 42px; text-align: right;
       font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);
     }
+
+    /* ── Rich-text tagline editor ─────────────────────────── */
+    .rt-editor-wrap {
+      display: flex; flex-direction: column;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .rt-editor-wrap:focus-within {
+      border-color: var(--lime);
+      box-shadow: 0 0 0 3px rgba(57, 255, 20, 0.12);
+    }
+    .rt-toolbar {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      padding: 6px 8px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .rt-btn {
+      background: var(--surface-3);
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      color: var(--text);
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      padding: 5px 10px;
+      transition: background var(--transition), color var(--transition), border-color var(--transition);
+    }
+    .rt-btn:hover { background: var(--lime); color: #001100; border-color: var(--lime); }
+    .rt-hint {
+      margin-left: auto;
+      font-size: 10.5px;
+      color: var(--muted-2);
+      font-style: italic;
+    }
+    .rt-editor {
+      padding: 10px 12px;
+      min-height: 40px;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+      word-break: break-word;
+      cursor: text;
+    }
+    .rt-editor a {
+      color: var(--lime);
+      text-decoration: underline;
+      font-weight: 600;
+    }
+    .rt-editor:empty::before {
+      content: attr(data-placeholder);
+      color: var(--muted-2);
+      pointer-events: none;
+    }
+
+    /* ── Mobile (≤720px) ──────────────────────────────────── */
+    @media (max-width: 720px) {
+      body { font-size: 13.5px; }
+
+      .va-topbar { padding: 10px 14px; }
+      .va-topbar h1 { font-size: 0.7rem; letter-spacing: 2px; }
+      #va-user-label { display: none; }
+      .topbar-right { gap: 8px; }
+      .btn-sm { font-size: 10.5px; padding: 5px 9px; }
+
+      .va-main { padding: 14px; gap: 14px; }
+      .va-card-header { padding: 12px 14px; }
+      .va-card-header h2 { font-size: 0.85rem; }
+      .va-card-body { padding: 14px; }
+
+      .live-toggle-item { padding: 12px 14px; gap: 10px; }
+      .live-toggle-name { font-size: 0.9rem; }
+
+      .fifi-editor { gap: 18px; }
+      .fifi-preview-frame-wrap { aspect-ratio: 3 / 4; max-height: 60vh; }
+
+      .fifi-input-row { flex-direction: column; gap: 6px; }
+      .fifi-input-row .fifi-upload-btn { padding: 10px 14px; }
+
+      .fifi-audio-row { flex-wrap: wrap; }
+      .fifi-audio-row audio { max-width: 100%; width: 100%; }
+
+      .fifi-save-row { flex-direction: column; align-items: stretch; gap: 10px; }
+      .fifi-save-row .btn { width: 100%; padding: 12px; font-size: 14px; }
+      #va-fifi-status { text-align: center; }
+
+      .rt-hint { width: 100%; margin-left: 0; padding-top: 2px; text-align: right; }
+    }
+    @media (max-width: 380px) {
+      .va-topbar h1 { font-size: 0.6rem; letter-spacing: 1.5px; }
+      .va-main { padding: 10px; }
+      .va-card-body { padding: 12px; }
+      .fifi-editor { gap: 14px; }
+      .fifi-preview-frame-wrap { max-height: 55vh; }
+    }
     .char-count {
       font-size: 11px; color: var(--muted-2);
       text-align: right; margin-top: 4px; font-family: var(--font-mono);
@@ -489,17 +590,23 @@
             <div class="fifi-divider"></div>
 
             <div class="form-group">
-              <label for="fifi-tagline-text">Top Text</label>
-              <input type="text" id="fifi-tagline-text" placeholder="e.g. @SSGVivid on TikTok" maxlength="120" autocomplete="off">
-              <span class="char-count" id="fifi-tag-chars">0 / 120</span>
-            </div>
-
-            <div class="form-group">
-              <label for="fifi-tagline-url">
-                Link URL
-                <span style="color:var(--muted);font-weight:normal;font-size:11px;margin-left:6px">(optional — leave blank for plain text)</span>
-              </label>
-              <input type="text" id="fifi-tagline-url" placeholder="https://www.tiktok.com/@SSGVivid" autocomplete="off">
+              <label>Top Text</label>
+              <div class="rt-editor-wrap">
+                <div class="rt-toolbar" role="toolbar" aria-label="Text formatting">
+                  <button type="button" class="rt-btn" id="fifi-rt-link" title="Wrap selected text in a link">🔗 LINK</button>
+                  <button type="button" class="rt-btn" id="fifi-rt-unlink" title="Remove link at cursor">⌫ UNLINK</button>
+                  <span class="rt-hint">Select text, then click LINK</span>
+                </div>
+                <div id="fifi-tagline-rt"
+                     class="rt-editor"
+                     contenteditable="true"
+                     role="textbox"
+                     spellcheck="false"
+                     aria-multiline="false"
+                     aria-label="Top text editor"
+                     data-placeholder="e.g. Follow @SSGVivid on TikTok for daily FiFi"></div>
+              </div>
+              <span class="char-count" id="fifi-tag-chars">0 / 500</span>
             </div>
 
             <div class="fifi-divider"></div>
@@ -543,6 +650,6 @@
 <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 <script src="assets/js/vendor/supabase.umd.min.js"></script>
 <script src="assets/js/cloud-config.js"></script>
-<script src="assets/js/vivid-admin.js?v=1.4.0"></script>
+<script src="assets/js/vivid-admin.js?v=1.5.0"></script>
 </body>
 </html>

@@ -249,15 +249,17 @@
 
     fifiState.image_url    = data.image_url    || '';
     fifiState.caption      = data.caption      || '';
-    fifiState.tagline_text = data.tagline_text || '';
-    fifiState.tagline_url  = data.tagline_url  || '';
+    fifiState.tagline_url  = data.tagline_url  || ''; // legacy; not edited going forward
     fifiState.song_url     = data.song_url     || '';
     fifiState.song_volume  = (typeof data.song_volume === 'number') ? data.song_volume : 0.7;
 
     $id('fifi-img-url').value       = fifiState.image_url;
     $id('fifi-caption-input').value = fifiState.caption;
-    $id('fifi-tagline-text').value  = fifiState.tagline_text;
-    $id('fifi-tagline-url').value   = fifiState.tagline_url;
+
+    // Tagline: load HTML if present, otherwise upgrade legacy plain-text + url
+    // into a single anchor so the editor shows it as a link the user can edit.
+    setTaglineEditor(data.tagline_text || '', fifiState.tagline_url);
+    fifiState.tagline_text = sanitiseTaglineHTML($id('fifi-tagline-rt').innerHTML);
 
     setSongUI(fifiState.song_url);
     setVolumeUI(fifiState.song_volume);
@@ -268,7 +270,8 @@
   function updateCharCounts() {
     const imgLen = ($id('fifi-img-url').value     || '').length;
     const capLen = ($id('fifi-caption-input').value || '').length;
-    const tagLen = ($id('fifi-tagline-text').value || '').length;
+    // Count the sanitised payload so the meter reflects what actually gets saved.
+    const tagLen = (fifiState.tagline_text || '').length;
 
     const imgEl = $id('fifi-img-chars');
     imgEl.textContent = `${imgLen} / 500`;
@@ -279,9 +282,154 @@
     capEl.className = 'char-count' + (capLen > 170 ? ' warn' : '');
 
     const tagEl = $id('fifi-tag-chars');
-    tagEl.textContent = `${tagLen} / 120`;
-    tagEl.className = 'char-count' + (tagLen > 100 ? ' warn' : '');
+    tagEl.textContent = `${tagLen} / 500`;
+    tagEl.className = 'char-count' + (tagLen > 450 ? ' warn' : '');
   }
+
+  // ── Rich-text tagline ────────────────────────────────────────────────
+  // Strict allowlist: only <a href="https?://..."> survives sanitisation.
+  // Server enforces length only; HTML soundness is the client's job.
+
+  function sanitiseTaglineHTML(html) {
+    if (!html) return '';
+    const tpl = document.createElement('template');
+    tpl.innerHTML = String(html);
+    walk(tpl.content);
+    function walk(node) {
+      const children = Array.from(node.childNodes);
+      for (const child of children) {
+        if (child.nodeType === Node.TEXT_NODE) continue;
+        if (child.nodeType !== Node.ELEMENT_NODE) {
+          node.removeChild(child);
+          continue;
+        }
+        const tag = child.tagName.toLowerCase();
+        if (tag === 'a') {
+          const href = child.getAttribute('href') || '';
+          if (!/^https?:\/\//i.test(href)) {
+            node.replaceChild(document.createTextNode(child.textContent || ''), child);
+            continue;
+          }
+          const safe = document.createElement('a');
+          safe.setAttribute('href', href);
+          safe.setAttribute('target', '_blank');
+          safe.setAttribute('rel', 'noopener noreferrer');
+          safe.textContent = child.textContent || '';
+          node.replaceChild(safe, child);
+        } else if (tag === 'br') {
+          // Single-line: drop line breaks entirely.
+          node.removeChild(child);
+        } else {
+          node.replaceChild(document.createTextNode(child.textContent || ''), child);
+        }
+      }
+    }
+    return tpl.innerHTML;
+  }
+
+  function setTaglineEditor(textOrHtml, legacyUrl) {
+    const editor = $id('fifi-tagline-rt');
+    if (!editor) return;
+    if (!textOrHtml) { editor.innerHTML = ''; return; }
+    if (/<a[\s>]/i.test(textOrHtml)) {
+      editor.innerHTML = sanitiseTaglineHTML(textOrHtml);
+    } else if (legacyUrl) {
+      // One-time auto-upgrade: wrap the whole legacy string in an anchor.
+      const a = document.createElement('a');
+      a.setAttribute('href', legacyUrl);
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener noreferrer');
+      a.textContent = textOrHtml;
+      editor.innerHTML = '';
+      editor.appendChild(a);
+    } else {
+      editor.textContent = textOrHtml;
+    }
+  }
+
+  // Track the latest selection inside the editor so the toolbar buttons
+  // operate on it even after the click has moved focus to the button.
+  let savedRange = null;
+  function maybeSaveSelection() {
+    const editor = $id('fifi-tagline-rt');
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
+      savedRange = sel.getRangeAt(0).cloneRange();
+    }
+  }
+  function restoreSelection() {
+    if (!savedRange) return false;
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(savedRange);
+    return true;
+  }
+
+  function bindRichText() {
+    const editor   = $id('fifi-tagline-rt');
+    const linkBtn  = $id('fifi-rt-link');
+    const unlinkBtn = $id('fifi-rt-unlink');
+    if (!editor) return;
+
+    // Single-line: kill Enter / Shift+Enter (don't insert <br>).
+    editor.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') e.preventDefault();
+    });
+
+    // Always paste plain text — no styled HTML from the clipboard.
+    editor.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      if (text) document.execCommand('insertText', false, text);
+    });
+
+    // Push state to preview as the user types/links.
+    editor.addEventListener('input', () => {
+      fifiState.tagline_text = sanitiseTaglineHTML(editor.innerHTML);
+      updateCharCounts();
+      pushPreview();
+    });
+
+    ['mouseup', 'keyup', 'touchend'].forEach((ev) => {
+      editor.addEventListener(ev, maybeSaveSelection);
+    });
+
+    linkBtn.addEventListener('mousedown', (e) => { e.preventDefault(); /* keep selection */ });
+    linkBtn.addEventListener('click', () => {
+      restoreSelection();
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount || !sel.toString().trim()) {
+        showFlash('Select some text inside the editor first, then click LINK.', true);
+        return;
+      }
+      const url = window.prompt('Link URL (https://...)', 'https://');
+      if (!url) return;
+      const trimmed = url.trim();
+      if (!/^https?:\/\//i.test(trimmed)) {
+        showFlash('URL must start with http:// or https://', true);
+        return;
+      }
+      document.execCommand('createLink', false, trimmed);
+      // execCommand doesn't set target/rel — patch the anchor it just made.
+      editor.querySelectorAll('a').forEach((a) => {
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+      });
+      fifiState.tagline_text = sanitiseTaglineHTML(editor.innerHTML);
+      updateCharCounts();
+      pushPreview();
+    });
+
+    unlinkBtn.addEventListener('mousedown', (e) => { e.preventDefault(); });
+    unlinkBtn.addEventListener('click', () => {
+      restoreSelection();
+      document.execCommand('unlink', false);
+      fifiState.tagline_text = sanitiseTaglineHTML(editor.innerHTML);
+      updateCharCounts();
+      pushPreview();
+    });
+  }
+  bindRichText();
 
   // ── Iframe preview ─────────────────────────────────────────────────────
   // The iframe loads fifi.html?preview=1, which signals 'fifi-preview-ready'
@@ -323,17 +471,7 @@
     updateCharCounts();
     pushPreview();
   });
-
-  $id('fifi-tagline-text').addEventListener('input', () => {
-    fifiState.tagline_text = $id('fifi-tagline-text').value;
-    updateCharCounts();
-    pushPreview();
-  });
-
-  $id('fifi-tagline-url').addEventListener('input', () => {
-    fifiState.tagline_url = $id('fifi-tagline-url').value.trim();
-    pushPreview();
-  });
+  // Tagline updates are handled inside bindRichText() (contenteditable input).
 
   // ── Volume ────────────────────────────────────────────────────────────
 
@@ -466,8 +604,7 @@
     // Pull the latest field values before saving.
     const imgUrl       = $id('fifi-img-url').value.trim();
     const caption      = $id('fifi-caption-input').value.trim();
-    const taglineText  = $id('fifi-tagline-text').value.trim();
-    const taglineUrl   = $id('fifi-tagline-url').value.trim();
+    const taglineText  = sanitiseTaglineHTML($id('fifi-tagline-rt').innerHTML).trim();
     const songUrl      = fifiState.song_url;     // '' means clear
     const songVolume   = fifiState.song_volume;
 
@@ -480,7 +617,9 @@
         p_image_url:    imgUrl      || null,
         p_caption:      caption     || null,
         p_tagline_text: taglineText || null,
-        p_tagline_url:  taglineUrl  || null,
+        // tagline_url is legacy: rich-text content lives inside p_tagline_text now.
+        // Pass null to leave whatever's already in the column untouched.
+        p_tagline_url:  null,
         // song_url uses '' as a sentinel for "clear", null for "leave alone".
         p_song_url:     songUrl,
         p_song_volume:  songVolume,
@@ -514,17 +653,17 @@
       const s = data[0];
       fifiState.image_url    = s.image_url    || '';
       fifiState.caption      = s.caption      || '';
-      fifiState.tagline_text = s.tagline_text || '';
       fifiState.tagline_url  = s.tagline_url  || '';
       fifiState.song_url     = s.song_url     || '';
       fifiState.song_volume  = (typeof s.song_volume === 'number') ? s.song_volume : 0.7;
 
       $id('fifi-img-url').value       = fifiState.image_url;
       $id('fifi-caption-input').value = fifiState.caption;
-      $id('fifi-tagline-text').value  = fifiState.tagline_text;
-      $id('fifi-tagline-url').value   = fifiState.tagline_url;
+      setTaglineEditor(s.tagline_text || '', fifiState.tagline_url);
+      fifiState.tagline_text = sanitiseTaglineHTML($id('fifi-tagline-rt').innerHTML);
       setSongUI(fifiState.song_url);
       setVolumeUI(fifiState.song_volume);
+      updateCharCounts();
       pushPreview();
     }
   });

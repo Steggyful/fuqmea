@@ -21,6 +21,43 @@
     });
   }
 
+  // Strict tagline sanitiser: keeps only text + <a href="https?://..."> with
+  // target="_blank" rel="noopener noreferrer". Everything else becomes text.
+  // Also forces .social-link styling on every anchor so legacy + new content
+  // look identical on the public page.
+  function sanitiseTaglineHTML(html) {
+    if (!html) return '';
+    var tpl = document.createElement('template');
+    tpl.innerHTML = String(html);
+    function walk(node) {
+      var children = Array.prototype.slice.call(node.childNodes);
+      for (var i = 0; i < children.length; i++) {
+        var child = children[i];
+        if (child.nodeType === 3) continue; // text — keep
+        if (child.nodeType !== 1) { node.removeChild(child); continue; }
+        var tag = child.tagName.toLowerCase();
+        if (tag === 'a') {
+          var href = child.getAttribute('href') || '';
+          if (!/^https?:\/\//i.test(href)) {
+            node.replaceChild(document.createTextNode(child.textContent || ''), child);
+            continue;
+          }
+          var safe = document.createElement('a');
+          safe.setAttribute('href', href);
+          safe.setAttribute('target', '_blank');
+          safe.setAttribute('rel', 'noopener noreferrer');
+          safe.setAttribute('class', 'social-link');
+          safe.textContent = child.textContent || '';
+          node.replaceChild(safe, child);
+        } else {
+          node.replaceChild(document.createTextNode(child.textContent || ''), child);
+        }
+      }
+    }
+    walk(tpl.content);
+    return tpl.innerHTML;
+  }
+
   function applyImage(url) {
     var img = document.getElementById('fifi-featured-img');
     if (img && url) img.src = url;
@@ -33,6 +70,13 @@
     var tagEl = document.getElementById('fifi-tagline');
     if (!tagEl) return;
     if (!text) { tagEl.textContent = ''; return; }
+
+    // Detect rich-text payload: contains an <a tag → treat as HTML.
+    if (/<a[\s>]/i.test(text)) {
+      tagEl.innerHTML = sanitiseTaglineHTML(text);
+      return;
+    }
+    // Legacy: plain text + optional whole-string link URL.
     if (url) {
       tagEl.innerHTML =
         '<a href="' + escapeHTML(url) +
@@ -143,8 +187,8 @@
   function applySettings(s) {
     if (!s) return;
     if (s.image_url) applyImage(s.image_url);
-    if (s.caption) applyCaption(s.caption);
-    if (s.tagline_text) applyTagline(s.tagline_text, s.tagline_url || '');
+    if ('caption' in s) applyCaption(s.caption);
+    if ('tagline_text' in s) applyTagline(s.tagline_text || '', s.tagline_url || '');
     if ('song_url' in s || 'song_volume' in s) {
       applySong(s.song_url || '', typeof s.song_volume === 'number' ? s.song_volume : currentVolume);
     }
