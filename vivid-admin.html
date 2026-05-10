@@ -16,143 +16,288 @@
 
     :root {
       --lime: #39ff14;
+      --lime-soft: rgba(57, 255, 20, 0.10);
       --red: #ff1744;
+      --red-soft: rgba(255, 23, 68, 0.12);
       --yellow: #ffd600;
-      --bg: #0e0e0e;
-      --surface: #1a1a1a;
-      --border: #2a2a2a;
-      --text: #e8e8e8;
-      --muted: #888;
-      --font: 'Courier New', Courier, monospace;
+      --yellow-soft: rgba(255, 214, 0, 0.12);
+      --bg: #0a0a0b;
+      --surface: #131316;
+      --surface-2: #1a1a1f;
+      --surface-3: #22232a;
+      --border: rgba(255, 255, 255, 0.07);
+      --border-strong: rgba(255, 255, 255, 0.14);
+      --text: #f1f1f3;
+      --muted: #8a8a92;
+      --muted-2: #5e5e66;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+      --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.35);
+      --radius-sm: 6px;
+      --radius: 10px;
+      --radius-lg: 14px;
+      --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; min-height: 100vh; }
+    html, body { height: 100%; }
+    body {
+      background:
+        radial-gradient(1200px 600px at 80% -10%, rgba(57, 255, 20, 0.06), transparent 60%),
+        radial-gradient(800px 400px at -10% 110%, rgba(255, 23, 68, 0.05), transparent 60%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-    /* ── Login ── */
+    /* ── Login ─────────────────────────────────────────────── */
     #va-login {
       display: flex; flex-direction: column; align-items: center;
-      justify-content: center; min-height: 100vh; gap: 24px; padding: 24px;
+      justify-content: center; min-height: 100vh; gap: 28px; padding: 24px;
     }
-    #va-login h1 { font-size: 2rem; color: var(--lime); letter-spacing: 4px; text-shadow: 0 0 20px var(--lime); }
+    #va-login h1 {
+      font-family: var(--font-mono);
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--lime);
+      letter-spacing: 6px;
+      text-shadow: 0 0 32px rgba(57, 255, 20, 0.5);
+    }
 
     .login-card {
-      background: var(--surface); border: 2px solid var(--border); border-radius: 8px;
-      padding: 32px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 16px;
+      background: linear-gradient(180deg, var(--surface), var(--surface-2));
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px; width: 100%; max-width: 380px;
+      display: flex; flex-direction: column; gap: 14px;
+      box-shadow: var(--shadow-lg);
     }
+
     .form-group { display: flex; flex-direction: column; gap: 6px; }
-    .form-group label { font-size: 0.75rem; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
-    .form-group input, .form-group textarea {
-      background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
-      color: var(--text); font-family: var(--font); font-size: 14px; padding: 10px 12px;
-      transition: border-color 0.2s; resize: vertical;
+    .form-group label {
+      font-size: 11px; color: var(--muted); letter-spacing: 0.5px;
+      text-transform: uppercase; font-weight: 600;
     }
-    .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--lime); }
+    .form-group input, .form-group textarea {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); color: var(--text);
+      font-family: var(--font-sans); font-size: 14px; padding: 10px 12px;
+      transition: border-color var(--transition), box-shadow var(--transition);
+      resize: vertical;
+    }
+    .form-group input:focus, .form-group textarea:focus {
+      outline: none; border-color: var(--lime);
+      box-shadow: 0 0 0 3px rgba(57, 255, 20, 0.12);
+    }
     #va-login-error { color: var(--red); font-size: 12px; min-height: 18px; text-align: center; }
 
-    /* ── Buttons ── */
+    /* ── Buttons ───────────────────────────────────────────── */
     .btn {
-      background: transparent; border: 2px solid var(--lime); border-radius: 4px;
-      color: var(--lime); cursor: pointer; font-family: var(--font); font-size: 14px;
-      font-weight: bold; letter-spacing: 1px; padding: 10px 20px; transition: all 0.2s;
+      background: var(--surface-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      padding: 9px 16px;
+      transition: background var(--transition), border-color var(--transition), color var(--transition), transform var(--transition);
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      white-space: nowrap;
     }
-    .btn:hover { background: var(--lime); color: #000; }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-red { border-color: var(--red); color: var(--red); }
-    .btn-red:hover { background: var(--red); color: #fff; }
-    .btn-sm { font-size: 12px; padding: 5px 10px; border-width: 1px; }
+    .btn:hover { background: var(--surface-3); }
+    .btn:active { transform: translateY(1px); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    /* Primary actions in lime */
+    #va-send-btn, #va-verify-btn, #fifi-save-btn {
+      background: var(--lime-soft);
+      border-color: rgba(57, 255, 20, 0.35);
+      color: var(--lime);
+    }
+    #va-send-btn:hover, #va-verify-btn:hover, #fifi-save-btn:hover {
+      background: var(--lime); color: #001100; border-color: var(--lime);
+      box-shadow: 0 4px 16px rgba(57, 255, 20, 0.25);
+    }
+
+    .btn-red {
+      background: var(--red-soft);
+      border-color: rgba(255, 23, 68, 0.35);
+      color: var(--red);
+    }
+    .btn-red:hover { background: var(--red); color: #fff; border-color: var(--red); box-shadow: 0 4px 16px rgba(255, 23, 68, 0.25); }
+    .btn-sm { font-size: 11px; padding: 5px 10px; }
     .btn-full { width: 100%; }
 
-    /* ── Panel ── */
+    /* ── Panel ─────────────────────────────────────────────── */
     #va-panel { display: flex; flex-direction: column; min-height: 100vh; }
     #va-panel[hidden] { display: none; }
-    #va-denied { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; }
-    #va-denied h2 { color: var(--red); letter-spacing: 3px; }
-    #va-denied p { color: var(--muted); font-size: 12px; }
+    #va-denied {
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 100vh; gap: 14px; text-align: center; padding: 24px;
+    }
+    #va-denied h2 { color: var(--red); letter-spacing: 4px; font-family: var(--font-mono); font-size: 1.4rem; }
+    #va-denied p { color: var(--muted); font-size: 13px; }
 
     .va-topbar {
-      background: var(--surface); border-bottom: 1px solid var(--border);
+      background: rgba(19, 19, 22, 0.85);
+      backdrop-filter: saturate(140%) blur(12px);
+      -webkit-backdrop-filter: saturate(140%) blur(12px);
+      border-bottom: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 24px; position: sticky; top: 0; z-index: 10;
+      padding: 14px 28px; position: sticky; top: 0; z-index: 10;
     }
-    .va-topbar h1 { color: var(--lime); font-size: 1rem; letter-spacing: 3px; text-shadow: 0 0 10px rgba(57,255,20,0.6); }
-    .topbar-right { display: flex; align-items: center; gap: 16px; }
-    #va-user-label { color: var(--muted); font-size: 12px; }
+    .va-topbar h1 {
+      font-family: var(--font-mono);
+      color: var(--lime);
+      font-size: 0.85rem;
+      letter-spacing: 4px;
+      font-weight: 700;
+      text-shadow: 0 0 16px rgba(57, 255, 20, 0.4);
+    }
+    .topbar-right { display: flex; align-items: center; gap: 14px; }
+    #va-user-label { color: var(--muted); font-size: 12px; font-family: var(--font-mono); }
 
     .va-main {
-      padding: 24px; display: flex; flex-direction: column; gap: 32px;
-      max-width: 860px; width: 100%; margin: 0 auto;
+      padding: 28px; display: flex; flex-direction: column; gap: 24px;
+      max-width: 920px; width: 100%; margin: 0 auto;
     }
 
-    /* ── Cards ── */
-    .va-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-    .va-card-header { border-bottom: 1px solid var(--border); padding: 14px 20px; }
-    .va-card-header h2 { color: var(--lime); font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; }
-    .va-card-body { padding: 20px; }
+    /* ── Cards ─────────────────────────────────────────────── */
+    .va-card {
+      background: linear-gradient(180deg, var(--surface), var(--surface-2));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+    .va-card-header {
+      border-bottom: 1px solid var(--border);
+      padding: 18px 22px;
+    }
+    .va-card-header h2 {
+      color: var(--text); font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em;
+    }
+    .va-card-body { padding: 22px; }
 
-    /* ── Live toggle ── */
+    /* ── Live toggle ───────────────────────────────────────── */
     .live-toggle-item {
       display: flex; align-items: center; gap: 14px;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: 6px; padding: 16px 20px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 16px 18px;
+      transition: border-color var(--transition), background var(--transition);
     }
-    .live-toggle-item.is-live { border-color: var(--red); box-shadow: 0 0 12px rgba(255,23,68,0.3); }
-    .live-badge { border-radius: 999px; font-size: 10px; font-weight: bold; letter-spacing: 1px; padding: 3px 8px; text-transform: uppercase; }
-    .live-badge.on { background: var(--red); color: #fff; }
-    .live-badge.off { background: var(--border); color: var(--muted); }
-    .live-toggle-name { flex: 1; font-weight: bold; font-size: 1rem; }
+    .live-toggle-item:hover { border-color: var(--border-strong); }
+    .live-toggle-item.is-live {
+      border-color: rgba(255, 23, 68, 0.45);
+      background: linear-gradient(180deg, rgba(255, 23, 68, 0.06), transparent);
+    }
+    .live-badge {
+      border-radius: 999px; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.5px; padding: 3px 9px; text-transform: uppercase;
+      font-family: var(--font-mono);
+    }
+    .live-badge.on {
+      background: var(--red); color: #fff;
+      box-shadow: 0 0 14px rgba(255, 23, 68, 0.45);
+      animation: va-pulse 2s ease-in-out infinite;
+    }
+    @keyframes va-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.78; } }
+    .live-badge.off { background: var(--surface-3); color: var(--muted); }
+    .live-toggle-name { flex: 1; font-weight: 600; font-size: 0.95rem; }
 
-    /* ── FiFi editor ── */
+    /* ── FiFi editor ───────────────────────────────────────── */
     .fifi-editor {
       display: grid;
-      grid-template-columns: 220px 1fr;
-      gap: 24px;
+      grid-template-columns: 240px 1fr;
+      gap: 28px;
       align-items: start;
     }
-    @media (max-width: 600px) { .fifi-editor { grid-template-columns: 1fr; } }
+    @media (max-width: 640px) { .fifi-editor { grid-template-columns: 1fr; } }
 
-    .fifi-preview-wrap {
-      display: flex; flex-direction: column; gap: 10px;
+    .fifi-preview-wrap { display: flex; flex-direction: column; gap: 10px; }
+    .fifi-preview-label {
+      font-size: 10.5px; color: var(--muted);
+      letter-spacing: 0.6px; text-transform: uppercase; font-weight: 600;
     }
-    .fifi-preview-label { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
     #fifi-preview-img {
       width: 100%; aspect-ratio: 3/4; object-fit: cover;
-      border: 3px solid var(--border); border-radius: 6px;
+      border: 2px solid var(--border); border-radius: var(--radius-sm);
       background: var(--bg);
-      transition: border-color 0.3s;
+      transition: border-color var(--transition), box-shadow var(--transition);
     }
-    #fifi-preview-img.preview-ok { border-color: var(--lime); }
-    #fifi-preview-img.preview-err { border-color: var(--red); }
+    #fifi-preview-img.preview-ok {
+      border-color: var(--lime);
+      box-shadow: 0 0 24px rgba(57, 255, 20, 0.18);
+    }
+    #fifi-preview-img.preview-err {
+      border-color: var(--red);
+      box-shadow: 0 0 24px rgba(255, 23, 68, 0.18);
+    }
     .fifi-preview-tagline {
       font-size: 12px; text-align: center; padding: 2px 0; min-height: 20px;
     }
     .fifi-preview-tagline .social-link {
-      color: var(--lime); text-decoration: underline; font-weight: bold; font-size: 12px;
+      color: var(--lime); text-decoration: underline; font-weight: 600; font-size: 12px;
     }
     .fifi-preview-tagline.plain-text { color: var(--text); }
-
     .fifi-preview-caption {
       font-size: 12px; color: var(--muted); text-align: center;
-      padding: 4px 0; min-height: 20px; font-style: italic;
+      padding: 4px 0; min-height: 20px;
     }
 
-    .fifi-form { display: flex; flex-direction: column; gap: 18px; }
-    .char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
+    .fifi-form { display: flex; flex-direction: column; gap: 16px; }
+    .char-count {
+      font-size: 11px; color: var(--muted-2);
+      text-align: right; margin-top: 4px; font-family: var(--font-mono);
+    }
     .char-count.warn { color: var(--yellow); }
-    .fifi-save-row { display: flex; align-items: center; gap: 12px; }
-    #va-fifi-status { font-size: 12px; min-height: 18px; }
+    .fifi-divider { height: 1px; background: var(--border); margin: 4px 0; }
+    .fifi-save-row {
+      display: flex; align-items: center; gap: 14px; margin-top: 4px;
+    }
+    #va-fifi-status { font-size: 12.5px; min-height: 18px; font-weight: 500; }
     #va-fifi-status.ok { color: var(--lime); }
     #va-fifi-status.err { color: var(--red); }
 
-    /* ── Status flash ── */
+    /* ── Status flash ──────────────────────────────────────── */
     #va-status-bar {
-      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-      background: var(--surface); border: 1px solid var(--lime); border-radius: 4px;
-      color: var(--lime); font-size: 12px; padding: 8px 20px;
-      box-shadow: 0 0 16px rgba(57,255,20,0.4); z-index: 200;
-      opacity: 0; transition: opacity 0.3s; pointer-events: none;
+      position: fixed; bottom: 24px; left: 50%; transform: translate(-50%, 8px);
+      background: var(--surface); border: 1px solid rgba(57, 255, 20, 0.35);
+      border-radius: 999px; color: var(--lime); font-size: 12.5px;
+      font-weight: 500; padding: 10px 22px;
+      box-shadow: var(--shadow-lg), 0 0 32px rgba(57, 255, 20, 0.15);
+      z-index: 200; opacity: 0;
+      transition: opacity 220ms, transform 220ms;
+      pointer-events: none;
     }
-    #va-status-bar.show { opacity: 1; }
-    #va-status-bar.err { border-color: var(--red); color: var(--red); box-shadow: 0 0 16px rgba(255,23,68,0.4); }
+    #va-status-bar.show { opacity: 1; transform: translate(-50%, 0); }
+    #va-status-bar.err {
+      border-color: rgba(255, 23, 68, 0.35); color: var(--red);
+      box-shadow: var(--shadow-lg), 0 0 32px rgba(255, 23, 68, 0.18);
+    }
+
+    /* Text-only ghost button (e.g. "use a different email") */
+    .va-text-btn {
+      width: 100%; margin-top: 8px;
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-family: var(--font-sans); font-size: 12px;
+      transition: color var(--transition);
+    }
+    .va-text-btn:hover { color: var(--text); }
+
+    /* Pretty scrollbars on the form */
+    body::-webkit-scrollbar { width: 10px; }
+    body::-webkit-scrollbar-track { background: transparent; }
+    body::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 999px; }
+    body::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
   </style>
 </head>
 <body>
@@ -181,7 +326,7 @@
                placeholder="000000" autocomplete="one-time-code" style="letter-spacing:6px;font-size:1.4rem;text-align:center">
       </div>
       <button type="submit" class="btn btn-full" id="va-verify-btn">VERIFY</button>
-      <button type="button" id="va-back-btn" style="width:100%;margin-top:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-family:var(--font);font-size:12px">
+      <button type="button" id="va-back-btn" class="va-text-btn">
         ← use a different email
       </button>
     </form>
@@ -193,7 +338,7 @@
 <div id="va-denied">
   <h2>ACCESS DENIED</h2>
   <p>This account doesn't have access to this panel.</p>
-  <button class="btn btn-red" onclick="window._vaLogout()">SIGN OUT</button>
+  <button class="btn btn-red" id="va-denied-logout">SIGN OUT</button>
 </div>
 
 <!-- Admin panel -->
@@ -246,7 +391,7 @@
               <textarea id="fifi-caption-input" rows="2" placeholder="e.g. When she finds your FiFi" maxlength="200"></textarea>
               <span class="char-count" id="fifi-cap-chars">0 / 200</span>
             </div>
-            <div style="height:1px;background:var(--border);margin:4px 0"></div>
+            <div class="fifi-divider"></div>
             <div class="form-group">
               <label for="fifi-tagline-text">Top Text</label>
               <input type="text" id="fifi-tagline-text" placeholder="e.g. @SSGVivid on TikTok" maxlength="120" autocomplete="off">
