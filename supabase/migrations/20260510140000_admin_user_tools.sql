@@ -76,6 +76,8 @@ as $$
 $$;
 
 -- ── Updated admin_list_users (now returns ban + excluded flags) ───────────
+-- Drop first since the return-row shape changed; CREATE OR REPLACE can't alter return type.
+drop function if exists public.admin_list_users();
 create or replace function public.admin_list_users()
 returns table (
   user_id uuid,
