@@ -418,14 +418,26 @@
       }
       if (editingLink) {
         editingLink.setAttribute('href', url);
-      } else {
-        editor.focus();
-        restoreSelection();
-        document.execCommand('createLink', false, url);
-        editor.querySelectorAll('a').forEach(a => {
-          a.setAttribute('target', '_blank');
-          a.setAttribute('rel', 'noopener noreferrer');
-        });
+      } else if (savedRange) {
+        // Use Range API — works on mobile where execCommand('createLink') is
+        // unreliable after the editor loses focus to the URL input.
+        const a = document.createElement('a');
+        a.setAttribute('href', url);
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+        try {
+          const frag = savedRange.extractContents();
+          a.appendChild(frag);
+          savedRange.insertNode(a);
+        } catch (e) {
+          editor.focus();
+          restoreSelection();
+          document.execCommand('createLink', false, url);
+          editor.querySelectorAll('a').forEach(el => {
+            el.setAttribute('target', '_blank');
+            el.setAttribute('rel', 'noopener noreferrer');
+          });
+        }
       }
       hideUrlBar();
       opts.onUpdate(sanitiseTaglineHTML(editor.innerHTML));
@@ -464,6 +476,7 @@
         }
         saveSelection();
         const anchorEl = sel.anchorNode?.parentElement?.closest('a');
+        editingLink = anchorEl || null;
         showUrlBar(anchorEl ? anchorEl.getAttribute('href') : '');
       });
     }
