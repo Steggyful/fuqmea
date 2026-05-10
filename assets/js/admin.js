@@ -197,11 +197,17 @@
   }
 
   async function toggleLive(username, live) {
-    const { error } = await getClient().rpc('admin_set_tiktok_live', {
-      p_username: username,
-      p_live: live
-    });
-    if (error) { showFlash('Error: ' + error.message, true); return; }
+    let error = null;
+    try {
+      const result = await Promise.race([
+        getClient().rpc('admin_set_tiktok_live', { p_username: username, p_live: live }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('toggle timed out')), 10000))
+      ]);
+      error = result.error;
+    } catch (err) {
+      error = { message: (err && err.message) ? err.message : String(err) };
+    }
+    if (error) { showFlash('Error: ' + error.message, true); await loadLiveStatus(); return; }
     showFlash(`${username} TikTok: ${live ? 'LIVE' : 'OFF'}`);
     await loadLiveStatus();
   }

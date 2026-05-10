@@ -1885,7 +1885,6 @@ h1 {
   font-weight: bold;
   letter-spacing: 0.7px;
   box-shadow: 0 0 16px rgba(255, 23, 68, 0.9);
-  transform: rotate(-12deg) translateY(-1px);
 }
 
 .streamer-section.checking {
@@ -3173,7 +3172,6 @@ h1 {
   .streamer-section.live h3::after {
     font-size: 0.56rem;
     padding: 2px 7px;
-    transform: rotate(-10deg);
   }
 
   .streamer-section.live {

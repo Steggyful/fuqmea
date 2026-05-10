@@ -127,8 +127,10 @@
     $id('va-login-error').textContent = '';
   });
 
-  window._vaLogout = async function () { await getClient().auth.signOut(); };
-  $id('va-logout-btn').addEventListener('click', window._vaLogout);
+  async function vaLogout() { await getClient().auth.signOut(); }
+  $id('va-logout-btn').addEventListener('click', vaLogout);
+  const deniedLogout = $id('va-denied-logout');
+  if (deniedLogout) deniedLogout.addEventListener('click', vaLogout);
 
   // ── Live status ───────────────────────────────────────────────────────────
 
@@ -157,14 +159,25 @@
 
   async function toggleLive(live) {
     const btn = $id('va-live-toggle').querySelector('button');
+    if (btn?.disabled) return;
     if (btn) btn.disabled = true;
 
-    const { error } = await getClient().rpc('admin_set_tiktok_live', {
-      p_username: 'ssgvivid',
-      p_live: live
-    });
+    let error = null;
+    try {
+      const result = await Promise.race([
+        getClient().rpc('admin_set_tiktok_live', { p_username: 'ssgvivid', p_live: live }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('toggle timed out')), 10000))
+      ]);
+      error = result.error;
+    } catch (err) {
+      error = { message: (err && err.message) ? err.message : String(err) };
+    }
 
-    if (error) { showFlash('Error: ' + error.message, true); await loadLiveStatus(); return; }
+    if (error) {
+      showFlash('Error: ' + error.message, true);
+      await loadLiveStatus(); // resyncs the button to actual DB state
+      return;
+    }
     showFlash(live ? 'You are now LIVE on TikTok 🔴' : 'Live ended.');
     renderLiveToggle(live);
   }
