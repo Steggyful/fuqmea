@@ -51,11 +51,17 @@
       showView('login');
     }
 
-    client.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        await onSession(session);
-      } else {
+    // TOKEN_REFRESHED fires on tab regain-focus when the JWT has expired —
+    // re-running onSession would repaint "Loading users..." and refetch
+    // everything every time the user came back to the tab. Only respond
+    // to events that actually changed who is signed in.
+    client.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
         showView('login');
+        return;
+      }
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        await onSession(session);
       }
     });
   }

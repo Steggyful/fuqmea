@@ -43,9 +43,17 @@
     if (session) await onSession(session);
     else showView('login');
 
-    client.auth.onAuthStateChange(async (_event, session) => {
-      if (session) await onSession(session);
-      else showView('login');
+    // Only respond to real sign-in / sign-out. TOKEN_REFRESHED fires every
+    // time the tab regains focus after the JWT has aged, and re-running
+    // onSession would repaint the FiFi form mid-edit.
+    client.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        showView('login');
+        return;
+      }
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        await onSession(session);
+      }
     });
   }
 
@@ -59,6 +67,22 @@
     showView('panel');
     await Promise.all([loadLiveStatus(), loadFifiSettings()]);
   }
+
+  // ── OAuth (preferred — bypasses the captcha flow) ────────────────────────
+  async function signInWithProvider(provider) {
+    const errEl = $id('va-login-error');
+    errEl.textContent = '';
+    const { error } = await getClient().auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.href }
+    });
+    if (error) errEl.textContent = error.message;
+  }
+
+  const googleBtn = $id('va-google-btn');
+  const discordBtn = $id('va-discord-btn');
+  if (googleBtn) googleBtn.addEventListener('click', () => signInWithProvider('google'));
+  if (discordBtn) discordBtn.addEventListener('click', () => signInWithProvider('discord'));
 
   let pendingEmail = '';
 
