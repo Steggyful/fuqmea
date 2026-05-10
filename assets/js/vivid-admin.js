@@ -382,12 +382,15 @@
     let editingLink = null;
 
     // Track the last non-empty selection inside this editor continuously.
-    // selectionchange is more reliable on mobile than mouseup/touchend alone —
-    // iOS can clear the selection before synthetic mousedown events fire.
+    // selectionchange is more reliable on mobile than mouseup/touchend alone.
+    // Only clear savedRange when the URL bar is closed — if it's open, preserve
+    // the range even if iOS clears the live selection when the user taps APPLY.
     document.addEventListener('selectionchange', () => {
       const sel = window.getSelection();
       if (sel && sel.rangeCount && !sel.isCollapsed && editor.contains(sel.anchorNode)) {
         savedRange = sel.getRangeAt(0).cloneRange();
+      } else if (urlBar.hidden) {
+        savedRange = null;
       }
     });
 
@@ -426,20 +429,23 @@
         return;
       }
 
+      const selectedText = range.toString();
+      if (!selectedText.trim()) {
+        showFlash('Select some text in the editor, then tap APPLY.', true);
+        return;
+      }
+
       const a = document.createElement('a');
       a.setAttribute('href', url);
       a.setAttribute('target', '_blank');
       a.setAttribute('rel', 'noopener noreferrer');
+      a.textContent = selectedText;
       try {
-        const frag = range.extractContents();
-        a.appendChild(frag);
+        range.deleteContents();
         range.insertNode(a);
       } catch (e) {
-        document.execCommand('createLink', false, url);
-        editor.querySelectorAll('a').forEach(el => {
-          el.setAttribute('target', '_blank');
-          el.setAttribute('rel', 'noopener noreferrer');
-        });
+        showFlash('Could not create link — please try again.', true);
+        return;
       }
 
       savedRange = null;
