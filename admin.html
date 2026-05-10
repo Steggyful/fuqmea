@@ -156,7 +156,6 @@
     #login-send-btn,
     #login-verify-btn,
     #modal-confirm,
-    #ban-confirm,
     .btn[id*="refresh"] {
       background: var(--lime-soft);
       border-color: rgba(57, 255, 20, 0.35);
@@ -209,9 +208,6 @@
       border-color: var(--red);
       box-shadow: 0 4px 16px rgba(255, 23, 68, 0.25);
     }
-    #ban-confirm { background: var(--red-soft); border-color: rgba(255, 23, 68, 0.35); color: var(--red); }
-    #ban-confirm:hover { background: var(--red); color: #fff; border-color: var(--red); }
-
     .btn-yellow {
       background: var(--yellow-soft);
       border-color: rgba(255, 214, 0, 0.35);
@@ -530,6 +526,7 @@
       box-shadow: var(--shadow-lg);
       animation: slide-up 200ms cubic-bezier(0.4, 0, 0.2, 1);
     }
+    .modal-box-lg { max-width: 760px; }
 
     @keyframes slide-up {
       from { opacity: 0; transform: translateY(8px) scale(0.98); }
@@ -556,6 +553,15 @@
     }
 
     #modal-error, #ban-error { color: var(--red); font-size: 12px; min-height: 16px; }
+
+    .events-table-wrap {
+      max-height: 60vh;
+      overflow-y: auto;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    .events-table-wrap table { font-size: 12px; }
 
     /* ── Status flash ──────────────────────────────────────── */
     #status-bar {
@@ -757,6 +763,36 @@
       transition: color var(--transition);
     }
     .text-btn:hover { color: var(--text); }
+
+    /* ── Mobile (≤720px) ──────────────────────────────────────── */
+    @media (max-width: 720px) {
+      body { font-size: 13.5px; }
+
+      .admin-topbar { padding: 10px 14px; }
+      .admin-topbar h1 { font-size: 0.7rem; letter-spacing: 2px; }
+      #admin-user-label { display: none; }
+      .topbar-right { gap: 8px; }
+      .btn-sm { font-size: 10.5px; padding: 5px 9px; }
+
+      .admin-main { padding: 14px; gap: 14px; }
+      .admin-card-header { padding: 12px 14px; }
+      .admin-card-body { padding: 14px; }
+
+      .users-search-row { padding: 10px 14px 4px; }
+      .users-search-row input { min-width: 0; }
+      .meme-controls input[type=text] { min-width: 0; }
+      .meme-list-wrap { max-height: 420px; }
+
+      .modal-backdrop { padding: 14px; }
+      .modal-box { padding: 18px; gap: 12px; }
+      .modal-box-lg { max-width: 100%; }
+    }
+
+    @media (max-width: 380px) {
+      .admin-topbar h1 { font-size: 0.6rem; letter-spacing: 1.5px; }
+      .admin-main { padding: 10px; }
+      .admin-card-body { padding: 12px; }
+    }
   </style>
 </head>
 <body>
@@ -960,11 +996,11 @@
 
 <!-- Game events viewer modal -->
 <div class="modal-backdrop" id="events-modal" hidden>
-  <div class="modal-box" style="max-width:760px">
+  <div class="modal-box modal-box-lg">
     <h3>RECENT EVENTS</h3>
     <p class="modal-target" id="events-target-name"></p>
-    <div style="max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:4px">
-      <table style="width:100%;font-size:12px">
+    <div class="events-table-wrap">
+      <table>
         <thead>
           <tr>
             <th>When</th>
