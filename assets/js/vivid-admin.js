@@ -501,21 +501,20 @@
     const clear  = $id('fifi-song-clear');
     if (url) {
       audio.src = url;
-      audio.hidden = false;
       audio.volume = fifiState.song_volume;
+      row.hidden = false;
       clear.hidden = false;
-      row.classList.add('has-song');
       // Display only the filename portion for readability.
       try {
         const u = new URL(url, window.location.href);
         name.textContent = decodeURIComponent(u.pathname.split('/').pop() || url);
       } catch { name.textContent = url; }
     } else {
+      try { audio.pause(); } catch (_) {}
       audio.removeAttribute('src');
-      audio.hidden = true;
+      row.hidden = true;
       clear.hidden = true;
-      row.classList.remove('has-song');
-      name.textContent = 'No song uploaded';
+      name.textContent = '';
     }
   }
 

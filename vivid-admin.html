@@ -252,10 +252,7 @@
     .fifi-form { display: flex; flex-direction: column; gap: 16px; }
 
     /* ── File upload ───────────────────────────────────────── */
-    .fifi-input-row { display: flex; gap: 8px; align-items: stretch; }
-    .fifi-input-row input[type="text"] { flex: 1; min-width: 0; }
     .fifi-upload-btn {
-      flex-shrink: 0;
       background: var(--surface-3);
       border: 1px solid var(--border-strong);
       border-radius: var(--radius-sm);
@@ -264,7 +261,8 @@
       font-family: var(--font-sans);
       font-size: 12px;
       font-weight: 600;
-      padding: 0 14px;
+      letter-spacing: 0.3px;
+      padding: 10px 14px;
       transition: background var(--transition), border-color var(--transition), color var(--transition);
       white-space: nowrap;
     }
@@ -273,29 +271,47 @@
     }
     .fifi-upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .fifi-upload-btn.uploading { background: var(--yellow-soft); color: var(--yellow); border-color: rgba(255, 214, 0, 0.4); }
+    /* Full-width variant: stacks below its associated input/audio row. */
+    .fifi-upload-btn-block { display: block; width: 100%; margin-top: 4px; }
+
+    /* Destructive button used for "delete song" — clearly red, full-width. */
+    .fifi-delete-btn {
+      display: block; width: 100%;
+      background: var(--red-soft);
+      border: 1px solid rgba(255, 23, 68, 0.4);
+      border-radius: var(--radius-sm);
+      color: var(--red);
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      padding: 9px 14px;
+      margin-top: 4px;
+      transition: background var(--transition), border-color var(--transition), color var(--transition);
+    }
+    .fifi-delete-btn:hover {
+      background: var(--red); color: #fff; border-color: var(--red);
+      box-shadow: 0 4px 16px rgba(255, 23, 68, 0.25);
+    }
+    .fifi-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* ── Audio + volume ────────────────────────────────────── */
     .fifi-audio-row {
-      display: flex; align-items: center; gap: 10px;
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
       background: var(--surface-2); border: 1px solid var(--border);
       border-radius: var(--radius-sm); padding: 10px 12px;
       font-size: 12px;
+      margin-top: 4px;
     }
     .fifi-audio-row .audio-name {
-      flex: 1; color: var(--muted); overflow: hidden;
+      flex: 1 1 100%; color: var(--lime); overflow: hidden;
       text-overflow: ellipsis; white-space: nowrap;
       font-family: var(--font-mono); font-size: 11px;
     }
-    .fifi-audio-row.has-song .audio-name { color: var(--lime); }
     .fifi-audio-row audio {
-      max-width: 220px; height: 32px;
+      width: 100%; height: 36px;
     }
-    .fifi-audio-row .audio-clear {
-      background: none; border: none; color: var(--red);
-      cursor: pointer; font-size: 18px; line-height: 1;
-      padding: 4px 6px; border-radius: 4px;
-    }
-    .fifi-audio-row .audio-clear:hover { background: var(--red-soft); }
 
     .fifi-volume-wrap { display: flex; flex-direction: column; gap: 8px; }
     .fifi-volume-row { display: flex; align-items: center; gap: 12px; }
@@ -388,11 +404,8 @@
       .fifi-editor { gap: 18px; }
       .fifi-preview-frame-wrap { aspect-ratio: 3 / 4; max-height: 60vh; }
 
-      .fifi-input-row { flex-direction: column; gap: 6px; }
-      .fifi-input-row .fifi-upload-btn { padding: 10px 14px; }
-
-      .fifi-audio-row { flex-wrap: wrap; }
-      .fifi-audio-row audio { max-width: 100%; width: 100%; }
+      .fifi-upload-btn-block, .fifi-delete-btn { padding: 11px 14px; }
+      .fifi-audio-row audio { height: 38px; }
 
       .fifi-save-row { flex-direction: column; align-items: stretch; gap: 10px; }
       .fifi-save-row .btn { width: 100%; padding: 12px; font-size: 14px; }
@@ -573,11 +586,9 @@
 
             <div class="form-group">
               <label for="fifi-img-url">Image</label>
-              <div class="fifi-input-row">
-                <input type="text" id="fifi-img-url" placeholder="https://... or assets/images/..." autocomplete="off">
-                <input type="file" id="fifi-img-file" accept="image/*" hidden>
-                <button type="button" class="fifi-upload-btn" id="fifi-img-upload-btn">UPLOAD IMAGE</button>
-              </div>
+              <input type="text" id="fifi-img-url" placeholder="https://... or assets/images/..." autocomplete="off">
+              <input type="file" id="fifi-img-file" accept="image/*" hidden>
+              <button type="button" class="fifi-upload-btn fifi-upload-btn-block" id="fifi-img-upload-btn">UPLOAD IMAGE</button>
               <span class="char-count" id="fifi-img-chars">0 / 500</span>
             </div>
 
@@ -613,15 +624,14 @@
 
             <div class="form-group">
               <label>Background Song</label>
-              <div class="fifi-input-row">
-                <input type="file" id="fifi-song-file" accept="audio/*" hidden>
-                <button type="button" class="fifi-upload-btn" id="fifi-song-upload-btn" style="flex:1">UPLOAD SONG</button>
-              </div>
-              <div class="fifi-audio-row" id="fifi-audio-row">
+              <input type="file" id="fifi-song-file" accept="audio/*" hidden>
+              <button type="button" class="fifi-upload-btn fifi-upload-btn-block" id="fifi-song-upload-btn">UPLOAD SONG</button>
+              <!-- Audio + delete row only appears when a song is set. -->
+              <div class="fifi-audio-row" id="fifi-audio-row" hidden>
                 <span class="audio-name" id="fifi-song-name">No song uploaded</span>
-                <audio id="fifi-song-audio" controls preload="none" hidden></audio>
-                <button type="button" class="audio-clear" id="fifi-song-clear" title="Remove song" hidden>×</button>
+                <audio id="fifi-song-audio" controls preload="none"></audio>
               </div>
+              <button type="button" class="fifi-delete-btn" id="fifi-song-clear" hidden>✕ DELETE SONG</button>
             </div>
 
             <div class="form-group fifi-volume-wrap">
@@ -650,6 +660,6 @@
 <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 <script src="assets/js/vendor/supabase.umd.min.js"></script>
 <script src="assets/js/cloud-config.js"></script>
-<script src="assets/js/vivid-admin.js?v=1.5.0"></script>
+<script src="assets/js/vivid-admin.js?v=1.5.1"></script>
 </body>
 </html>
