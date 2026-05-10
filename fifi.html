@@ -3,12 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://www.google-analytics.com https://*.analytics.google.com https://*.google-analytics.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://www.google-analytics.com https://*.analytics.google.com https://*.google-analytics.com https://region1.google-analytics.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com/fifi</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.17">
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-MNCNNCQ7XX"></script>
-  <script src="assets/js/ga.js"></script>
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.18">
+  <script src="assets/js/cookie-consent.js?v=1.0.0"></script>
 </head>
 <body>
   <header>
@@ -66,15 +64,14 @@
     <audio id="fifi-bg-audio" preload="none" loop hidden></audio>
     <button type="button" id="fifi-bg-toggle" class="fifi-bg-toggle" hidden
             aria-label="Toggle song" title="Toggle song"></button>
-    <p class="credit">created by 
-  <a href="https://www.tiktok.com/@steggyful1" target="_blank" rel="noopener noreferrer">@steggyful1</a>
-</p>
+    <p id="fifi-song-credit" class="fifi-song-credit" hidden></p>
+    <p id="fifi-site-credit" class="credit fifi-site-credit">created by <a href="https://www.tiktok.com/@steggyful1" target="_blank" rel="noopener noreferrer">@steggyful1</a></p>
     <p class="legal-footer"><a href="legal.html">Legal</a></p>
   </div>
   <script src="tools/extract-categories.js?v=1.0.1" defer></script>
   <script src="assets/js/hub.js?v=2.1.7" defer></script>
   <script src="assets/js/init.js?v=2.1.6" defer></script>
   <script src="assets/js/cloud-config.js" defer></script>
-  <script src="assets/js/fifi-page.js?v=1.2.0" defer></script>
+  <script src="assets/js/fifi-page.js?v=1.3.0" defer></script>
 </body>
 </html>
