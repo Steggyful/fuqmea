@@ -68,27 +68,6 @@
   <script src="assets/js/hub.js?v=2.1.7" defer></script>
   <script src="assets/js/init.js?v=2.1.6" defer></script>
   <script src="assets/js/cloud-config.js" defer></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var cfg = window.FUQ_CLOUD_CONFIG;
-      if (!cfg || !cfg.supabaseUrl) return;
-      fetch(cfg.supabaseUrl + '/rest/v1/fifi_zone_settings?id=eq.1&select=image_url,caption,tagline_text,tagline_url', {
-        headers: { apikey: cfg.supabaseAnonKey }
-      }).then(function (r) { return r.ok ? r.json() : null; }).then(function (rows) {
-        if (!rows || !rows[0]) return;
-        var s = rows[0];
-        if (s.image_url) document.getElementById('fifi-featured-img').src = s.image_url;
-        if (s.caption) document.getElementById('fifi-caption').textContent = s.caption;
-        var tagEl = document.getElementById('fifi-tagline');
-        if (tagEl && s.tagline_text) {
-          if (s.tagline_url) {
-            tagEl.innerHTML = '<a href="' + s.tagline_url + '" target="_blank" rel="noopener noreferrer" class="social-link">' + s.tagline_text.replace(/[<>&"]/g, function(c){return({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]);}) + '</a>';
-          } else {
-            tagEl.textContent = s.tagline_text;
-          }
-        }
-      }).catch(function () {});
-    });
-  </script>
+  <script src="assets/js/fifi-page.js?v=1.0.0" defer></script>
 </body>
 </html>
