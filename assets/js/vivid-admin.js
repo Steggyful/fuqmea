@@ -35,25 +35,36 @@
 
   const ALLOWED_ROLES = ['vivid', 'admin'];
 
+  // Tracks which user the panel is currently rendered for, so we can skip
+  // redundant reloads from token refreshes / duplicate initial events
+  // without dropping legitimate sign-in events.
+  let lastLoadedUserId = null;
+
+  async function handleSession(session) {
+    if (!session) {
+      showView('login');
+      lastLoadedUserId = null;
+      return;
+    }
+    if (lastLoadedUserId === session.user.id) return;
+    lastLoadedUserId = session.user.id;
+    await onSession(session);
+  }
+
   async function init() {
     const client = getClient();
     if (!client) { alert('Supabase client failed to load.'); return; }
 
+    // Fast initial paint from cached localStorage session, if any.
     const { data: { session } } = await client.auth.getSession();
-    if (session) await onSession(session);
-    else showView('login');
+    await handleSession(session);
 
-    // Only respond to real sign-in / sign-out. TOKEN_REFRESHED fires every
-    // time the tab regains focus after the JWT has aged, and re-running
-    // onSession would repaint the FiFi form mid-edit.
+    // INITIAL_SESSION + SIGNED_IN are deduped by lastLoadedUserId above.
+    // Token refresh / user update keep the same user — skip entirely so
+    // the FiFi form isn't repainted mid-edit on tab return.
     client.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        showView('login');
-        return;
-      }
-      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-        await onSession(session);
-      }
+      if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
+      await handleSession(session);
     });
   }
 

@@ -37,6 +37,25 @@
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
+  // Tracks which user the panel is currently rendered for, so we can skip
+  // redundant reloads from token refreshes / duplicate initial events
+  // without dropping legitimate sign-in events.
+  let lastLoadedUserId = null;
+
+  async function handleSession(session) {
+    if (!session) {
+      showView('login');
+      lastLoadedUserId = null;
+      return;
+    }
+    if (lastLoadedUserId === session.user.id) {
+      // Already showing the panel for this user — don't re-fetch.
+      return;
+    }
+    lastLoadedUserId = session.user.id;
+    await onSession(session);
+  }
+
   async function init() {
     const client = getClient();
     if (!client) {
@@ -44,25 +63,18 @@
       return;
     }
 
+    // Fast initial paint from cached localStorage session, if any.
     const { data: { session } } = await client.auth.getSession();
-    if (session) {
-      await onSession(session);
-    } else {
-      showView('login');
-    }
+    await handleSession(session);
 
-    // TOKEN_REFRESHED fires on tab regain-focus when the JWT has expired —
-    // re-running onSession would repaint "Loading users..." and refetch
-    // everything every time the user came back to the tab. Only respond
-    // to events that actually changed who is signed in.
+    // INITIAL_SESSION fires once after the listener is registered, then
+    // SIGNED_IN on fresh sign-in (including OAuth callback). The
+    // lastLoadedUserId guard above dedupes those against the fast path.
+    // Token refresh / user update keep the same user — skip those entirely
+    // to avoid the "Loading users..." flash on tab return.
     client.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        showView('login');
-        return;
-      }
-      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-        await onSession(session);
-      }
+      if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
+      await handleSession(session);
     });
   }
 
