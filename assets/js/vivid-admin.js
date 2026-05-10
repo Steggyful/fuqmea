@@ -226,50 +226,43 @@
 
   // ── FiFi Zone editor ──────────────────────────────────────────────────────
 
+  // Local state mirrors the form so we can push it to the iframe live.
+  const fifiState = {
+    image_url: '',
+    caption: '',
+    tagline_text: '',
+    tagline_url: '',
+    song_url: '',
+    song_volume: 0.7,
+  };
+  let previewReady = false;
+  let pendingPreviewPush = false;
+
   async function loadFifiSettings() {
     const { data } = await getClient()
       .from('fifi_zone_settings')
-      .select('image_url, caption, tagline_text, tagline_url')
+      .select('image_url, caption, tagline_text, tagline_url, song_url, song_volume')
       .eq('id', 1)
       .maybeSingle();
 
     if (!data) return;
-    $id('fifi-img-url').value      = data.image_url    || '';
-    $id('fifi-caption-input').value = data.caption     || '';
-    $id('fifi-tagline-text').value  = data.tagline_text || '';
-    $id('fifi-tagline-url').value   = data.tagline_url  || '';
-    updatePreview(data.image_url, data.caption, data.tagline_text, data.tagline_url);
+
+    fifiState.image_url    = data.image_url    || '';
+    fifiState.caption      = data.caption      || '';
+    fifiState.tagline_text = data.tagline_text || '';
+    fifiState.tagline_url  = data.tagline_url  || '';
+    fifiState.song_url     = data.song_url     || '';
+    fifiState.song_volume  = (typeof data.song_volume === 'number') ? data.song_volume : 0.7;
+
+    $id('fifi-img-url').value       = fifiState.image_url;
+    $id('fifi-caption-input').value = fifiState.caption;
+    $id('fifi-tagline-text').value  = fifiState.tagline_text;
+    $id('fifi-tagline-url').value   = fifiState.tagline_url;
+
+    setSongUI(fifiState.song_url);
+    setVolumeUI(fifiState.song_volume);
     updateCharCounts();
-  }
-
-  function escapeHtml(str) {
-    return (str || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-  }
-
-  function updatePreview(imgUrl, caption, taglineText, taglineUrl) {
-    const previewImg = $id('fifi-preview-img');
-    const previewCap = $id('fifi-preview-caption');
-    const previewTag = $id('fifi-preview-tagline');
-
-    if (imgUrl !== undefined) {
-      previewImg.src = imgUrl || '';
-      previewImg.className = '';
-      previewImg.onload  = () => { previewImg.className = 'preview-ok'; };
-      previewImg.onerror = () => { previewImg.className = 'preview-err'; };
-    }
-    if (caption !== undefined) previewCap.textContent = caption || '';
-
-    if (taglineText !== undefined || taglineUrl !== undefined) {
-      const text = taglineText !== undefined ? taglineText : ($id('fifi-tagline-text').value || '');
-      const url  = taglineUrl  !== undefined ? taglineUrl  : ($id('fifi-tagline-url').value  || '');
-      if (url) {
-        previewTag.className = 'fifi-preview-tagline';
-        previewTag.innerHTML = `<a href="${escapeHtml(url)}" class="social-link" tabindex="-1">${escapeHtml(text)}</a>`;
-      } else {
-        previewTag.className = 'fifi-preview-tagline plain-text';
-        previewTag.textContent = text;
-      }
-    }
+    pushPreview();
   }
 
   function updateCharCounts() {
@@ -290,49 +283,193 @@
     tagEl.className = 'char-count' + (tagLen > 100 ? ' warn' : '');
   }
 
-  // Live preview as user types
-  let previewDebounce;
+  // ── Iframe preview ─────────────────────────────────────────────────────
+  // The iframe loads fifi.html?preview=1, which signals 'fifi-preview-ready'
+  // back to us via postMessage. We then push the full state on every change.
+
+  function pushPreview() {
+    const iframe = $id('fifi-preview-frame');
+    if (!iframe || !iframe.contentWindow) return;
+    if (!previewReady) { pendingPreviewPush = true; return; }
+    iframe.contentWindow.postMessage(
+      { type: 'fifi-preview', settings: { ...fifiState } },
+      window.location.origin
+    );
+  }
+
+  window.addEventListener('message', (e) => {
+    if (e.origin !== window.location.origin) return;
+    if (e.data && e.data.type === 'fifi-preview-ready') {
+      previewReady = true;
+      if (pendingPreviewPush) { pendingPreviewPush = false; pushPreview(); }
+      else { pushPreview(); }
+      const wrap = $id('fifi-preview-frame-wrap');
+      if (wrap) wrap.classList.add('preview-ok');
+    }
+  });
+
+  // Live preview as user types — debounce only the image (it triggers a
+  // network fetch); other fields update instantly.
+  let imgDebounce;
   $id('fifi-img-url').addEventListener('input', () => {
+    fifiState.image_url = $id('fifi-img-url').value.trim();
     updateCharCounts();
-    clearTimeout(previewDebounce);
-    previewDebounce = setTimeout(() => {
-      updatePreview($id('fifi-img-url').value.trim(), undefined, undefined, undefined);
-    }, 600);
+    clearTimeout(imgDebounce);
+    imgDebounce = setTimeout(pushPreview, 400);
   });
 
   $id('fifi-caption-input').addEventListener('input', () => {
+    fifiState.caption = $id('fifi-caption-input').value;
     updateCharCounts();
-    updatePreview(undefined, $id('fifi-caption-input').value, undefined, undefined);
+    pushPreview();
   });
 
   $id('fifi-tagline-text').addEventListener('input', () => {
+    fifiState.tagline_text = $id('fifi-tagline-text').value;
     updateCharCounts();
-    updatePreview(undefined, undefined, $id('fifi-tagline-text').value, undefined);
+    pushPreview();
   });
 
   $id('fifi-tagline-url').addEventListener('input', () => {
-    updatePreview(undefined, undefined, undefined, $id('fifi-tagline-url').value.trim());
+    fifiState.tagline_url = $id('fifi-tagline-url').value.trim();
+    pushPreview();
   });
 
-  $id('fifi-save-btn').addEventListener('click', async () => {
-    const imgUrl       = $id('fifi-img-url').value.trim();
-    const caption      = $id('fifi-caption-input').value.trim();
-    const taglineText  = $id('fifi-tagline-text').value.trim();
-    const taglineUrl   = $id('fifi-tagline-url').value.trim();
-    const statusEl     = $id('va-fifi-status');
-    const btn          = $id('fifi-save-btn');
+  // ── Volume ────────────────────────────────────────────────────────────
 
-    if (!imgUrl && !caption && !taglineText && !taglineUrl) {
-      statusEl.textContent = 'Nothing to save.';
-      statusEl.className = 'err';
-      return;
+  function setVolumeUI(vol) {
+    const slider = $id('fifi-volume');
+    const label  = $id('fifi-volume-value');
+    const pct = Math.round(vol * 100);
+    slider.value = String(pct);
+    label.textContent = pct + '%';
+  }
+  $id('fifi-volume').addEventListener('input', () => {
+    const pct = parseInt($id('fifi-volume').value, 10);
+    $id('fifi-volume-value').textContent = pct + '%';
+    fifiState.song_volume = pct / 100;
+    // Update the local <audio> in the admin too so Vivid hears the level.
+    const a = $id('fifi-song-audio');
+    if (a) a.volume = fifiState.song_volume;
+    pushPreview();
+  });
+
+  // ── Song UI (local audio element + clear button) ───────────────────────
+
+  function setSongUI(url) {
+    const row    = $id('fifi-audio-row');
+    const audio  = $id('fifi-song-audio');
+    const name   = $id('fifi-song-name');
+    const clear  = $id('fifi-song-clear');
+    if (url) {
+      audio.src = url;
+      audio.hidden = false;
+      audio.volume = fifiState.song_volume;
+      clear.hidden = false;
+      row.classList.add('has-song');
+      // Display only the filename portion for readability.
+      try {
+        const u = new URL(url, window.location.href);
+        name.textContent = decodeURIComponent(u.pathname.split('/').pop() || url);
+      } catch { name.textContent = url; }
+    } else {
+      audio.removeAttribute('src');
+      audio.hidden = true;
+      clear.hidden = true;
+      row.classList.remove('has-song');
+      name.textContent = 'No song uploaded';
     }
+  }
+
+  $id('fifi-song-clear').addEventListener('click', () => {
+    fifiState.song_url = '';
+    setSongUI('');
+    pushPreview();
+    showFlash('Song removed (press SAVE CHANGES to confirm)');
+  });
+
+  // ── Uploads (image + audio) ───────────────────────────────────────────
+
+  async function uploadAsset(file, kind) {
+    const session = (await getClient().auth.getSession()).data.session;
+    if (!session) throw new Error('Not signed in');
+
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    fd.append('kind', kind);
+
+    const res = await fetch(`${CONFIG.supabaseUrl}/functions/v1/upload-fifi-asset`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'apikey': CONFIG.supabaseAnonKey,
+      },
+      body: fd,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('upload failed: ' + res.status));
+    if (!body.url) throw new Error('upload returned no URL');
+    return body.url;
+  }
+
+  function wireUpload(triggerId, fileInputId, kind, onSuccess, busyText) {
+    const trigger = $id(triggerId);
+    const input   = $id(fileInputId);
+    const original = trigger.textContent;
+    trigger.addEventListener('click', () => input.click());
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      input.value = '';  // allow re-uploading the same file
+      if (!file) return;
+      trigger.disabled = true;
+      trigger.classList.add('uploading');
+      trigger.textContent = busyText;
+      try {
+        const url = await uploadAsset(file, kind);
+        onSuccess(url);
+        showFlash('Uploaded — preview updated. Press SAVE CHANGES to publish.');
+      } catch (err) {
+        showFlash('Upload failed: ' + (err.message || err), true);
+      } finally {
+        trigger.disabled = false;
+        trigger.classList.remove('uploading');
+        trigger.textContent = original;
+      }
+    });
+  }
+
+  wireUpload('fifi-img-upload-btn', 'fifi-img-file', 'image', (url) => {
+    fifiState.image_url = url;
+    $id('fifi-img-url').value = url;
+    updateCharCounts();
+    pushPreview();
+  }, 'UPLOADING...');
+
+  wireUpload('fifi-song-upload-btn', 'fifi-song-file', 'audio', (url) => {
+    fifiState.song_url = url;
+    setSongUI(url);
+    pushPreview();
+  }, 'UPLOADING...');
+
+  // ── Save ──────────────────────────────────────────────────────────────
+
+  $id('fifi-save-btn').addEventListener('click', async () => {
+    const statusEl = $id('va-fifi-status');
+    const btn      = $id('fifi-save-btn');
 
     if (btn.disabled) return; // guard against duplicate fires while one is in-flight
 
     btn.disabled = true;
     btn.textContent = 'SAVING...';
     statusEl.textContent = '';
+
+    // Pull the latest field values before saving.
+    const imgUrl       = $id('fifi-img-url').value.trim();
+    const caption      = $id('fifi-caption-input').value.trim();
+    const taglineText  = $id('fifi-tagline-text').value.trim();
+    const taglineUrl   = $id('fifi-tagline-url').value.trim();
+    const songUrl      = fifiState.song_url;     // '' means clear
+    const songVolume   = fifiState.song_volume;
 
     // Race the RPC against a hard timeout so the UI never gets stuck if the
     // Supabase client's promise stalls (mid-flight JWT refresh, dropped socket, etc.).
@@ -343,7 +480,10 @@
         p_image_url:    imgUrl      || null,
         p_caption:      caption     || null,
         p_tagline_text: taglineText || null,
-        p_tagline_url:  taglineUrl  || null
+        p_tagline_url:  taglineUrl  || null,
+        // song_url uses '' as a sentinel for "clear", null for "leave alone".
+        p_song_url:     songUrl,
+        p_song_volume:  songVolume,
       });
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('save timed out (15s)')), 15000)
@@ -372,11 +512,20 @@
     // Sync inputs to whatever the DB stored
     if (data && data[0]) {
       const s = data[0];
-      $id('fifi-img-url').value       = s.image_url    || '';
-      $id('fifi-caption-input').value  = s.caption     || '';
-      $id('fifi-tagline-text').value   = s.tagline_text || '';
-      $id('fifi-tagline-url').value    = s.tagline_url  || '';
-      updatePreview(s.image_url, s.caption, s.tagline_text, s.tagline_url);
+      fifiState.image_url    = s.image_url    || '';
+      fifiState.caption      = s.caption      || '';
+      fifiState.tagline_text = s.tagline_text || '';
+      fifiState.tagline_url  = s.tagline_url  || '';
+      fifiState.song_url     = s.song_url     || '';
+      fifiState.song_volume  = (typeof s.song_volume === 'number') ? s.song_volume : 0.7;
+
+      $id('fifi-img-url').value       = fifiState.image_url;
+      $id('fifi-caption-input').value = fifiState.caption;
+      $id('fifi-tagline-text').value  = fifiState.tagline_text;
+      $id('fifi-tagline-url').value   = fifiState.tagline_url;
+      setSongUI(fifiState.song_url);
+      setVolumeUI(fifiState.song_volume);
+      pushPreview();
     }
   });
 

@@ -716,7 +716,7 @@ nav a:focus-visible,
 
 .streamer-btn.live .live-dot {
   background: #FF1744;
-  animation: pulse-live 2s infinite;
+  animation: pulse-live 2s ease-in-out infinite;
   box-shadow: 0 0 15px #FF1744;
 }
 
@@ -749,8 +749,7 @@ nav a:focus-visible,
   color: #FFF;
   font-size: 0.8rem;
   text-shadow: 0 0 10px rgba(255, 50, 50, 0.8);
-  box-shadow: 0 0 15px #FF1744;
-  animation: badge-pulse 2s infinite;
+  animation: badge-pulse 2s ease-in-out infinite;
 }
 
 .streamer-btn.checking .live-text {
@@ -765,9 +764,18 @@ nav a:focus-visible,
   box-shadow: none;
 }
 
+/* badge-pulse, pulse-live, platform-live-pulse all share the same 2s rhythm
+   so the LIVE badge, the dot's ring, and the red social button outline all
+   pulse in lockstep. */
 @keyframes badge-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 15px #FF1744, 0 0 0 0 rgba(255, 50, 50, 0.7);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 22px #FF1744, 0 0 0 8px rgba(255, 50, 50, 0);
+  }
 }
 .rotator {
   position: relative;
@@ -1827,6 +1835,34 @@ h1 {
   }
 }
 
+/* FiFi Zone background-song mute/unmute toggle (fixed corner button). */
+.fifi-bg-toggle {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--lime);
+  background: rgba(0, 0, 0, 0.65);
+  color: var(--lime);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 50;
+  box-shadow: 0 0 14px rgba(57, 255, 20, 0.45);
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+}
+.fifi-bg-toggle:hover {
+  background: rgba(0, 0, 0, 0.85);
+  box-shadow: 0 0 22px var(--lime);
+  transform: scale(1.06);
+}
+.fifi-bg-toggle:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 2px;
+}
+
 .main-content {
   text-align: center;
   padding: 4rem 5%;
@@ -2112,7 +2148,7 @@ h1 {
 .streamer-section .button.platform-live {
   border-color: #FF1744;
   box-shadow: 0 0 24px rgba(255, 23, 68, 0.9);
-  animation: platform-live-pulse 1.4s ease-in-out infinite;
+  animation: platform-live-pulse 2s ease-in-out infinite;
 }
 
 @media (hover: hover) {
