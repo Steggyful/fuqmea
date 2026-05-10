@@ -7,6 +7,13 @@
   preloadCriticalImages(memes);
   setupMobileOptimizations();
 
+  // Kick off TikTok/Twitch live polling on any page that has the streamer
+  // header strip. Without this the dots stay OFFLINE forever even after the
+  // admin toggles GO LIVE — initLiveStatus was defined but never invoked.
+  if (typeof initLiveStatus === 'function' && document.querySelector('.streamers')) {
+    initLiveStatus();
+  }
+
   const galleryEl = document.getElementById('gallery');
   if (galleryEl) {
     await initGallery();
