@@ -170,14 +170,16 @@
           <span class="live-badge ${live ? 'on' : 'off'}">${live ? 'LIVE' : 'OFF'}</span>
           <span class="live-toggle-name">${name} — TikTok</span>
           <button class="btn btn-sm ${live ? 'btn-red' : ''}"
-            onclick="window._adminToggleLive('${row.username}', ${!live})">
+            data-action="toggle-live"
+            data-username="${row.username}"
+            data-target-live="${!live}">
             ${live ? 'END LIVE' : 'GO LIVE'}
           </button>
         </div>`;
     }).join('');
   }
 
-  window._adminToggleLive = async function (username, live) {
+  async function toggleLive(username, live) {
     const { error } = await getClient().rpc('admin_set_tiktok_live', {
       p_username: username,
       p_live: live
@@ -185,7 +187,16 @@
     if (error) { showFlash('Error: ' + error.message, true); return; }
     showFlash(`${username} TikTok: ${live ? 'LIVE' : 'OFF'}`);
     await loadLiveStatus();
-  };
+  }
+
+  // Delegated click handler — CSP blocks inline onclick, so we attach once here.
+  $id('live-toggles').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action="toggle-live"]');
+    if (!btn) return;
+    const username = btn.dataset.username;
+    const live = btn.dataset.targetLive === 'true';
+    if (username) toggleLive(username, live);
+  });
 
   $id('refresh-live-btn').addEventListener('click', loadLiveStatus);
 
@@ -216,9 +227,11 @@
       tbody.innerHTML = '<tr class="loading-row"><td colspan="9">No users found.</td></tr>';
       return;
     }
-    tbody.innerHTML = currentUsers.map(u => `
+    tbody.innerHTML = currentUsers.map(u => {
+      const safeName = String(u.leaderboard_name).replace(/"/g, '&quot;');
+      return `
       <tr>
-        <td class="col-name" title="${u.leaderboard_name}">${u.leaderboard_name}</td>
+        <td class="col-name" title="${safeName}">${u.leaderboard_name}</td>
         <td class="col-handle">${u.handle}</td>
         <td class="col-num" id="bal-${u.user_id}">${fmt(u.tokens)}</td>
         <td class="col-num" style="color:${u.net_delta >= 0 ? 'var(--lime)' : 'var(--red)'}">
@@ -231,23 +244,39 @@
         <td class="col-actions">
           <div class="actions-cell">
             <button class="btn btn-sm btn-yellow"
-              onclick="window._adminOpenAdjust('${u.user_id}','${u.leaderboard_name.replace(/'/g, "\\'")}')">
+              data-action="adjust-tokens"
+              data-user-id="${u.user_id}"
+              data-name="${safeName}">
               TOKENS
             </button>
             <button class="btn btn-sm btn-red"
-              onclick="window._adminResetWeekly('${u.user_id}','${u.leaderboard_name.replace(/'/g, "\\'")}')">
+              data-action="reset-weekly"
+              data-user-id="${u.user_id}"
+              data-name="${safeName}">
               RESET WK
             </button>
           </div>
         </td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
   }
+
+  // Delegated click handler — CSP blocks inline onclick.
+  $id('users-tbody').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const userId = btn.dataset.userId;
+    const name = btn.dataset.name || '';
+    if (!userId) return;
+    if (btn.dataset.action === 'adjust-tokens') openAdjustModal(userId, name);
+    else if (btn.dataset.action === 'reset-weekly') resetWeekly(userId, name);
+  });
 
   $id('refresh-users-btn').addEventListener('click', loadUsers);
 
   // ── Token adjustment modal ────────────────────────────────────────────────
 
-  window._adminOpenAdjust = function (userId, name) {
+  function openAdjustModal(userId, name) {
     pendingAdjust = { userId, name };
     $id('modal-target-name').textContent = name;
     $id('modal-delta').value = '';
@@ -255,7 +284,7 @@
     $id('modal-error').textContent = '';
     $id('token-modal').hidden = false;
     $id('modal-delta').focus();
-  };
+  }
 
   $id('modal-cancel').addEventListener('click', closeModal);
 
@@ -313,7 +342,7 @@
 
   // ── Weekly reset ──────────────────────────────────────────────────────────
 
-  window._adminResetWeekly = async function (userId, name) {
+  async function resetWeekly(userId, name) {
     if (!confirm(`Reset weekly stats for ${name}?\n\nThis will zero out weekly wagered and rounds on the leaderboard.`)) return;
 
     const { error } = await getClient().rpc('admin_reset_weekly', { p_user_id: userId });
@@ -323,7 +352,7 @@
     if (user) { user.weekly_wagered = 0; user.weekly_rounds = 0; }
     renderUsersTable();
     showFlash(`Weekly stats reset for ${name}`);
-  };
+  }
 
   // ── Boot ──────────────────────────────────────────────────────────────────
 
