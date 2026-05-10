@@ -172,6 +172,16 @@
     $id('login-error').textContent = '';
   });
 
+  const loginEmailToggle  = $id('login-email-toggle');
+  const loginEmailSection = $id('login-email-section');
+  if (loginEmailToggle && loginEmailSection) {
+    loginEmailToggle.addEventListener('click', () => {
+      const open = !loginEmailSection.hidden;
+      loginEmailSection.hidden = open;
+      loginEmailToggle.setAttribute('aria-expanded', String(!open));
+    });
+  }
+
   async function handleLogout() {
     await getClient().auth.signOut();
     showView('login');

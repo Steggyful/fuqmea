@@ -467,16 +467,37 @@
       background: var(--border);
     }
 
-    /* Make the lime "CONTINUE WITH..." buttons match the rest */
+    /* OAuth buttons */
     #va-google-btn, #va-discord-btn {
       background: var(--lime-soft);
       border-color: rgba(57, 255, 20, 0.35);
       color: var(--lime);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
     }
     #va-google-btn:hover, #va-discord-btn:hover {
       background: var(--lime); color: #001100; border-color: var(--lime);
       box-shadow: 0 4px 16px rgba(57, 255, 20, 0.25);
     }
+    #va-google-btn:hover svg path,
+    #va-discord-btn:hover svg path { fill: #001100; }
+
+    /* "or email code" collapsible toggle */
+    button.va-divider {
+      background: none;
+      border: none;
+      cursor: pointer;
+      width: 100%;
+      padding: 2px 0;
+      font-family: inherit;
+      letter-spacing: inherit;
+    }
+    button.va-divider:hover { color: var(--text); }
+    .va-toggle-chevron { transition: transform 0.2s ease; flex-shrink: 0; }
+    button.va-divider[aria-expanded="true"] .va-toggle-chevron { transform: rotate(180deg); }
+    #va-email-section { margin-top: 4px; }
 
     /* Text-only ghost button (e.g. "use a different email") */
     .va-text-btn {
@@ -501,35 +522,55 @@
   <h1>VIVID</h1>
   <div class="login-card">
     <!-- OAuth (preferred — bypasses captcha) -->
-    <button type="button" class="btn btn-full" id="va-google-btn">CONTINUE WITH GOOGLE</button>
-    <button type="button" class="btn btn-full" id="va-discord-btn">CONTINUE WITH DISCORD</button>
+    <button type="button" class="btn btn-full" id="va-google-btn">
+      <svg width="16" height="16" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+        <path d="M17.64 9.2a10.34 10.34 0 0 0-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91A8.78 8.78 0 0 0 17.64 9.2z" fill="#4285F4"/>
+        <path d="M9 18a8.59 8.59 0 0 0 5.96-2.18l-2.91-2.26a5.4 5.4 0 0 1-3.05.86 5.41 5.41 0 0 1-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z" fill="#34A853"/>
+        <path d="M3.97 10.71A5.41 5.41 0 0 1 3.68 9c0-.59.1-1.17.29-1.71V4.96H.96A9 9 0 0 0 0 9a9 9 0 0 0 .96 4.04l3.01-2.33z" fill="#FBBC05"/>
+        <path d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.58A9 9 0 0 0 9 0 9 9 0 0 0 .96 4.96l3.01 2.33A5.41 5.41 0 0 1 9 3.58z" fill="#EA4335"/>
+      </svg>
+      CONTINUE WITH GOOGLE
+    </button>
+    <button type="button" class="btn btn-full" id="va-discord-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+        <path fill="#5865F2" d="M20.2 4.6A16.6 16.6 0 0 0 16 3.3l-.2.5-.3.9c-2.3-.4-4.6-.4-6.9 0l-.3-.9-.2-.5A16.6 16.6 0 0 0 3.8 4.6C1.1 8.6.4 12.4.7 16.1a16.9 16.9 0 0 0 5.1 2.6l.4-.7.7-1.2a10.8 10.8 0 0 1-1.7-.8l.4-.3a12 12 0 0 0 10.8 0l.4.3c-.6.3-1.1.6-1.7.8l.7 1.2.4.7a16.9 16.9 0 0 0 5.1-2.6c.3-4.3-.6-8.1-3.3-11.5ZM9.5 13.8c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm5 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z"/>
+      </svg>
+      CONTINUE WITH DISCORD
+    </button>
 
-    <div class="va-divider"><span>or email code</span></div>
+    <button type="button" class="va-divider" id="va-email-toggle" aria-expanded="false" aria-controls="va-email-section">
+      or email code
+      <svg class="va-toggle-chevron" width="10" height="7" viewBox="0 0 10 7" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M1 1L5 5.5L9 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
 
-    <!-- Step 1: email -->
-    <form id="va-login-step1" autocomplete="on">
-      <div class="form-group" style="margin-bottom:20px">
-        <label for="va-email">Email</label>
-        <input type="email" id="va-email" autocomplete="email" required>
-      </div>
-      <div class="h-captcha" data-sitekey="cebc04d6-7ce4-4c40-8676-5bb09a089ce6" data-size="invisible" id="va-captcha"></div>
-      <button type="submit" class="btn btn-full" id="va-send-btn">SEND CODE</button>
-    </form>
-    <!-- Step 2: code -->
-    <form id="va-login-step2" style="display:none" autocomplete="off">
-      <p style="color:var(--muted);font-size:12px;margin-bottom:16px;text-align:center">
-        Code sent to <strong id="va-email-shown" style="color:var(--text)"></strong>
-      </p>
-      <div class="form-group" style="margin-bottom:20px">
-        <label for="va-code">6-Digit Code</label>
-        <input type="text" id="va-code" inputmode="numeric" maxlength="6"
-               placeholder="000000" autocomplete="one-time-code" style="letter-spacing:6px;font-size:1.4rem;text-align:center">
-      </div>
-      <button type="submit" class="btn btn-full" id="va-verify-btn">VERIFY</button>
-      <button type="button" id="va-back-btn" class="va-text-btn">
-        ← use a different email
-      </button>
-    </form>
+    <div id="va-email-section" hidden>
+      <!-- Step 1: email -->
+      <form id="va-login-step1" autocomplete="on">
+        <div class="form-group" style="margin-bottom:20px">
+          <label for="va-email">Email</label>
+          <input type="email" id="va-email" autocomplete="email" required>
+        </div>
+        <div class="h-captcha" data-sitekey="cebc04d6-7ce4-4c40-8676-5bb09a089ce6" data-size="invisible" id="va-captcha"></div>
+        <button type="submit" class="btn btn-full" id="va-send-btn">SEND CODE</button>
+      </form>
+      <!-- Step 2: code -->
+      <form id="va-login-step2" style="display:none" autocomplete="off">
+        <p style="color:var(--muted);font-size:12px;margin-bottom:16px;text-align:center">
+          Code sent to <strong id="va-email-shown" style="color:var(--text)"></strong>
+        </p>
+        <div class="form-group" style="margin-bottom:20px">
+          <label for="va-code">6-Digit Code</label>
+          <input type="text" id="va-code" inputmode="numeric" maxlength="6"
+                 placeholder="000000" autocomplete="one-time-code" style="letter-spacing:6px;font-size:1.4rem;text-align:center">
+        </div>
+        <button type="submit" class="btn btn-full" id="va-verify-btn">VERIFY</button>
+        <button type="button" id="va-back-btn" class="va-text-btn">
+          ← use a different email
+        </button>
+      </form>
+    </div>
     <p id="va-login-error"></p>
   </div>
 </div>
@@ -585,22 +626,6 @@
           <div class="fifi-form">
 
             <div class="form-group">
-              <label for="fifi-img-url">Image</label>
-              <input type="text" id="fifi-img-url" placeholder="https://... or assets/images/..." autocomplete="off">
-              <input type="file" id="fifi-img-file" accept="image/*" hidden>
-              <button type="button" class="fifi-upload-btn fifi-upload-btn-block" id="fifi-img-upload-btn">UPLOAD IMAGE</button>
-              <span class="char-count" id="fifi-img-chars">0 / 500</span>
-            </div>
-
-            <div class="form-group">
-              <label for="fifi-caption-input">Caption</label>
-              <textarea id="fifi-caption-input" rows="2" placeholder="e.g. When she finds your FiFi" maxlength="200"></textarea>
-              <span class="char-count" id="fifi-cap-chars">0 / 200</span>
-            </div>
-
-            <div class="fifi-divider"></div>
-
-            <div class="form-group">
               <label>Top Text</label>
               <div class="rt-editor-wrap">
                 <div class="rt-toolbar" role="toolbar" aria-label="Text formatting">
@@ -618,6 +643,22 @@
                      data-placeholder="e.g. Follow @SSGVivid on TikTok for daily FiFi"></div>
               </div>
               <span class="char-count" id="fifi-tag-chars">0 / 500</span>
+            </div>
+
+            <div class="fifi-divider"></div>
+
+            <div class="form-group">
+              <label for="fifi-img-url">Image</label>
+              <input type="text" id="fifi-img-url" placeholder="https://... or assets/images/..." autocomplete="off">
+              <input type="file" id="fifi-img-file" accept="image/*" hidden>
+              <button type="button" class="fifi-upload-btn fifi-upload-btn-block" id="fifi-img-upload-btn">UPLOAD IMAGE</button>
+              <span class="char-count" id="fifi-img-chars">0 / 500</span>
+            </div>
+
+            <div class="form-group">
+              <label for="fifi-caption-input">Caption</label>
+              <textarea id="fifi-caption-input" rows="2" placeholder="e.g. When she finds your FiFi" maxlength="200"></textarea>
+              <span class="char-count" id="fifi-cap-chars">0 / 200</span>
             </div>
 
             <div class="fifi-divider"></div>
@@ -643,7 +684,7 @@
             </div>
 
             <div class="form-group">
-              <label>Song Credit <span style="font-size:0.75rem;opacity:0.55;font-weight:400">(optional — shown on the FiFi page)</span></label>
+              <label>Song Credit <span style="font-size:0.75rem;opacity:0.55;font-weight:400">(shown on the bottom of the FiFi page)</span></label>
               <div class="rt-editor-wrap">
                 <div class="rt-toolbar" role="toolbar" aria-label="Song credit formatting">
                   <button type="button" class="rt-btn" id="fifi-credit-rt-link" title="Wrap selected text in a link">🔗 LINK</button>
@@ -680,6 +721,6 @@
 <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 <script src="assets/js/vendor/supabase.umd.min.js"></script>
 <script src="assets/js/cloud-config.js"></script>
-<script src="assets/js/vivid-admin.js?v=1.6.0"></script>
+<script src="assets/js/vivid-admin.js?v=1.7.0"></script>
 </body>
 </html>
