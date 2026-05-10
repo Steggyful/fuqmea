@@ -369,25 +369,23 @@
   }
 
   function bindRichEditor(opts) {
-    const editor    = $id(opts.editorId);
-    const linkBtn   = $id(opts.linkBtnId);
-    const unlinkBtn = $id(opts.unlinkBtnId);
-    const urlBar    = $id(opts.urlBarId);
-    const urlInput  = $id(opts.urlInputId);
-    const urlApply  = $id(opts.urlApplyId);
-    const urlCancel = $id(opts.urlCancelId);
+    const editor        = $id(opts.editorId);
+    const linkBtn       = $id(opts.linkBtnId);
+    const unlinkBtn     = $id(opts.unlinkBtnId);
+    const urlBar        = $id(opts.urlBarId);
+    const linkTextInput = $id(opts.linkTextId);
+    const urlInput      = $id(opts.urlInputId);
+    const urlApply      = $id(opts.urlApplyId);
+    const urlCancel     = $id(opts.urlCancelId);
     if (!editor) return;
 
     let savedRange  = null;
     let editingLink = null;
 
-    // Track the last non-empty selection inside this editor continuously.
-    // selectionchange is more reliable on mobile than mouseup/touchend alone.
-    // Only clear savedRange when the URL bar is closed — if it's open, preserve
-    // the range even if iOS clears the live selection when the user taps APPLY.
+    // Track cursor/selection inside this editor so we know where to insert.
     document.addEventListener('selectionchange', () => {
       const sel = window.getSelection();
-      if (sel && sel.rangeCount && !sel.isCollapsed && editor.contains(sel.anchorNode)) {
+      if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
         savedRange = sel.getRangeAt(0).cloneRange();
       } else if (urlBar.hidden) {
         savedRange = null;
@@ -395,43 +393,29 @@
     });
 
     function hideUrlBar() {
-      urlBar.hidden  = true;
-      urlInput.value = '';
-      editingLink    = null;
+      urlBar.hidden        = true;
+      linkTextInput.value  = '';
+      urlInput.value       = '';
+      editingLink          = null;
     }
 
     function applyLink() {
-      const url = urlInput.value.trim();
-      if (!url) { hideUrlBar(); return; }
-      if (!/^https?:\/\//i.test(url)) {
-        showFlash('URL must start with http:// or https://', true);
+      const linkText = linkTextInput.value.trim();
+      const url      = urlInput.value.trim();
+
+      if (!linkText) {
+        showFlash('Enter link text', true);
+        linkTextInput.focus();
+        return;
+      }
+      if (!url) {
+        showFlash('Enter a URL', true);
         urlInput.focus();
         return;
       }
-
-      if (editingLink) {
-        // Editing an existing link — just swap the href.
-        editingLink.setAttribute('href', url);
-        hideUrlBar();
-        opts.onUpdate(sanitiseTaglineHTML(editor.innerHTML));
-        return;
-      }
-
-      // Creating a new link — prefer live selection, fall back to savedRange
-      // (iOS sometimes clears the live selection before mousedown fires).
-      const sel = window.getSelection();
-      const range = (sel && sel.rangeCount && !sel.isCollapsed && editor.contains(sel.anchorNode))
-        ? sel.getRangeAt(0)
-        : savedRange;
-
-      if (!range || range.collapsed) {
-        showFlash('Select some text in the editor, then tap APPLY.', true);
-        return;
-      }
-
-      const selectedText = range.toString();
-      if (!selectedText.trim()) {
-        showFlash('Select some text in the editor, then tap APPLY.', true);
+      if (!/^https?:\/\//i.test(url)) {
+        showFlash('URL must start with http:// or https://', true);
+        urlInput.focus();
         return;
       }
 
@@ -439,13 +423,19 @@
       a.setAttribute('href', url);
       a.setAttribute('target', '_blank');
       a.setAttribute('rel', 'noopener noreferrer');
-      a.textContent = selectedText;
-      try {
-        range.deleteContents();
-        range.insertNode(a);
-      } catch (e) {
-        showFlash('Could not create link — please try again.', true);
-        return;
+      a.textContent = linkText;
+
+      if (editingLink) {
+        editingLink.replaceWith(a);
+      } else if (savedRange) {
+        try {
+          savedRange.deleteContents();
+          savedRange.insertNode(a);
+        } catch (_) {
+          editor.appendChild(a);
+        }
+      } else {
+        editor.appendChild(a);
       }
 
       savedRange = null;
@@ -467,15 +457,15 @@
 
     editor.addEventListener('input', () => opts.onUpdate(sanitiseTaglineHTML(editor.innerHTML)));
 
-    // Tap an existing link to edit its URL — but only if the bar isn't already
-    // open (prevents overwriting a URL the user is actively typing).
+    // Tap an existing link to edit it.
     editor.addEventListener('click', (e) => {
       const a = e.target.closest('a');
-      if (!a || !urlBar.hidden) return;
+      if (!a) return;
       e.preventDefault();
-      editingLink    = a;
-      urlInput.value = a.getAttribute('href') || '';
-      urlBar.hidden  = false;
+      editingLink          = a;
+      linkTextInput.value  = a.textContent || '';
+      urlInput.value       = a.getAttribute('href') || '';
+      urlBar.hidden        = false;
       urlInput.focus();
       urlInput.select();
     });
@@ -483,18 +473,16 @@
     // ── Toolbar buttons ────────────────────────────────────────────────────
 
     if (linkBtn) {
-      linkBtn.addEventListener('mousedown', e => e.preventDefault());
       linkBtn.addEventListener('click', () => {
-        // Toggle: clicking LINK while the bar is open closes it.
         if (!urlBar.hidden) { hideUrlBar(); return; }
-        // Pre-fill if cursor is already inside a link.
-        const sel = window.getSelection();
-        const anchorEl = sel?.anchorNode?.parentElement?.closest('a');
-        editingLink    = anchorEl || null;
-        urlInput.value = anchorEl ? (anchorEl.getAttribute('href') || '') : '';
-        urlBar.hidden  = false;
-        urlInput.focus();
-        if (anchorEl) urlInput.select();
+        // Pre-fill link text from any current selection; leave URL blank for new links.
+        const selText = (savedRange && !savedRange.collapsed) ? savedRange.toString() : '';
+        editingLink         = null;
+        linkTextInput.value = selText;
+        urlInput.value      = '';
+        urlBar.hidden       = false;
+        // Focus URL if text is pre-filled, otherwise focus the text field.
+        if (selText) { urlInput.focus(); } else { linkTextInput.focus(); }
       });
     }
 
@@ -502,7 +490,6 @@
       unlinkBtn.addEventListener('mousedown', e => e.preventDefault());
       unlinkBtn.addEventListener('click', () => {
         hideUrlBar();
-        // Restore savedRange if the live selection was cleared.
         const sel = window.getSelection();
         if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
           document.execCommand('unlink', false);
@@ -515,19 +502,23 @@
       });
     }
 
-    // ── URL bar controls ───────────────────────────────────────────────────
+    // ── Link panel controls ────────────────────────────────────────────────
 
-    if (urlApply) {
-      // mousedown preventDefault keeps the editor's text selection alive
-      // when the user taps APPLY on mobile.
-      urlApply.addEventListener('mousedown', e => e.preventDefault());
-      urlApply.addEventListener('click', applyLink);
-    }
+    if (urlApply) urlApply.addEventListener('click', applyLink);
     if (urlCancel) urlCancel.addEventListener('click', hideUrlBar);
+
+    if (linkTextInput) {
+      linkTextInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter')                    { e.preventDefault(); applyLink(); }
+        if (e.key === 'Escape')                   { e.preventDefault(); hideUrlBar(); }
+        if (e.key === 'Tab' && !e.shiftKey)       { e.preventDefault(); urlInput.focus(); }
+      });
+    }
     if (urlInput) {
       urlInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter')  { e.preventDefault(); applyLink(); }
-        if (e.key === 'Escape') { e.preventDefault(); hideUrlBar(); }
+        if (e.key === 'Enter')                    { e.preventDefault(); applyLink(); }
+        if (e.key === 'Escape')                   { e.preventDefault(); hideUrlBar(); }
+        if (e.key === 'Tab' && e.shiftKey)        { e.preventDefault(); linkTextInput.focus(); }
       });
     }
   }
@@ -537,6 +528,7 @@
     linkBtnId:   'fifi-rt-link',
     unlinkBtnId: 'fifi-rt-unlink',
     urlBarId:    'fifi-rt-url-bar',
+    linkTextId:  'fifi-rt-link-text',
     urlInputId:  'fifi-rt-url-input',
     urlApplyId:  'fifi-rt-url-apply',
     urlCancelId: 'fifi-rt-url-cancel',
@@ -561,6 +553,7 @@
     linkBtnId:   'fifi-credit-rt-link',
     unlinkBtnId: 'fifi-credit-rt-unlink',
     urlBarId:    'fifi-credit-url-bar',
+    linkTextId:  'fifi-credit-link-text',
     urlInputId:  'fifi-credit-url-input',
     urlApplyId:  'fifi-credit-url-apply',
     urlCancelId: 'fifi-credit-url-cancel',

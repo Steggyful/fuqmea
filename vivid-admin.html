@@ -383,12 +383,12 @@
       pointer-events: none;
     }
 
-    /* ── Rich-text URL bar ────────────────────────────────────── */
+    /* ── Rich-text link panel ─────────────────────────────────── */
     .rt-url-bar {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 6px;
-      padding: 6px 8px;
+      padding: 8px;
       background: var(--surface-3);
       border-bottom: 1px solid var(--border);
       animation: rt-bar-in 120ms ease;
@@ -398,17 +398,34 @@
       from { opacity: 0; transform: translateY(-4px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+    .rt-url-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .rt-link-text-input,
     .rt-url-input {
-      flex: 1;
-      min-width: 0;
       background: var(--bg);
-      border: 1px solid var(--lime);
+      border: 1px solid var(--border-strong);
       border-radius: 4px;
       color: var(--text);
-      font-family: var(--font-mono);
+      font-family: var(--font-sans);
       font-size: 12px;
       padding: 5px 8px;
       outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    .rt-link-text-input {
+      width: 100%;
+    }
+    .rt-url-input {
+      flex: 1;
+      min-width: 0;
+      font-family: var(--font-mono);
+    }
+    .rt-link-text-input:focus,
+    .rt-url-input:focus {
+      border-color: var(--lime);
       box-shadow: 0 0 0 2px rgba(57, 255, 20, 0.10);
     }
     .rt-url-apply {
@@ -685,14 +702,17 @@
               <label>Top Text</label>
               <div class="rt-editor-wrap">
                 <div class="rt-toolbar" role="toolbar" aria-label="Text formatting">
-                  <button type="button" class="rt-btn" id="fifi-rt-link" title="Wrap selected text in a link">🔗 LINK</button>
+                  <button type="button" class="rt-btn" id="fifi-rt-link" title="Add or edit a link">🔗 LINK</button>
                   <button type="button" class="rt-btn" id="fifi-rt-unlink" title="Remove link at cursor">⌫ UNLINK</button>
-                  <span class="rt-hint">LINK → type URL → select text → APPLY</span>
+                  <span class="rt-hint">Click a link to edit it</span>
                 </div>
                 <div class="rt-url-bar" id="fifi-rt-url-bar" hidden>
-                  <input class="rt-url-input" id="fifi-rt-url-input" type="text" placeholder="https://" autocomplete="off" spellcheck="false">
-                  <button type="button" class="rt-url-apply" id="fifi-rt-url-apply">APPLY</button>
-                  <button type="button" class="rt-url-cancel" id="fifi-rt-url-cancel" aria-label="Cancel">✕</button>
+                  <input class="rt-link-text-input" id="fifi-rt-link-text" type="text" placeholder="Link text" autocomplete="off" spellcheck="false">
+                  <div class="rt-url-row">
+                    <input class="rt-url-input" id="fifi-rt-url-input" type="text" placeholder="https://" autocomplete="off" spellcheck="false">
+                    <button type="button" class="rt-url-apply" id="fifi-rt-url-apply">APPLY</button>
+                    <button type="button" class="rt-url-cancel" id="fifi-rt-url-cancel" aria-label="Cancel">✕</button>
+                  </div>
                 </div>
                 <div id="fifi-tagline-rt"
                      class="rt-editor"
@@ -753,9 +773,12 @@
                   <span class="rt-hint">e.g. "Music by @Artist"</span>
                 </div>
                 <div class="rt-url-bar" id="fifi-credit-url-bar" hidden>
-                  <input class="rt-url-input" id="fifi-credit-url-input" type="text" placeholder="https://" autocomplete="off" spellcheck="false">
-                  <button type="button" class="rt-url-apply" id="fifi-credit-url-apply">APPLY</button>
-                  <button type="button" class="rt-url-cancel" id="fifi-credit-url-cancel" aria-label="Cancel">✕</button>
+                  <input class="rt-link-text-input" id="fifi-credit-link-text" type="text" placeholder="Link text" autocomplete="off" spellcheck="false">
+                  <div class="rt-url-row">
+                    <input class="rt-url-input" id="fifi-credit-url-input" type="text" placeholder="https://" autocomplete="off" spellcheck="false">
+                    <button type="button" class="rt-url-apply" id="fifi-credit-url-apply">APPLY</button>
+                    <button type="button" class="rt-url-cancel" id="fifi-credit-url-cancel" aria-label="Cancel">✕</button>
+                  </div>
                 </div>
                 <div id="fifi-credit-rt"
                      class="rt-editor"
@@ -787,6 +810,6 @@
 <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 <script src="assets/js/vendor/supabase.umd.min.js"></script>
 <script src="assets/js/cloud-config.js"></script>
-<script src="assets/js/vivid-admin.js?v=1.7.0"></script>
+<script src="assets/js/vivid-admin.js?v=1.8.0"></script>
 </body>
 </html>
