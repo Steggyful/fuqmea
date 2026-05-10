@@ -390,35 +390,80 @@
     .user-flag.banned { color: var(--red); background: var(--red-soft); }
     .user-flag.excluded { color: var(--muted); background: var(--surface-3); }
 
-    .actions-cell {
-      display: inline-flex;
-      gap: 0;
-      justify-content: flex-end;
-      flex-wrap: wrap;
-      max-width: 380px;
-      background: var(--surface-2);
-      border: 1px solid var(--border);
-      border-radius: 999px;
-      padding: 3px;
-      overflow: hidden;
-    }
-    .actions-cell .btn {
-      padding: 5px 10px;
-      font-size: 10.5px;
-      border: none;
+    /* Single ⋮ trigger per row + a popover menu (configured below). */
+    .row-menu-btn {
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border-radius: 8px;
       background: transparent;
-      border-radius: 999px;
-      letter-spacing: 0.3px;
+      border: 1px solid transparent;
+      color: var(--muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      line-height: 1;
+      transition: background var(--transition), color var(--transition), border-color var(--transition);
     }
-    .actions-cell .btn:hover {
+    .row-menu-btn:hover {
       background: var(--surface-3);
       color: var(--text);
-      box-shadow: none;
+      border-color: var(--border);
     }
-    .actions-cell .btn.btn-yellow { color: var(--yellow); }
-    .actions-cell .btn.btn-yellow:hover { background: rgba(255, 214, 0, 0.15); color: var(--yellow); }
-    .actions-cell .btn.btn-red { color: var(--red); }
-    .actions-cell .btn.btn-red:hover { background: rgba(255, 23, 68, 0.15); color: var(--red); }
+    .row-menu-btn[aria-expanded="true"] {
+      background: var(--surface-3);
+      color: var(--text);
+      border-color: var(--border-strong);
+    }
+
+    .row-menu {
+      position: fixed;
+      z-index: 150;
+      min-width: 220px;
+      background: var(--surface-2);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      animation: row-menu-in 120ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .row-menu[hidden] { display: none; }
+
+    @keyframes row-menu-in {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .row-menu-item {
+      background: transparent;
+      border: none;
+      padding: 8px 12px;
+      text-align: left;
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 6px;
+      transition: background 80ms ease;
+      width: 100%;
+    }
+    .row-menu-item:hover { background: var(--surface-3); }
+    .row-menu-item.destructive { color: var(--red); }
+    .row-menu-item.destructive:hover { background: rgba(255, 23, 68, 0.10); }
+    .row-menu-item.warn { color: var(--yellow); }
+    .row-menu-item.warn:hover { background: rgba(255, 214, 0, 0.10); }
+    .row-menu-item[hidden] { display: none; }
+
+    .row-menu-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 2px;
+    }
 
     .loading-row td {
       color: var(--muted);
@@ -817,7 +862,7 @@
               <th>Name</th>
               <th>Handle</th>
               <th class="col-num">Balance</th>
-              <th class="col-num">Net Δ</th>
+              <th class="col-num" title="Net profit/loss across every game (sum of wins minus losses)">Net P/L</th>
               <th class="col-num">Lifetime Wagered</th>
               <th class="col-num">Weekly Wagered</th>
               <th class="col-num">Wk Rounds</th>
@@ -901,6 +946,19 @@
   </div>
 </div>
 
+<!-- Per-user-row dropdown menu (positioned by JS, one shared instance) -->
+<div id="user-row-menu" class="row-menu" role="menu" hidden>
+  <button class="row-menu-item" data-act="adjust-tokens" role="menuitem">Adjust tokens</button>
+  <button class="row-menu-item" data-act="events" role="menuitem">View recent events</button>
+  <div class="row-menu-divider"></div>
+  <button class="row-menu-item destructive" data-act="ban" role="menuitem">Ban user</button>
+  <button class="row-menu-item" data-act="unban" role="menuitem" hidden>Unban user</button>
+  <button class="row-menu-item" data-act="exclude-lb" role="menuitem">Hide from leaderboard</button>
+  <button class="row-menu-item" data-act="include-lb" role="menuitem" hidden>Show on leaderboard</button>
+  <button class="row-menu-item warn" data-act="clear-name" role="menuitem">Clear display name</button>
+  <button class="row-menu-item destructive" data-act="reset-weekly" role="menuitem">Reset weekly stats</button>
+</div>
+
 <!-- Status flash -->
 <div id="status-bar"></div>
 
@@ -908,7 +966,7 @@
 <script src="assets/js/vendor/supabase.umd.min.js"></script>
 <script src="assets/js/cloud-config.js"></script>
 <script src="tools/extract-categories.js?v=1.0.1"></script>
-<script src="assets/js/admin.js?v=1.3.0"></script>
+<script src="assets/js/admin.js?v=1.4.0"></script>
 <script src="assets/js/admin-memes.js?v=1.0.1"></script>
 </body>
 </html>
