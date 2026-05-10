@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://www.google-analytics.com https://*.analytics.google.com https://*.google-analytics.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://www.google-analytics.com https://*.analytics.google.com https://*.google-analytics.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com/fifi</title>
   <link rel="stylesheet" href="assets/css/styles.css?v=2.2.16">
   <!-- Google tag (gtag.js) -->
@@ -52,13 +52,13 @@
   <div class="main-content" style="padding-top:2rem;">
     <h1 style="font-size:3.5rem;">FiFi ZONE</h1>
     
-    <p>
+    <p id="fifi-tagline">
       <a href="https://www.tiktok.com/@SSGVivid" target="_blank" rel="noopener noreferrer" class="social-link">@SSGVivid on TikTok</a>
     </p>
     
-    <img src="assets/images/01 Vivid.jpg" alt="Vivid Getting Pegged" style="max-width:96%; max-height:82vh; border:8px solid lime; box-shadow:0 0 40px lime;">
-    
-    <p style="font-size:1.8rem; margin-top:2rem;">When she finds your FiFi</p>
+    <img id="fifi-featured-img" src="assets/images/01 Vivid.jpg" alt="Vivid" style="max-width:96%; max-height:82vh; border:8px solid lime; box-shadow:0 0 40px lime;">
+
+    <p id="fifi-caption" style="font-size:1.8rem; margin-top:2rem;">When she finds your FiFi</p>
     <p class="credit">created by 
   <a href="https://www.tiktok.com/@steggyful1" target="_blank" rel="noopener noreferrer">@steggyful1</a>
 </p>
@@ -67,5 +67,28 @@
   <script src="tools/extract-categories.js?v=1.0.1" defer></script>
   <script src="assets/js/hub.js?v=2.1.7" defer></script>
   <script src="assets/js/init.js?v=2.1.6" defer></script>
+  <script src="assets/js/cloud-config.js" defer></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var cfg = window.FUQ_CLOUD_CONFIG;
+      if (!cfg || !cfg.supabaseUrl) return;
+      fetch(cfg.supabaseUrl + '/rest/v1/fifi_zone_settings?id=eq.1&select=image_url,caption,tagline_text,tagline_url', {
+        headers: { apikey: cfg.supabaseAnonKey }
+      }).then(function (r) { return r.ok ? r.json() : null; }).then(function (rows) {
+        if (!rows || !rows[0]) return;
+        var s = rows[0];
+        if (s.image_url) document.getElementById('fifi-featured-img').src = s.image_url;
+        if (s.caption) document.getElementById('fifi-caption').textContent = s.caption;
+        var tagEl = document.getElementById('fifi-tagline');
+        if (tagEl && s.tagline_text) {
+          if (s.tagline_url) {
+            tagEl.innerHTML = '<a href="' + s.tagline_url + '" target="_blank" rel="noopener noreferrer" class="social-link">' + s.tagline_text.replace(/[<>&"]/g, function(c){return({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]);}) + '</a>';
+          } else {
+            tagEl.textContent = s.tagline_text;
+          }
+        }
+      }).catch(function () {});
+    });
+  </script>
 </body>
 </html>

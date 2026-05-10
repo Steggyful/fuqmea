@@ -1,4 +1,4 @@
-// FuqMeA mini-games — local-first fun tokens with optional cloud sync + leaderboard.
+// Fuqmea mini-games — local-first fun tokens with optional cloud sync + leaderboard.
 
 (function () {
   'use strict';
@@ -51,6 +51,7 @@
     slots: 'SLOTS',
     bj: 'BJ',
     crash: 'AURA',
+    fifi: 'FiFi BIRD',
     daily: 'DAILY',
     rakeback: 'RAKEBACK',
     reset: 'RESET',
@@ -2956,7 +2957,7 @@
         .recordSettlement(payload)
         .then((result) => {
           if (!result || !result.ok || !result.wallet) {
-            console.warn('[FuqMeA] settlement failed', result && result.error ? result.error : result);
+            console.warn('[Fuqmea] settlement failed', result && result.error ? result.error : result);
             const errTxt = result && result.error != null ? String(result.error) : '';
             if (
               (row.game === 'quest' || row.game === 'quest_weekly') &&
@@ -2979,7 +2980,7 @@
           renderWinStreakBars();
         })
         .catch((err) => {
-          console.warn('[FuqMeA] settlement threw', err);
+          console.warn('[Fuqmea] settlement threw', err);
         });
       scheduleLeaderboardRefresh();
     }
@@ -3015,6 +3016,7 @@
       slots: 'slots',
       bj: 'bj',
       crash: 'crash',
+      fifi: 'fifi',
       daily: 'daily',
       rakeback: 'daily',
       quest: 'quest',
@@ -3733,7 +3735,7 @@
     const panels = document.querySelectorAll('.games-tab-panel');
     if (!tabs.length || !panels.length) return;
 
-    const order = ['bj', 'crash', 'coin', 'rps', 'slots'];
+    const order = ['bj', 'crash', 'coin', 'rps', 'slots', 'fifi'];
 
     function selectTab(id) {
       const next = order.includes(id) ? id : 'bj';
@@ -3778,7 +3780,7 @@
     }
 
     const g = new URLSearchParams(window.location.search).get('game');
-    if (g === 'rps' || g === 'slots' || g === 'coin' || g === 'bj' || g === 'crash') selectTab(g);
+    if (g === 'rps' || g === 'slots' || g === 'coin' || g === 'bj' || g === 'crash' || g === 'fifi') selectTab(g);
     else selectTab('bj');
   }
 
@@ -3818,10 +3820,15 @@
   initQuestCollapseControls();
   initGameRulesDisclosures();
   initHistoryDetailsOpen();
-  document.getElementById('games-leaderboard-refresh')?.addEventListener('click', () => {
-    cloudClient?.refreshLeaderboard?.().catch(() => {});
-  });
   initBlackjack();
   initCrashGame();
   initGameTabs();
+
+  if (typeof window.initFifiBirdArcade === 'function') {
+    window.initFifiBirdArcade({
+      pushHistory,
+      loadWallet,
+      arcadeNoteRound
+    });
+  }
 })();

@@ -879,6 +879,244 @@ on public.game_events for select
 to authenticated
 using (auth.uid() = user_id);
 
+-- FiFi Bird skill game progress (no wallet / settle-game).
+create table if not exists public.fifi_bird_progress (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  best_score integer not null default 0
+    check (best_score >= 0 and best_score <= 999999),
+  games_played integer not null default 0
+    check (games_played >= 0),
+  total_pipes bigint not null default 0
+    check (total_pipes >= 0),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists fifi_bird_progress_updated_idx
+  on public.fifi_bird_progress (updated_at desc);
+
+alter table public.fifi_bird_progress enable row level security;
+
+drop policy if exists fifi_bird_progress_owner_select on public.fifi_bird_progress;
+create policy fifi_bird_progress_owner_select
+on public.fifi_bird_progress for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists fifi_bird_progress_owner_insert on public.fifi_bird_progress;
+create policy fifi_bird_progress_owner_insert
+on public.fifi_bird_progress for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists fifi_bird_progress_owner_update on public.fifi_bird_progress;
+create policy fifi_bird_progress_owner_update
+on public.fifi_bird_progress for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+create table if not exists public.fifi_bird_run_sessions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  seed bigint not null,
+  created_at timestamptz not null default now(),
+  consumed_at timestamptz,
+  duration_ms integer,
+  score integer
+);
+
+create index if not exists fifi_bird_run_sessions_user_created_idx
+  on public.fifi_bird_run_sessions (user_id, created_at desc);
+
+alter table public.fifi_bird_run_sessions enable row level security;
+
+drop policy if exists fifi_bird_run_sessions_owner_insert on public.fifi_bird_run_sessions;
+create policy fifi_bird_run_sessions_owner_insert
+on public.fifi_bird_run_sessions for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists fifi_bird_run_sessions_owner_update on public.fifi_bird_run_sessions;
+create policy fifi_bird_run_sessions_owner_update
+on public.fifi_bird_run_sessions for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+grant select, insert, update on public.fifi_bird_run_sessions to authenticated;
+
+create or replace function public.start_fifi_bird_run()
+returns table(run_id uuid, seed bigint)
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_seed bigint;
+begin
+  if v_uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  delete from public.fifi_bird_run_sessions
+  where user_id = v_uid and consumed_at is null;
+
+  v_seed :=
+    (floor(random() * 1.0e15)::bigint * 1300021)
+    + (floor(random() * 1.0e15)::bigint * 790007);
+
+  return query
+  insert into public.fifi_bird_run_sessions (user_id, seed)
+  values (v_uid, v_seed)
+  returning id, seed;
+end;
+$$;
+
+create or replace function public.record_fifi_bird_run(
+  p_run_id uuid,
+  p_score integer,
+  p_pipes integer,
+  p_duration_ms integer
+)
+returns table(best_score integer, games_played integer, total_pipes bigint)
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_score integer := least(greatest(coalesce(p_score, 0), 0), 999999);
+  v_pipes integer := least(greatest(coalesce(p_pipes, 0), 0), 999999);
+  v_dur integer := greatest(0, coalesce(p_duration_ms, 0));
+  v_max_score integer;
+  s record;
+begin
+  if v_uid is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  if p_run_id is null then
+    raise exception 'fifi_missing_run_id';
+  end if;
+
+  if v_score <> v_pipes then
+    raise exception 'fifi_score_pipes_mismatch';
+  end if;
+
+  select * into s
+  from public.fifi_bird_run_sessions
+  where id = p_run_id and user_id = v_uid
+  for update;
+
+  if not found then
+    raise exception 'fifi_invalid_run';
+  end if;
+
+  if s.consumed_at is not null then
+    raise exception 'fifi_run_already_used';
+  end if;
+
+  if s.created_at < now() - interval '25 minutes' then
+    raise exception 'fifi_run_expired';
+  end if;
+
+  if v_score > 0 and v_dur < 320 then
+    raise exception 'fifi_run_too_short';
+  end if;
+
+  if v_dur > 18 * 60 * 1000 then
+    raise exception 'fifi_run_too_long';
+  end if;
+
+  v_max_score := v_dur / 210 + 18;
+  if v_score > v_max_score then
+    raise exception 'fifi_implausible_score';
+  end if;
+
+  update public.fifi_bird_run_sessions
+  set consumed_at = now(), duration_ms = v_dur, score = v_score
+  where id = p_run_id;
+
+  insert into public.fifi_bird_progress (user_id, best_score, games_played, total_pipes)
+  values (v_uid, v_score, 1, v_pipes::bigint)
+  on conflict (user_id) do update set
+    best_score = greatest(public.fifi_bird_progress.best_score, v_score),
+    games_played = public.fifi_bird_progress.games_played + 1,
+    total_pipes = public.fifi_bird_progress.total_pipes + v_pipes::bigint,
+    updated_at = now();
+
+  return query
+  select p.best_score, p.games_played, p.total_pipes
+  from public.fifi_bird_progress p
+  where p.user_id = v_uid;
+end;
+$$;
+
+create or replace function public.merge_fifi_bird_guest_local(
+  p_best integer,
+  p_extra_runs integer,
+  p_extra_pipes bigint
+)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_best integer := least(greatest(coalesce(p_best, 0), 0), 999999);
+  v_runs integer := least(greatest(coalesce(p_extra_runs, 0), 0), 999999);
+  v_pipes bigint := least(greatest(coalesce(p_extra_pipes, 0), 0), 9999999999);
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  insert into public.fifi_bird_progress (user_id, best_score, games_played, total_pipes)
+  values (auth.uid(), v_best, v_runs, v_pipes)
+  on conflict (user_id) do update set
+    best_score = greatest(public.fifi_bird_progress.best_score, v_best),
+    games_played = public.fifi_bird_progress.games_played + v_runs,
+    total_pipes = public.fifi_bird_progress.total_pipes + v_pipes,
+    updated_at = now();
+end;
+$$;
+
+grant select, insert, update on public.fifi_bird_progress to authenticated;
+
+grant execute on function public.start_fifi_bird_run() to authenticated;
+grant execute on function public.record_fifi_bird_run(uuid, integer, integer, integer) to authenticated;
+grant execute on function public.merge_fifi_bird_guest_local(integer, integer, bigint) to authenticated;
+
+-- FiFi Bird public leaderboard (client-reported scores; honor system).
+create or replace function public.fifi_bird_leaderboard_rows(p_limit integer default 50)
+returns table(
+  leaderboard_name text,
+  best_score integer,
+  games_played integer,
+  total_pipes bigint,
+  avatar_url text
+)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select
+    coalesce(nullif(trim(p.display_name), ''), p.handle)::text as leaderboard_name,
+    f.best_score,
+    f.games_played,
+    f.total_pipes,
+    p.avatar_url
+  from public.fifi_bird_progress f
+  inner join public.profiles p on p.id = f.user_id
+  where f.games_played > 0 or f.best_score > 0 or f.total_pipes > 0
+  order by f.best_score desc, f.updated_at desc
+  limit least(greatest(coalesce(p_limit, 50), 1), 100);
+$$;
+
+grant execute on function public.fifi_bird_leaderboard_rows(integer) to anon, authenticated;
+
 grant usage on schema public to anon, authenticated;
 grant select on public.leaderboard_all_time to anon, authenticated;
 grant select on public.leaderboard_weekly to anon, authenticated;
@@ -889,3 +1127,171 @@ grant execute on function public.ensure_wallet_exists(uuid) to authenticated;
 grant execute on function public.import_initial_device_wallet(integer, integer, text) to authenticated;
 grant execute on function public.leaderboard_all_time_rows(integer) to anon, authenticated;
 grant execute on function public.leaderboard_weekly_rows(integer) to anon, authenticated;
+
+-- ── Admin Panel ──────────────────────────────────────────────────────────────
+-- All admin RPCs check (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'.
+-- Grant that role via Supabase Dashboard → Auth → Users → Edit → app_metadata.
+-- No credentials or user IDs are stored in this codebase.
+
+create table if not exists public.streamer_live_status (
+  username text primary key check (char_length(username) between 1 and 32),
+  tiktok_live boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.streamer_live_status (username, tiktok_live) values
+  ('steggyful1', false),
+  ('ssgvivid', false)
+on conflict (username) do nothing;
+
+alter table public.streamer_live_status enable row level security;
+
+drop policy if exists streamer_live_status_public_read on public.streamer_live_status;
+create policy streamer_live_status_public_read on public.streamer_live_status
+  for select to anon, authenticated using (true);
+
+grant select on public.streamer_live_status to anon, authenticated;
+
+create or replace function public.admin_set_tiktok_live(p_username text, p_live boolean)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce((auth.jwt() -> 'app_metadata' ->> 'role'), '') <> 'admin' then
+    raise exception 'not authorized';
+  end if;
+  insert into public.streamer_live_status (username, tiktok_live)
+  values (lower(p_username), p_live)
+  on conflict (username) do update set tiktok_live = p_live, updated_at = now();
+end;
+$$;
+
+create or replace function public.admin_adjust_tokens(
+  p_user_id uuid, p_delta integer, p_reason text default 'admin adjustment'
+)
+returns integer language plpgsql security definer set search_path = public as $$
+declare v_new_tokens integer;
+begin
+  if coalesce((auth.jwt() -> 'app_metadata' ->> 'role'), '') <> 'admin' then
+    raise exception 'not authorized';
+  end if;
+  update public.wallets set tokens = greatest(tokens + p_delta, 0)
+  where user_id = p_user_id returning tokens into v_new_tokens;
+  if not found then raise exception 'user_not_found'; end if;
+  insert into public.game_events (user_id, game, detail, delta, balance_after)
+  values (p_user_id, 'admin', left(coalesce(p_reason, 'admin adjustment'), 160), p_delta, v_new_tokens);
+  return v_new_tokens;
+end;
+$$;
+
+create or replace function public.admin_reset_weekly(p_user_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce((auth.jwt() -> 'app_metadata' ->> 'role'), '') <> 'admin' then
+    raise exception 'not authorized';
+  end if;
+  update public.leaderboard_aggregate
+  set weekly_net_delta = 0, weekly_rounds = 0, weekly_wagered = 0,
+      weekly_week_start = date_trunc('week', now())::date, updated_at = now()
+  where user_id = p_user_id;
+end;
+$$;
+
+create or replace function public.admin_list_users()
+returns table (
+  user_id uuid, leaderboard_name text, handle text, tokens integer,
+  net_delta integer, lifetime_wagered bigint, weekly_wagered bigint,
+  weekly_rounds integer, rakeback_pool numeric, aura_peak double precision, created_at timestamptz
+)
+language plpgsql security definer set search_path = public stable as $$
+begin
+  if coalesce((auth.jwt() -> 'app_metadata' ->> 'role'), '') <> 'admin' then
+    raise exception 'not authorized';
+  end if;
+  return query
+  select p.id, coalesce(nullif(trim(p.display_name), ''), p.handle)::text,
+    p.handle::text, w.tokens, coalesce(la.net_delta, 0)::integer,
+    coalesce(la.lifetime_wagered, 0)::bigint,
+    (case when la.weekly_week_start = date_trunc('week', now())::date then la.weekly_wagered else 0 end)::bigint,
+    (case when la.weekly_week_start = date_trunc('week', now())::date then la.weekly_rounds else 0 end)::integer,
+    coalesce(w.rakeback_pool, 0)::numeric, coalesce(w.aura_peak_multiplier, 0)::double precision, p.created_at
+  from public.profiles p
+  join public.wallets w on w.user_id = p.id
+  left join public.leaderboard_aggregate la on la.user_id = p.id
+  order by w.tokens desc;
+end;
+$$;
+
+grant execute on function public.admin_set_tiktok_live(text, boolean) to authenticated;
+grant execute on function public.admin_adjust_tokens(uuid, integer, text) to authenticated;
+grant execute on function public.admin_reset_weekly(uuid) to authenticated;
+grant execute on function public.admin_list_users() to authenticated;
+
+-- ── Vivid Admin ──────────────────────────────────────────────────────────────
+-- Grant role via Supabase Dashboard → Auth → Users → Edit → app_metadata: {"role":"vivid"}
+
+create table if not exists public.fifi_zone_settings (
+  id smallint primary key check (id = 1),
+  image_url text not null default 'assets/images/01 Vivid.jpg'
+    check (char_length(image_url) <= 500),
+  caption text not null default 'When she finds your FiFi'
+    check (char_length(caption) <= 200),
+  updated_at timestamptz not null default now()
+);
+
+insert into public.fifi_zone_settings (id, image_url, caption)
+values (1, 'assets/images/01 Vivid.jpg', 'When she finds your FiFi')
+on conflict (id) do nothing;
+
+alter table public.fifi_zone_settings enable row level security;
+
+drop policy if exists fifi_zone_settings_public_read on public.fifi_zone_settings;
+create policy fifi_zone_settings_public_read on public.fifi_zone_settings
+  for select to anon, authenticated using (true);
+
+grant select on public.fifi_zone_settings to anon, authenticated;
+
+create table if not exists public.fifi_zone_settings (
+  id smallint primary key check (id = 1),
+  image_url    text not null default 'assets/images/01 Vivid.jpg' check (char_length(image_url) <= 500),
+  caption      text not null default 'When she finds your FiFi'   check (char_length(caption) <= 200),
+  tagline_text text not null default '@SSGVivid on TikTok'         check (char_length(tagline_text) <= 120),
+  tagline_url  text not null default 'https://www.tiktok.com/@SSGVivid' check (char_length(tagline_url) <= 500),
+  updated_at   timestamptz not null default now()
+);
+
+insert into public.fifi_zone_settings (id, image_url, caption, tagline_text, tagline_url)
+values (1, 'assets/images/01 Vivid.jpg', 'When she finds your FiFi', '@SSGVivid on TikTok', 'https://www.tiktok.com/@SSGVivid')
+on conflict (id) do nothing;
+
+create or replace function public.set_fifi_zone_settings(
+  p_image_url    text default null,
+  p_caption      text default null,
+  p_tagline_text text default null,
+  p_tagline_url  text default null
+)
+returns table (image_url text, caption text, tagline_text text, tagline_url text)
+language plpgsql security definer set search_path = public as $$
+declare
+  v_role text := coalesce((auth.jwt() -> 'app_metadata' ->> 'role'), '');
+  v_img  text := nullif(trim(coalesce(p_image_url,    '')), '');
+  v_cap  text := nullif(trim(coalesce(p_caption,      '')), '');
+  v_tt   text := nullif(trim(coalesce(p_tagline_text, '')), '');
+  v_tu   text := nullif(trim(coalesce(p_tagline_url,  '')), '');
+begin
+  if v_role not in ('admin', 'vivid') then raise exception 'not authorized'; end if;
+  if v_img is not null and char_length(v_img) > 500 then raise exception 'image_url too long'; end if;
+  if v_cap is not null and char_length(v_cap) > 200 then raise exception 'caption too long'; end if;
+  if v_tt  is not null and char_length(v_tt)  > 120 then raise exception 'tagline_text too long'; end if;
+  if v_tu  is not null and char_length(v_tu)  > 500 then raise exception 'tagline_url too long'; end if;
+  update public.fifi_zone_settings
+  set image_url    = coalesce(v_img, image_url),
+      caption      = coalesce(v_cap, caption),
+      tagline_text = coalesce(v_tt,  tagline_text),
+      tagline_url  = coalesce(v_tu,  tagline_url),
+      updated_at   = now()
+  where id = 1;
+  return query select s.image_url, s.caption, s.tagline_text, s.tagline_url
+    from public.fifi_zone_settings s where s.id = 1;
+end;
+$$;
+
+grant execute on function public.set_fifi_zone_settings(text, text, text, text) to authenticated;
