@@ -3,8 +3,11 @@
 
   var CONSENT_KEY = 'fuqmea_consent';
   var GA_ID = 'G-MNCNNCQ7XX';
+  var gaLoaded = false;
 
   function loadGA() {
+    if (gaLoaded) return;
+    gaLoaded = true;
     window.dataLayer = window.dataLayer || [];
     if (!window.gtag) {
       window.gtag = function () { window.dataLayer.push(arguments); };
