@@ -473,6 +473,8 @@
     // ── Toolbar buttons ────────────────────────────────────────────────────
 
     if (linkBtn) {
+      // Prevent the editor from losing focus (and clearing savedRange) on click.
+      linkBtn.addEventListener('mousedown', e => e.preventDefault());
       linkBtn.addEventListener('click', () => {
         if (!urlBar.hidden) { hideUrlBar(); return; }
         // Pre-fill link text from any current selection; leave URL blank for new links.
