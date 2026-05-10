@@ -148,13 +148,14 @@
         <span class="live-badge ${isLive ? 'on' : 'off'}">${isLive ? 'LIVE' : 'OFF'}</span>
         <span class="live-toggle-name">SSGVivid — TikTok</span>
         <button class="btn ${isLive ? 'btn-red' : ''}"
-          onclick="window._vaToggleLive(${!isLive})">
+          data-action="toggle-live"
+          data-target-live="${!isLive}">
           ${isLive ? 'END LIVE' : 'GO LIVE'}
         </button>
       </div>`;
   }
 
-  window._vaToggleLive = async function (live) {
+  async function toggleLive(live) {
     const btn = $id('va-live-toggle').querySelector('button');
     if (btn) btn.disabled = true;
 
@@ -166,7 +167,14 @@
     if (error) { showFlash('Error: ' + error.message, true); await loadLiveStatus(); return; }
     showFlash(live ? 'You are now LIVE on TikTok 🔴' : 'Live ended.');
     renderLiveToggle(live);
-  };
+  }
+
+  // Delegated handler — CSP blocks inline onclick.
+  $id('va-live-toggle').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action="toggle-live"]');
+    if (!btn) return;
+    toggleLive(btn.dataset.targetLive === 'true');
+  });
 
   // ── FiFi Zone editor ──────────────────────────────────────────────────────
 
