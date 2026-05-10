@@ -2,7 +2,7 @@
   'use strict';
 
   /** Bumped on each material cloud-sync change; surfaced as a tiny chip in the account panel. */
-  const BUILD = '1.25.0';
+  const BUILD = '1.29.0';
 
   /** Latest profile row from server — used to restore the display-name field on Cancel and keep preview in sync. */
   let lastLoadedProfileRow = null;
@@ -15,6 +15,10 @@
 
   /** Same key as games.js — must stay in sync for offline→cloud one-time merge. */
   const FUN_WALLET_KEY = 'fuqmea_fun_wallet_v1';
+
+  const FIFI_WORKING_KEY = 'fuqmea_fifi_bird_v1';
+  /** One guest→cloud merge per signed-in session (avoids double-count on re-auth). */
+  let fifiGuestMergedThisSession = false;
 
   /** Pre-sign-in guest wallet snapshot. Restored on sign-out so the cloud balance
    *  never leaks into guest play (anti-abuse: kills sign-in -> sign-out -> drain ->
@@ -47,6 +51,8 @@
   let supabaseClient = null;
 
   let leaderboardScope = 'alltime';
+  /** Which board is visible in the combined LEADERBOARD panel: FUQ arcade vs FiFi Bird. */
+  let leaderboardMain = 'arcade';
   /** Set by bootstrap so init() can show a precise reason without re-reading the URL. */
   let lastAuthCallbackError = null;
   /** True after a successful PKCE/token-hash exchange so `init` skips the duplicate refresh. */
@@ -541,6 +547,41 @@
     return fetchLeaderboardViaRest(limit);
   }
 
+  async function fetchFifiBirdLeaderboardRows(limit) {
+    const headers = {
+      'Content-Type': 'application/json',
+      apikey: CONFIG.supabaseAnonKey
+    };
+    const sb = getSupabase();
+    if (sb) {
+      try {
+        await maybeRefreshToken();
+        const { data } = await sb.auth.getSession();
+        if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+      } catch (_) {
+        /**/
+      }
+    }
+    const lim = leastInt(limit, 1, 100);
+    const res = await fetch(`${CONFIG.supabaseUrl}/rest/v1/rpc/fifi_bird_leaderboard_rows`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ p_limit: lim })
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(body || `Request failed: ${res.status}`);
+    }
+    const ct = res.headers.get('content-type') || '';
+    const parsed = ct.includes('application/json') ? await res.json() : null;
+    return Array.isArray(parsed) ? parsed : [];
+  }
+
+  function leastInt(n, lo, hi) {
+    const x = Math.floor(Number(n) || 0);
+    return Math.min(Math.max(x || lo, lo), hi);
+  }
+
   function updateLeaderboardTableHeadLabels() {
     const scoreCol = byId('games-lb-head-score');
     if (scoreCol) {
@@ -562,6 +603,33 @@
     const wk = byId('games-leaderboard-scope-weekly');
     if (allt) allt.classList.toggle('games-quest-toggle--active', leaderboardScope === 'alltime');
     if (wk) wk.classList.toggle('games-quest-toggle--active', leaderboardScope === 'weekly');
+  }
+
+  function applyLeaderboardMainView() {
+    const arcade = byId('games-lb-pane-arcade');
+    const fifi = byId('games-lb-pane-fifi');
+    const btArc = byId('games-leaderboard-main-arcade');
+    const btFi = byId('games-leaderboard-main-fifi');
+    const isArc = leaderboardMain === 'arcade';
+    if (arcade) {
+      arcade.hidden = !isArc;
+    }
+    if (fifi) {
+      fifi.hidden = isArc;
+    }
+    if (btArc) {
+      btArc.classList.toggle('games-quest-toggle--active', isArc);
+      btArc.setAttribute('aria-selected', isArc ? 'true' : 'false');
+    }
+    if (btFi) {
+      btFi.classList.toggle('games-quest-toggle--active', !isArc);
+      btFi.setAttribute('aria-selected', !isArc ? 'true' : 'false');
+    }
+  }
+
+  async function refreshActiveLeaderboard() {
+    if (leaderboardMain === 'fifi') await loadFifiBirdLeaderboard();
+    else await loadLeaderboard();
   }
 
   function syncAvatarPreview(url) {
@@ -634,7 +702,7 @@
       if (hint) hint.textContent = 'Saved. Leaderboard refreshes below.';
       const prof = await ensureProfile(me);
       syncProfileForm(prof);
-      await loadLeaderboard();
+      await Promise.all([loadLeaderboard(), loadFifiBirdLeaderboard().catch(() => {})]);
     } catch (err) {
       const msg = err && err.message ? String(err.message) : '';
       const dup =
@@ -784,6 +852,119 @@
     }
   }
 
+  function normalizeFifiBirdState(raw) {
+    const o = raw && typeof raw === 'object' ? raw : {};
+    return {
+      best: Math.max(0, Math.min(999999, Math.floor(Number(o.best) || 0))),
+      gamesPlayed: Math.max(0, Math.min(999999, Math.floor(Number(o.gamesPlayed) || 0))),
+      totalPipes: Math.max(0, Math.min(9999999999, Math.floor(Number(o.totalPipes) || 0)))
+    };
+  }
+
+  function readFifiWorkingLocal() {
+    try {
+      const raw = localStorage.getItem(FIFI_WORKING_KEY);
+      if (!raw) return normalizeFifiBirdState(null);
+      return normalizeFifiBirdState(JSON.parse(raw));
+    } catch (_) {
+      return normalizeFifiBirdState(null);
+    }
+  }
+
+  function writeFifiWorkingLocal(st) {
+    try {
+      localStorage.setItem(FIFI_WORKING_KEY, JSON.stringify(normalizeFifiBirdState(st)));
+    } catch (_) {
+      /**/
+    }
+  }
+
+  async function mergeFifiWorkingLocalIntoCloudOnce() {
+    if (!isEnabled() || !isSignedIn() || fifiGuestMergedThisSession) return;
+    const w = readFifiWorkingLocal();
+    if (w.gamesPlayed === 0 && w.best === 0 && w.totalPipes === 0) {
+      fifiGuestMergedThisSession = true;
+      return;
+    }
+    try {
+      await authFetch('/rest/v1/rpc/merge_fifi_bird_guest_local', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal'
+        },
+        body: JSON.stringify({
+          p_best: w.best,
+          p_extra_runs: w.gamesPlayed,
+          p_extra_pipes: w.totalPipes
+        })
+      });
+      try {
+        localStorage.removeItem(FIFI_WORKING_KEY);
+      } catch (_) {
+        /**/
+      }
+      fifiGuestMergedThisSession = true;
+    } catch (_) {
+      /**/
+    }
+  }
+
+  async function fetchFifiBirdProgressCloud() {
+    const rows = await authFetch(
+      '/rest/v1/fifi_bird_progress?select=best_score,games_played,total_pipes&limit=1',
+      { method: 'GET', headers: { Accept: 'application/json' } }
+    );
+    if (!Array.isArray(rows) || !rows.length) {
+      return { best: 0, gamesPlayed: 0, totalPipes: 0 };
+    }
+    const r = rows[0];
+    return normalizeFifiBirdState({
+      best: r.best_score,
+      gamesPlayed: r.games_played,
+      totalPipes: r.total_pipes
+    });
+  }
+
+  async function startFifiBirdRunCloud() {
+    const rows = await authFetch('/rest/v1/rpc/start_fifi_bird_run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: '{}'
+    });
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (!row || typeof row !== 'object' || row.run_id == null) return null;
+    return { runId: row.run_id, seed: row.seed };
+  }
+
+  async function recordFifiBirdRunCloud(runId, score, pipesThisRun, durationMs) {
+    const rows = await authFetch('/rest/v1/rpc/record_fifi_bird_run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({
+        p_run_id: runId,
+        p_score: Math.max(0, Math.floor(score || 0)),
+        p_pipes: Math.max(0, Math.floor(pipesThisRun || 0)),
+        p_duration_ms: Math.max(0, Math.floor(durationMs || 0))
+      })
+    });
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (!row || typeof row !== 'object') {
+      return normalizeFifiBirdState(null);
+    }
+    return normalizeFifiBirdState({
+      best: row.best_score,
+      gamesPlayed: row.games_played,
+      totalPipes: row.total_pipes
+    });
+  }
+
   /** Idempotent: only the FIRST SIGNED_IN after a guest stretch saves the backup;
    *  subsequent SIGNED_IN events (e.g. token-refresh re-emits) are no-ops. */
   function snapshotGuestIfFirstSignIn() {
@@ -804,6 +985,7 @@
     target.rakebackLifetime = 0;
     writeFunWalletLocal(target);
     clearGuestBackup();
+    fifiGuestMergedThisSession = false;
     window.dispatchEvent(new CustomEvent('fuqmea-restore-guest-quests'));
   }
 
@@ -1142,7 +1324,7 @@
     if (!tbody) return;
     updateLeaderboardTableHeadLabels();
     syncLeaderboardScopeButtons();
-    const lbPanel = tbody.closest('.games-leaderboard-panel');
+    const lbPanel = byId('games-leaderboard-panel');
     if (lbPanel) lbPanel.classList.add('games-leaderboard-panel--refreshing');
     try {
       const lim = Number(CONFIG.leaderboardLimit || 25);
@@ -1184,6 +1366,49 @@
     }
   }
 
+  async function loadFifiBirdLeaderboard() {
+    if (!isEnabledBasics()) return;
+    const tbody = byId('games-fifi-leaderboard-body');
+    if (!tbody) return;
+    const lbPanel = byId('games-leaderboard-panel');
+    if (lbPanel) lbPanel.classList.add('games-leaderboard-panel--refreshing');
+    try {
+      const lim = leastInt(Number(CONFIG.leaderboardLimit || 25), 1, 100);
+      const rows = await fetchFifiBirdLeaderboardRows(lim);
+      if (!rows?.length) {
+        tbody.innerHTML = '<tr><td colspan="5">No scores yet. Play FiFi Bird!</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows
+        .map((row, idx) => {
+          const best = Number(row.best_score || 0);
+          const games = Number(row.games_played || 0);
+          const pipes = Number(row.total_pipes || 0);
+          const name = String(row.leaderboard_name || 'player')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          const avatarSrc = safeAvatarSrc(row.avatar_url);
+          const pfpHtml = avatarSrc
+            ? `<img class="lb-pfp" src="${avatarSrc}" alt="" loading="lazy">`
+            : `<span class="lb-pfp lb-pfp--empty" aria-hidden="true"></span>`;
+          return `<tr>
+            <td>${idx + 1}</td>
+            <td><div class="lb-name-cell">${pfpHtml}<span>${name}</span></div></td>
+            <td>${best.toLocaleString()}</td>
+            <td>${games.toLocaleString()}</td>
+            <td>${pipes.toLocaleString()}</td>
+          </tr>`;
+        })
+        .join('');
+    } catch {
+      tbody.innerHTML =
+        '<tr><td colspan="5">FiFi Bird leaderboard unavailable — please try again later.</td></tr>';
+    } finally {
+      if (lbPanel) lbPanel.classList.remove('games-leaderboard-panel--refreshing');
+    }
+  }
+
   /** Floor between auto-hydrates so rapid Alt-Tab / focus toggles don't hammer Supabase. */
   const AUTO_HYDRATE_MIN_MS = 30_000;
   let lastAutoHydrateAt = 0;
@@ -1198,7 +1423,7 @@
     if (!token) return;
     lastAutoHydrateAt = now;
     await hydrateWalletAfterLogin().catch(() => {});
-    await loadLeaderboard().catch(() => {});
+    await refreshActiveLeaderboard().catch(() => {});
   }
 
   function setupLoginLayout() {
@@ -1260,7 +1485,7 @@
       const res = await clearAvatar();
       if (res.ok) {
         if (hint) hint.textContent = 'Picture removed.';
-        await loadLeaderboard().catch(() => {});
+        await refreshActiveLeaderboard().catch(() => {});
       } else {
         if (hint) hint.textContent = 'Could not remove — try again.';
       }
@@ -1372,7 +1597,7 @@
     byId('games-cloud-logout-btn')?.addEventListener('click', async () => {
       await clearAuthSessionEverywhere();
       applyGuestChrome('Signed out.');
-      await loadLeaderboard();
+      await refreshActiveLeaderboard();
     });
 
     syncLeaderboardScopeButtons();
@@ -1384,6 +1609,22 @@
       leaderboardScope = 'weekly';
       await loadLeaderboard();
     });
+
+    byId('games-leaderboard-main-arcade')?.addEventListener('click', async () => {
+      leaderboardMain = 'arcade';
+      applyLeaderboardMainView();
+      await loadLeaderboard();
+    });
+    byId('games-leaderboard-main-fifi')?.addEventListener('click', async () => {
+      leaderboardMain = 'fifi';
+      applyLeaderboardMainView();
+      await loadFifiBirdLeaderboard();
+    });
+    byId('games-leaderboard-refresh')?.addEventListener('click', async () => {
+      await refreshActiveLeaderboard();
+    });
+
+    applyLeaderboardMainView();
   }
 
   function isAuthRevokedError(txt) {
@@ -1420,6 +1661,12 @@
       updateCloudBadge('Signed in', true);
       syncProfileForm(prof);
       await hydrateWalletAfterLogin().catch(() => {});
+      await mergeFifiWorkingLocalIntoCloudOnce().catch(() => {});
+      try {
+        window.dispatchEvent(new CustomEvent('fuqmea-fifi-progress-sync'));
+      } catch (_) {
+        /**/
+      }
     } catch (err) {
       const txt = String(err?.message || err || '');
       if (isAuthRevokedError(txt)) {
@@ -1433,7 +1680,7 @@
     } finally {
       chromeRefreshInFlight = false;
     }
-    await loadLeaderboard().catch(() => {});
+    await refreshActiveLeaderboard().catch(() => {});
   }
 
   async function init() {
@@ -1456,7 +1703,7 @@
       if (!isEnabled()) {
         applyGuestChrome('Missing Supabase script — see games.html script includes.');
         updateCloudBadge('Unavailable', false);
-        await loadLeaderboard().catch(() => {});
+        await refreshActiveLeaderboard().catch(() => {});
         return;
       }
 
@@ -1476,7 +1723,7 @@
         } else if (event === 'SIGNED_OUT') {
           restoreGuestOrReset();
           applyGuestChrome('');
-          void loadLeaderboard().catch(() => {});
+          void refreshActiveLeaderboard().catch(() => {});
         }
       });
 
@@ -1507,7 +1754,7 @@
         } else {
           applyGuestChrome('');
         }
-        await loadLeaderboard().catch(() => {});
+        await refreshActiveLeaderboard().catch(() => {});
         return;
       }
 
@@ -1671,7 +1918,7 @@
               if (ed) ed.hidden = true;
               if (tb) tb.textContent = 'Choose';
               if (hint) hint.textContent = 'Pick a meme — each one can only be claimed once.';
-              await loadLeaderboard().catch(() => {});
+              await refreshActiveLeaderboard().catch(() => {});
             } else if (res.error === 'already_claimed') {
               if (hint) hint.textContent = 'Someone just grabbed that one! Pick another.';
               await openAvatarPicker();
@@ -1687,13 +1934,67 @@
     }
   }
 
+  async function getFifiBirdProgress() {
+    if (isSignedIn()) {
+      try {
+        return { source: 'cloud', ...(await fetchFifiBirdProgressCloud()) };
+      } catch (_) {
+        return { source: 'cloud', ...normalizeFifiBirdState(null) };
+      }
+    }
+    return { source: 'local', ...readFifiWorkingLocal() };
+  }
+
+  async function startFifiBirdRun() {
+    if (!isSignedIn()) return null;
+    try {
+      return await startFifiBirdRunCloud();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function recordFifiBirdRun(score, pipesThisRun, opts) {
+    const s = Math.max(0, Math.floor(score || 0));
+    const p = Math.max(0, Math.floor(pipesThisRun || 0));
+    const o = opts && typeof opts === 'object' ? opts : {};
+    if (isSignedIn()) {
+      if (!o.runId || o.durationMs == null || !Number.isFinite(Number(o.durationMs))) {
+        return {
+          ok: false,
+          error: 'fifi_missing_verified_session',
+          ...readFifiWorkingLocal(),
+          source: 'local'
+        };
+      }
+      try {
+        const next = await recordFifiBirdRunCloud(o.runId, s, p, Number(o.durationMs));
+        return { ok: true, ...next, source: 'cloud' };
+      } catch (err) {
+        return { ok: false, error: shortErrText(err), ...readFifiWorkingLocal(), source: 'local' };
+      }
+    }
+    const cur = readFifiWorkingLocal();
+    const next = normalizeFifiBirdState({
+      best: Math.max(cur.best, s),
+      gamesPlayed: cur.gamesPlayed + 1,
+      totalPipes: cur.totalPipes + p
+    });
+    writeFifiWorkingLocal(next);
+    return { ok: true, ...next, source: 'local' };
+  }
+
   window.FuqCloud = {
     enabled: isEnabled,
     isSignedIn,
+    getFifiBirdProgress,
+    startFifiBirdRun,
+    recordFifiBirdRun,
     recordSettlement,
     getLastSettlementResult,
     getSettlementInFlightCount,
     refreshLeaderboard: loadLeaderboard,
+    refreshFifiBirdLeaderboard: loadFifiBirdLeaderboard,
     claimRakeback,
     mergeArcadeStreaks,
     mergeQuestState,

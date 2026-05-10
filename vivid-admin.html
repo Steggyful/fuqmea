@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://js.hcaptcha.com https://newassets.hcaptcha.com; style-src 'self' 'unsafe-inline' https://newassets.hcaptcha.com; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co https://hcaptcha.com https://*.hcaptcha.com; frame-src https://newassets.hcaptcha.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
+  <title>vivid admin</title>
+  <!--
+    ACCESS: Set app_metadata to {"role":"vivid"} on SSGVivid's Supabase Auth account.
+    Supabase Dashboard → Authentication → Users → Edit user → app_metadata
+    No credentials or IDs are stored in this codebase.
+  -->
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --lime: #39ff14;
+      --red: #ff1744;
+      --yellow: #ffd600;
+      --bg: #0e0e0e;
+      --surface: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #e8e8e8;
+      --muted: #888;
+      --font: 'Courier New', Courier, monospace;
+    }
+
+    body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; min-height: 100vh; }
+
+    /* ── Login ── */
+    #va-login {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; min-height: 100vh; gap: 24px; padding: 24px;
+    }
+    #va-login h1 { font-size: 2rem; color: var(--lime); letter-spacing: 4px; text-shadow: 0 0 20px var(--lime); }
+
+    .login-card {
+      background: var(--surface); border: 2px solid var(--border); border-radius: 8px;
+      padding: 32px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 16px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group label { font-size: 0.75rem; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+    .form-group input, .form-group textarea {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
+      color: var(--text); font-family: var(--font); font-size: 14px; padding: 10px 12px;
+      transition: border-color 0.2s; resize: vertical;
+    }
+    .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--lime); }
+    #va-login-error { color: var(--red); font-size: 12px; min-height: 18px; text-align: center; }
+
+    /* ── Buttons ── */
+    .btn {
+      background: transparent; border: 2px solid var(--lime); border-radius: 4px;
+      color: var(--lime); cursor: pointer; font-family: var(--font); font-size: 14px;
+      font-weight: bold; letter-spacing: 1px; padding: 10px 20px; transition: all 0.2s;
+    }
+    .btn:hover { background: var(--lime); color: #000; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-red { border-color: var(--red); color: var(--red); }
+    .btn-red:hover { background: var(--red); color: #fff; }
+    .btn-sm { font-size: 12px; padding: 5px 10px; border-width: 1px; }
+    .btn-full { width: 100%; }
+
+    /* ── Panel ── */
+    #va-panel { display: flex; flex-direction: column; min-height: 100vh; }
+    #va-panel[hidden] { display: none; }
+    #va-denied { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; }
+    #va-denied h2 { color: var(--red); letter-spacing: 3px; }
+    #va-denied p { color: var(--muted); font-size: 12px; }
+
+    .va-topbar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 24px; position: sticky; top: 0; z-index: 10;
+    }
+    .va-topbar h1 { color: var(--lime); font-size: 1rem; letter-spacing: 3px; text-shadow: 0 0 10px rgba(57,255,20,0.6); }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
+    #va-user-label { color: var(--muted); font-size: 12px; }
+
+    .va-main {
+      padding: 24px; display: flex; flex-direction: column; gap: 32px;
+      max-width: 860px; width: 100%; margin: 0 auto;
+    }
+
+    /* ── Cards ── */
+    .va-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .va-card-header { border-bottom: 1px solid var(--border); padding: 14px 20px; }
+    .va-card-header h2 { color: var(--lime); font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; }
+    .va-card-body { padding: 20px; }
+
+    /* ── Live toggle ── */
+    .live-toggle-item {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 16px 20px;
+    }
+    .live-toggle-item.is-live { border-color: var(--red); box-shadow: 0 0 12px rgba(255,23,68,0.3); }
+    .live-badge { border-radius: 999px; font-size: 10px; font-weight: bold; letter-spacing: 1px; padding: 3px 8px; text-transform: uppercase; }
+    .live-badge.on { background: var(--red); color: #fff; }
+    .live-badge.off { background: var(--border); color: var(--muted); }
+    .live-toggle-name { flex: 1; font-weight: bold; font-size: 1rem; }
+
+    /* ── FiFi editor ── */
+    .fifi-editor {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 600px) { .fifi-editor { grid-template-columns: 1fr; } }
+
+    .fifi-preview-wrap {
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .fifi-preview-label { font-size: 10px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; }
+    #fifi-preview-img {
+      width: 100%; aspect-ratio: 3/4; object-fit: cover;
+      border: 3px solid var(--border); border-radius: 6px;
+      background: var(--bg);
+      transition: border-color 0.3s;
+    }
+    #fifi-preview-img.preview-ok { border-color: var(--lime); }
+    #fifi-preview-img.preview-err { border-color: var(--red); }
+    .fifi-preview-tagline {
+      font-size: 12px; text-align: center; padding: 2px 0; min-height: 20px;
+    }
+    .fifi-preview-tagline .social-link {
+      color: var(--lime); text-decoration: underline; font-weight: bold; font-size: 12px;
+    }
+    .fifi-preview-tagline.plain-text { color: var(--text); }
+
+    .fifi-preview-caption {
+      font-size: 12px; color: var(--muted); text-align: center;
+      padding: 4px 0; min-height: 20px; font-style: italic;
+    }
+
+    .fifi-form { display: flex; flex-direction: column; gap: 18px; }
+    .char-count { font-size: 11px; color: var(--muted); text-align: right; margin-top: 2px; }
+    .char-count.warn { color: var(--yellow); }
+    .fifi-save-row { display: flex; align-items: center; gap: 12px; }
+    #va-fifi-status { font-size: 12px; min-height: 18px; }
+    #va-fifi-status.ok { color: var(--lime); }
+    #va-fifi-status.err { color: var(--red); }
+
+    /* ── Status flash ── */
+    #va-status-bar {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: var(--surface); border: 1px solid var(--lime); border-radius: 4px;
+      color: var(--lime); font-size: 12px; padding: 8px 20px;
+      box-shadow: 0 0 16px rgba(57,255,20,0.4); z-index: 200;
+      opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    }
+    #va-status-bar.show { opacity: 1; }
+    #va-status-bar.err { border-color: var(--red); color: var(--red); box-shadow: 0 0 16px rgba(255,23,68,0.4); }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="va-login">
+  <h1>VIVID</h1>
+  <div class="login-card">
+    <!-- Step 1: email -->
+    <form id="va-login-step1" autocomplete="on">
+      <div class="form-group" style="margin-bottom:20px">
+        <label for="va-email">Email</label>
+        <input type="email" id="va-email" autocomplete="email" required>
+      </div>
+      <div class="h-captcha" data-sitekey="cebc04d6-7ce4-4c40-8676-5bb09a089ce6" data-size="invisible" id="va-captcha"></div>
+      <button type="submit" class="btn btn-full" id="va-send-btn">SEND CODE</button>
+    </form>
+    <!-- Step 2: code -->
+    <form id="va-login-step2" style="display:none" autocomplete="off">
+      <p style="color:var(--muted);font-size:12px;margin-bottom:16px;text-align:center">
+        Code sent to <strong id="va-email-shown" style="color:var(--text)"></strong>
+      </p>
+      <div class="form-group" style="margin-bottom:20px">
+        <label for="va-code">6-Digit Code</label>
+        <input type="text" id="va-code" inputmode="numeric" maxlength="6"
+               placeholder="000000" autocomplete="one-time-code" style="letter-spacing:6px;font-size:1.4rem;text-align:center">
+      </div>
+      <button type="submit" class="btn btn-full" id="va-verify-btn">VERIFY</button>
+      <button type="button" id="va-back-btn" style="width:100%;margin-top:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-family:var(--font);font-size:12px">
+        ← use a different email
+      </button>
+    </form>
+    <p id="va-login-error"></p>
+  </div>
+</div>
+
+<!-- Access denied -->
+<div id="va-denied">
+  <h2>ACCESS DENIED</h2>
+  <p>This account doesn't have access to this panel.</p>
+  <button class="btn btn-red" onclick="window._vaLogout()">SIGN OUT</button>
+</div>
+
+<!-- Admin panel -->
+<div id="va-panel" hidden>
+  <div class="va-topbar">
+    <h1>VIVID ADMIN</h1>
+    <div class="topbar-right">
+      <span id="va-user-label"></span>
+      <button class="btn btn-sm btn-red" id="va-logout-btn">LOGOUT</button>
+    </div>
+  </div>
+
+  <div class="va-main">
+
+    <!-- Live toggle -->
+    <div class="va-card">
+      <div class="va-card-header"><h2>TikTok Live</h2></div>
+      <div class="va-card-body">
+        <div id="va-live-toggle">
+          <span style="color:var(--muted);font-size:12px">Loading...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- FiFi Zone editor -->
+    <div class="va-card">
+      <div class="va-card-header"><h2>FiFi Zone</h2></div>
+      <div class="va-card-body">
+        <div class="fifi-editor">
+
+          <!-- Preview -->
+          <div class="fifi-preview-wrap">
+            <span class="fifi-preview-label">Preview</span>
+            <p class="fifi-preview-tagline" id="fifi-preview-tagline">
+              <a href="https://www.tiktok.com/@SSGVivid" class="social-link" tabindex="-1">@SSGVivid on TikTok</a>
+            </p>
+            <img id="fifi-preview-img" src="assets/images/01 Vivid.jpg" alt="preview">
+            <p class="fifi-preview-caption" id="fifi-preview-caption">When she finds your FiFi</p>
+          </div>
+
+          <!-- Form -->
+          <div class="fifi-form">
+            <div class="form-group">
+              <label for="fifi-img-url">Image URL</label>
+              <input type="text" id="fifi-img-url" placeholder="https://... or assets/images/..." autocomplete="off">
+              <span class="char-count" id="fifi-img-chars">0 / 500</span>
+            </div>
+            <div class="form-group">
+              <label for="fifi-caption-input">Caption</label>
+              <textarea id="fifi-caption-input" rows="2" placeholder="e.g. When she finds your FiFi" maxlength="200"></textarea>
+              <span class="char-count" id="fifi-cap-chars">0 / 200</span>
+            </div>
+            <div style="height:1px;background:var(--border);margin:4px 0"></div>
+            <div class="form-group">
+              <label for="fifi-tagline-text">Top Text</label>
+              <input type="text" id="fifi-tagline-text" placeholder="e.g. @SSGVivid on TikTok" maxlength="120" autocomplete="off">
+              <span class="char-count" id="fifi-tag-chars">0 / 120</span>
+            </div>
+            <div class="form-group">
+              <label for="fifi-tagline-url">
+                Link URL
+                <span style="color:var(--muted);font-weight:normal;font-size:11px;margin-left:6px">(optional — leave blank for plain text)</span>
+              </label>
+              <input type="text" id="fifi-tagline-url" placeholder="https://www.tiktok.com/@SSGVivid" autocomplete="off">
+            </div>
+            <div class="fifi-save-row">
+              <button class="btn" id="fifi-save-btn">SAVE CHANGES</button>
+              <span id="va-fifi-status"></span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="va-status-bar"></div>
+
+<script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+<script src="assets/js/vendor/supabase.umd.min.js"></script>
+<script src="assets/js/cloud-config.js"></script>
+<script src="assets/js/vivid-admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://js.hcaptcha.com https://newassets.hcaptcha.com; style-src 'self' 'unsafe-inline' https://newassets.hcaptcha.com; img-src 'self' data: blob: https://memes.fuqmea.com https://newassets.hcaptcha.com; connect-src 'self' https://*.supabase.co https://hcaptcha.com https://*.hcaptcha.com; frame-src https://newassets.hcaptcha.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
+  <title>fuqmea admin</title>
+  <!--
+    ADMIN ACCESS:
+    To grant admin access to a Supabase Auth account:
+    1. Supabase Dashboard → Authentication → Users
+    2. Click the user → Edit user → Update "app_metadata" to: {"role":"admin"}
+    3. No credentials, UUIDs, or secrets are stored in this codebase.
+  -->
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --lime: #39ff14;
+      --red: #ff1744;
+      --yellow: #ffd600;
+      --bg: #0e0e0e;
+      --surface: #1a1a1a;
+      --border: #2a2a2a;
+      --text: #e8e8e8;
+      --muted: #888;
+      --font: 'Courier New', Courier, monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Login ─────────────────────────────────────────────── */
+    #admin-login {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 24px;
+      padding: 24px;
+    }
+
+    #admin-login h1 {
+      font-size: 2rem;
+      color: var(--lime);
+      letter-spacing: 4px;
+      text-shadow: 0 0 20px var(--lime);
+    }
+
+    .login-card {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 32px;
+      width: 100%;
+      max-width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .form-group input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      padding: 10px 12px;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--lime);
+    }
+
+    .btn {
+      background: transparent;
+      border: 2px solid var(--lime);
+      border-radius: 4px;
+      color: var(--lime);
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 14px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      padding: 10px 20px;
+      transition: all 0.2s;
+    }
+
+    .btn:hover { background: var(--lime); color: #000; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-red { border-color: var(--red); color: var(--red); }
+    .btn-red:hover { background: var(--red); color: #fff; }
+
+    .btn-yellow { border-color: var(--yellow); color: var(--yellow); }
+    .btn-yellow:hover { background: var(--yellow); color: #000; }
+
+    .btn-sm { font-size: 12px; padding: 5px 10px; border-width: 1px; }
+
+    #login-error {
+      color: var(--red);
+      font-size: 12px;
+      min-height: 18px;
+      text-align: center;
+    }
+
+    /* ── Panel ─────────────────────────────────────────────── */
+    #admin-panel { display: flex; flex-direction: column; min-height: 100vh; }
+    #admin-panel[hidden] { display: none; }
+
+    .admin-topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .admin-topbar h1 {
+      color: var(--lime);
+      font-size: 1rem;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px rgba(57,255,20,0.6);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    #admin-user-label { color: var(--muted); font-size: 12px; }
+
+    .admin-main {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      max-width: 1100px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ── Section cards ─────────────────────────────────────── */
+    .admin-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .admin-card-header {
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+    }
+
+    .admin-card-header h2 {
+      color: var(--lime);
+      font-size: 0.8rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .admin-card-body { padding: 20px; }
+
+    /* ── Live toggles ──────────────────────────────────────── */
+    .live-toggles {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .live-toggle-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px 18px;
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .live-toggle-item.is-live { border-color: var(--red); box-shadow: 0 0 12px rgba(255,23,68,0.3); }
+
+    .live-badge {
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      padding: 3px 8px;
+      text-transform: uppercase;
+    }
+
+    .live-badge.on { background: var(--red); color: #fff; }
+    .live-badge.off { background: var(--border); color: var(--muted); }
+
+    .live-toggle-name { flex: 1; font-weight: bold; color: var(--text); }
+
+    /* ── Users table ───────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 13px;
+    }
+
+    thead th {
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      padding: 10px 12px;
+      text-align: left;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.03); }
+
+    tbody td {
+      padding: 10px 12px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    td.col-name { color: var(--lime); font-weight: bold; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+    td.col-handle { color: var(--muted); font-size: 11px; }
+    td.col-num { text-align: right; font-variant-numeric: tabular-nums; }
+    td.col-actions { text-align: right; }
+
+    .actions-cell { display: flex; gap: 6px; justify-content: flex-end; }
+
+    .loading-row td { color: var(--muted); font-style: italic; padding: 20px 12px; text-align: center; }
+
+    /* ── Modal ─────────────────────────────────────────────── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 24px;
+    }
+
+    .modal-backdrop[hidden] { display: none; }
+
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 28px;
+      width: 100%;
+      max-width: 400px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .modal-box h3 { color: var(--lime); font-size: 0.85rem; letter-spacing: 2px; }
+    .modal-box .modal-target { color: var(--muted); font-size: 12px; margin-top: -10px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+
+    #modal-error { color: var(--red); font-size: 12px; min-height: 16px; }
+
+    /* ── Status flash ──────────────────────────────────────── */
+    #status-bar {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--lime);
+      border-radius: 4px;
+      color: var(--lime);
+      font-size: 12px;
+      padding: 8px 20px;
+      box-shadow: 0 0 16px rgba(57,255,20,0.4);
+      z-index: 200;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+
+    #status-bar.show { opacity: 1; }
+    #status-bar.err { border-color: var(--red); color: var(--red); box-shadow: 0 0 16px rgba(255,23,68,0.4); }
+
+    #access-denied { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; }
+    #access-denied h2 { color: var(--red); letter-spacing: 3px; }
+    #access-denied p { color: var(--muted); font-size: 12px; }
+
+    /* ── Meme Vault ────────────────────────────────────────── */
+    .meme-upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 6px;
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .meme-upload-zone:hover,
+    .meme-upload-zone.dragover {
+      border-color: var(--lime);
+      background: rgba(57,255,20,0.05);
+      color: var(--lime);
+    }
+    .meme-upload-zone strong { color: var(--lime); }
+
+    .meme-controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 14px 0 10px;
+    }
+    .meme-controls input[type=text],
+    .meme-controls select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 6px 10px;
+    }
+    .meme-controls input[type=text] { flex: 1; min-width: 180px; }
+    .meme-controls input:focus, .meme-controls select:focus {
+      outline: none; border-color: var(--lime);
+    }
+    .meme-stats { color: var(--muted); font-size: 11px; margin-left: auto; }
+
+    .meme-list-wrap { max-height: 520px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; }
+    .meme-list { width: 100%; }
+    .meme-row {
+      display: grid;
+      grid-template-columns: 56px 1fr auto auto;
+      gap: 12px;
+      align-items: center;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .meme-row:last-child { border-bottom: none; }
+    .meme-row:hover { background: rgba(255,255,255,0.03); }
+
+    .meme-thumb {
+      width: 56px; height: 56px; object-fit: cover;
+      background: var(--bg); border-radius: 3px;
+    }
+    .meme-name {
+      color: var(--text); font-size: 13px; word-break: break-word;
+    }
+    .meme-name input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--lime);
+      border-radius: 3px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 4px 6px;
+    }
+    .meme-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+    .meme-badge {
+      font-size: 9px;
+      letter-spacing: 1px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .meme-badge.live    { border-color: var(--lime);   color: var(--lime); }
+    .meme-badge.draft   { border-color: var(--yellow); color: var(--yellow); }
+    .meme-badge.hidden  { border-color: var(--red);    color: var(--red); }
+    .meme-badge.upload  { border-color: var(--lime);   color: var(--lime); }
+    .meme-badge.static  { border-color: var(--muted);  color: var(--muted); }
+
+    .meme-actions { display: flex; gap: 4px; }
+    .meme-actions .btn-sm { padding: 4px 8px; font-size: 10px; }
+
+    .meme-empty { text-align: center; color: var(--muted); padding: 30px 12px; font-size: 12px; font-style: italic; }
+    .meme-cat-hint { color: var(--muted); font-size: 10px; margin-top: 2px; }
+    .meme-cat-hint strong { color: var(--lime); }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="admin-login">
+  <h1>FUQMEA</h1>
+  <div class="login-card">
+    <!-- Step 1: email -->
+    <form id="login-step1" autocomplete="on">
+      <div class="form-group" style="margin-bottom:20px">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" autocomplete="email" required>
+      </div>
+      <div class="h-captcha" data-sitekey="cebc04d6-7ce4-4c40-8676-5bb09a089ce6" data-size="invisible" id="admin-captcha"></div>
+      <button type="submit" class="btn" id="login-send-btn" style="width:100%">SEND CODE</button>
+    </form>
+    <!-- Step 2: code -->
+    <form id="login-step2" style="display:none" autocomplete="off">
+      <p style="color:var(--muted);font-size:12px;margin-bottom:16px;text-align:center">
+        Code sent to <strong id="login-email-shown" style="color:var(--text)"></strong>
+      </p>
+      <div class="form-group" style="margin-bottom:20px">
+        <label for="login-code">6-Digit Code</label>
+        <input type="text" id="login-code" inputmode="numeric" maxlength="6"
+               placeholder="000000" autocomplete="one-time-code" style="letter-spacing:6px;font-size:1.4rem;text-align:center">
+      </div>
+      <button type="submit" class="btn" id="login-verify-btn" style="width:100%">VERIFY</button>
+      <button type="button" id="login-back-btn" style="width:100%;margin-top:8px;background:none;border:none;color:var(--muted);cursor:pointer;font-family:var(--font);font-size:12px">
+        ← use a different email
+      </button>
+    </form>
+    <p id="login-error"></p>
+  </div>
+</div>
+
+<!-- Access denied (logged in but not admin) -->
+<div id="access-denied">
+  <h2>ACCESS DENIED</h2>
+  <p>This account does not have admin privileges.</p>
+  <button class="btn btn-red" onclick="document.getElementById('logout-btn-denied').click()">SIGN OUT</button>
+  <button id="logout-btn-denied" hidden></button>
+</div>
+
+<!-- Admin panel -->
+<div id="admin-panel" hidden>
+
+  <div class="admin-topbar">
+    <h1>FUQMEA ADMIN</h1>
+    <div class="topbar-right">
+      <span id="admin-user-label"></span>
+      <button class="btn btn-sm btn-red" id="logout-btn">LOGOUT</button>
+    </div>
+  </div>
+
+  <div class="admin-main">
+
+    <!-- Live Status -->
+    <div class="admin-card" id="card-live">
+      <div class="admin-card-header">
+        <h2>TikTok Live Status</h2>
+        <button class="btn btn-sm" id="refresh-live-btn">REFRESH</button>
+      </div>
+      <div class="admin-card-body">
+        <div class="live-toggles" id="live-toggles">
+          <span style="color:var(--muted);font-size:12px">Loading...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Meme Vault -->
+    <div class="admin-card" id="card-memes">
+      <div class="admin-card-header">
+        <h2>Meme Vault <span id="meme-stats" class="meme-stats"></span></h2>
+        <button class="btn btn-sm" id="meme-refresh-btn">REFRESH</button>
+      </div>
+      <div class="admin-card-body">
+        <div class="meme-upload-zone" id="meme-upload-zone" tabindex="0" role="button" aria-label="Upload memes">
+          <p><strong>Drop image / GIF here</strong> or click to browse</p>
+          <p style="font-size:10px;margin-top:4px">JPG · PNG · GIF · WEBP &nbsp;·&nbsp; max 25 MB &nbsp;·&nbsp; uploads start as drafts</p>
+        </div>
+        <input type="file" id="meme-upload-input" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
+
+        <div class="meme-controls">
+          <input type="text" id="meme-search" placeholder="Search by name..." autocomplete="off">
+          <select id="meme-filter">
+            <option value="all">All memes</option>
+            <option value="published">Published only</option>
+            <option value="draft">Drafts</option>
+            <option value="hidden">Hidden</option>
+            <option value="upload">Uploads only</option>
+            <option value="static">Static only</option>
+          </select>
+        </div>
+
+        <div class="meme-list-wrap">
+          <div id="meme-list" class="meme-list">
+            <div class="meme-empty">Loading memes...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Users -->
+    <div class="admin-card" id="card-users">
+      <div class="admin-card-header">
+        <h2>Users <span id="user-count" style="color:var(--muted);font-size:11px;font-weight:normal;margin-left:8px"></span></h2>
+        <button class="btn btn-sm" id="refresh-users-btn">REFRESH</button>
+      </div>
+      <div class="table-wrap">
+        <table id="users-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Handle</th>
+              <th class="col-num">Balance</th>
+              <th class="col-num">Net Δ</th>
+              <th class="col-num">Lifetime Wagered</th>
+              <th class="col-num">Weekly Wagered</th>
+              <th class="col-num">Wk Rounds</th>
+              <th class="col-num">Rakeback</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody">
+            <tr class="loading-row"><td colspan="9">Loading users...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Token adjustment modal -->
+<div class="modal-backdrop" id="token-modal" hidden>
+  <div class="modal-box">
+    <h3>ADJUST TOKENS</h3>
+    <p class="modal-target" id="modal-target-name"></p>
+    <div class="form-group">
+      <label for="modal-delta">Amount (positive = add, negative = remove)</label>
+      <input type="number" id="modal-delta" placeholder="e.g. 500 or -200">
+    </div>
+    <div class="form-group">
+      <label for="modal-reason">Reason</label>
+      <input type="text" id="modal-reason" placeholder="e.g. stream prize" maxlength="120">
+    </div>
+    <p id="modal-error"></p>
+    <div class="modal-actions">
+      <button class="btn btn-sm btn-red" id="modal-cancel">CANCEL</button>
+      <button class="btn btn-sm" id="modal-confirm">CONFIRM</button>
+    </div>
+  </div>
+</div>
+
+<!-- Status flash -->
+<div id="status-bar"></div>
+
+<script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+<script src="assets/js/vendor/supabase.umd.min.js"></script>
+<script src="assets/js/cloud-config.js"></script>
+<script src="tools/extract-categories.js?v=1.0.1"></script>
+<script src="assets/js/admin.js"></script>
+<script src="assets/js/admin-memes.js?v=1.0.0"></script>
+</body>
+</html>
