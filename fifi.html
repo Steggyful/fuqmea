@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://www.google-analytics.com https://*.analytics.google.com https://*.google-analytics.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://www.google-analytics.com https://*.analytics.google.com https://*.google-analytics.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com/fifi</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.16">
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.17">
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-MNCNNCQ7XX"></script>
   <script src="assets/js/ga.js"></script>
@@ -59,6 +59,13 @@
     <img id="fifi-featured-img" src="assets/images/01 Vivid.jpg" alt="Vivid" style="max-width:96%; max-height:82vh; border:8px solid lime; box-shadow:0 0 40px lime;">
 
     <p id="fifi-caption" style="font-size:1.8rem; margin-top:2rem;">When she finds your FiFi</p>
+
+    <!-- Background song (uploaded by Vivid; produced by his brother). Starts
+         muted so browsers allow autoplay; the first user interaction unmutes
+         it automatically. The toggle is also a manual mute control. -->
+    <audio id="fifi-bg-audio" preload="none" loop hidden></audio>
+    <button type="button" id="fifi-bg-toggle" class="fifi-bg-toggle" hidden
+            aria-label="Toggle song" title="Toggle song"></button>
     <p class="credit">created by 
   <a href="https://www.tiktok.com/@steggyful1" target="_blank" rel="noopener noreferrer">@steggyful1</a>
 </p>
@@ -68,6 +75,6 @@
   <script src="assets/js/hub.js?v=2.1.7" defer></script>
   <script src="assets/js/init.js?v=2.1.6" defer></script>
   <script src="assets/js/cloud-config.js" defer></script>
-  <script src="assets/js/fifi-page.js?v=1.0.0" defer></script>
+  <script src="assets/js/fifi-page.js?v=1.1.0" defer></script>
 </body>
 </html>

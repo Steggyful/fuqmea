@@ -16,3 +16,4 @@ Add a row when someone requests a user-facing change worth remembering.
 |------|-----|---------|
 | 2026-04-26 | Sealofvile Blood | Homepage **Random meme** button (quick jump to random meme). |
 | 2026-04-27 | Vivid | Add homepage **FOLLOW US** (Steggyful1 + SSGVivid) under the main title; **Join Discord** between socials and **Random Meme**; keep existing **Socials** page; desktop + mobile layout; TikTok above Twitch in that block. |
+| 2026-05-10 | Vivid | Sync the header **LIVE** badge with the red social-button outline; add a **literal page preview** to his admin (iframe of `fifi.html`); allow **image upload** to FiFi Zone; allow **song upload + volume control** for the FiFi Zone (song produced by his brother) — autoplay on visit (muted-autoplay-with-auto-unmute pattern, due to browser policy). |
