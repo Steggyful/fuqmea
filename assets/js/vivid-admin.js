@@ -368,89 +368,140 @@
     }
   }
 
-  // Track the latest selection inside the editor so the toolbar buttons
-  // operate on it even after the click has moved focus to the button.
-  let savedRange = null;
-  function maybeSaveSelection() {
-    const editor = $id('fifi-tagline-rt');
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
-      savedRange = sel.getRangeAt(0).cloneRange();
-    }
-  }
-  function restoreSelection() {
-    if (!savedRange) return false;
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(savedRange);
-    return true;
-  }
-
-  function bindRichText() {
-    const editor   = $id('fifi-tagline-rt');
-    const linkBtn  = $id('fifi-rt-link');
-    const unlinkBtn = $id('fifi-rt-unlink');
+  function bindRichEditor(opts) {
+    const editor    = $id(opts.editorId);
+    const linkBtn   = $id(opts.linkBtnId);
+    const unlinkBtn = $id(opts.unlinkBtnId);
+    const urlBar    = $id(opts.urlBarId);
+    const urlInput  = $id(opts.urlInputId);
+    const urlApply  = $id(opts.urlApplyId);
+    const urlCancel = $id(opts.urlCancelId);
     if (!editor) return;
 
-    // Single-line: kill Enter / Shift+Enter (don't insert <br>).
+    let savedRange  = null;
+    let editingLink = null;
+
+    function saveSelection() {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
+        savedRange = sel.getRangeAt(0).cloneRange();
+      }
+    }
+
+    function restoreSelection() {
+      if (!savedRange) return;
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(savedRange);
+    }
+
+    function showUrlBar(prefill) {
+      urlInput.value = prefill || '';
+      urlBar.hidden  = false;
+      urlInput.focus();
+      if (prefill) urlInput.select();
+    }
+
+    function hideUrlBar() {
+      urlBar.hidden  = true;
+      urlInput.value = '';
+      editingLink    = null;
+    }
+
+    function applyLink() {
+      const url = urlInput.value.trim();
+      if (!url) { hideUrlBar(); return; }
+      if (!/^https?:\/\//i.test(url)) {
+        showFlash('URL must start with http:// or https://', true);
+        urlInput.focus();
+        return;
+      }
+      if (editingLink) {
+        editingLink.setAttribute('href', url);
+      } else {
+        editor.focus();
+        restoreSelection();
+        document.execCommand('createLink', false, url);
+        editor.querySelectorAll('a').forEach(a => {
+          a.setAttribute('target', '_blank');
+          a.setAttribute('rel', 'noopener noreferrer');
+        });
+      }
+      hideUrlBar();
+      opts.onUpdate(sanitiseTaglineHTML(editor.innerHTML));
+    }
+
     editor.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') e.preventDefault();
     });
 
-    // Always paste plain text — no styled HTML from the clipboard.
     editor.addEventListener('paste', (e) => {
       e.preventDefault();
       const text = (e.clipboardData || window.clipboardData).getData('text/plain');
       if (text) document.execCommand('insertText', false, text);
     });
 
-    // Push state to preview as the user types/links.
-    editor.addEventListener('input', () => {
-      fifiState.tagline_text = sanitiseTaglineHTML(editor.innerHTML);
-      updateCharCounts();
-      pushPreview();
+    editor.addEventListener('input', () => opts.onUpdate(sanitiseTaglineHTML(editor.innerHTML)));
+
+    ['mouseup', 'keyup', 'touchend'].forEach(ev => editor.addEventListener(ev, saveSelection));
+
+    // Click an existing link to edit its URL inline.
+    editor.addEventListener('click', (e) => {
+      const a = e.target.closest('a');
+      if (!a) return;
+      e.preventDefault();
+      editingLink = a;
+      showUrlBar(a.getAttribute('href') || '');
     });
 
-    ['mouseup', 'keyup', 'touchend'].forEach((ev) => {
-      editor.addEventListener(ev, maybeSaveSelection);
-    });
-
-    linkBtn.addEventListener('mousedown', (e) => { e.preventDefault(); /* keep selection */ });
-    linkBtn.addEventListener('click', () => {
-      restoreSelection();
-      const sel = window.getSelection();
-      if (!sel || !sel.rangeCount || !sel.toString().trim()) {
-        showFlash('Select some text inside the editor first, then click LINK.', true);
-        return;
-      }
-      const url = window.prompt('Link URL (https://...)', 'https://');
-      if (!url) return;
-      const trimmed = url.trim();
-      if (!/^https?:\/\//i.test(trimmed)) {
-        showFlash('URL must start with http:// or https://', true);
-        return;
-      }
-      document.execCommand('createLink', false, trimmed);
-      // execCommand doesn't set target/rel — patch the anchor it just made.
-      editor.querySelectorAll('a').forEach((a) => {
-        a.setAttribute('target', '_blank');
-        a.setAttribute('rel', 'noopener noreferrer');
+    if (linkBtn) {
+      linkBtn.addEventListener('mousedown', e => e.preventDefault());
+      linkBtn.addEventListener('click', () => {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !sel.toString().trim()) {
+          showFlash('Select some text first, then click LINK.', true);
+          return;
+        }
+        saveSelection();
+        const anchorEl = sel.anchorNode?.parentElement?.closest('a');
+        showUrlBar(anchorEl ? anchorEl.getAttribute('href') : '');
       });
-      fifiState.tagline_text = sanitiseTaglineHTML(editor.innerHTML);
-      updateCharCounts();
-      pushPreview();
-    });
+    }
 
-    unlinkBtn.addEventListener('mousedown', (e) => { e.preventDefault(); });
-    unlinkBtn.addEventListener('click', () => {
-      restoreSelection();
-      document.execCommand('unlink', false);
-      fifiState.tagline_text = sanitiseTaglineHTML(editor.innerHTML);
+    if (unlinkBtn) {
+      unlinkBtn.addEventListener('mousedown', e => e.preventDefault());
+      unlinkBtn.addEventListener('click', () => {
+        hideUrlBar();
+        restoreSelection();
+        document.execCommand('unlink', false);
+        opts.onUpdate(sanitiseTaglineHTML(editor.innerHTML));
+      });
+    }
+
+    if (urlApply)  urlApply.addEventListener('click', applyLink);
+    if (urlCancel) urlCancel.addEventListener('click', hideUrlBar);
+    if (urlInput) {
+      urlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter')  { e.preventDefault(); applyLink(); }
+        if (e.key === 'Escape') { e.preventDefault(); hideUrlBar(); }
+      });
+    }
+  }
+
+  bindRichEditor({
+    editorId:    'fifi-tagline-rt',
+    linkBtnId:   'fifi-rt-link',
+    unlinkBtnId: 'fifi-rt-unlink',
+    urlBarId:    'fifi-rt-url-bar',
+    urlInputId:  'fifi-rt-url-input',
+    urlApplyId:  'fifi-rt-url-apply',
+    urlCancelId: 'fifi-rt-url-cancel',
+    onUpdate(html) {
+      fifiState.tagline_text = html;
       updateCharCounts();
       pushPreview();
-    });
-  }
-  bindRichText();
+    }
+  });
 
   // ── Song credit rich-text editor ──────────────────────────────────────
 
@@ -461,78 +512,20 @@
     editor.innerHTML = sanitiseTaglineHTML(html);
   }
 
-  function bindSongCreditRichText() {
-    const editor   = $id('fifi-credit-rt');
-    const linkBtn  = $id('fifi-credit-rt-link');
-    const unlinkBtn = $id('fifi-credit-rt-unlink');
-    if (!editor) return;
-
-    let savedCreditRange = null;
-    function maybeSaveCreditSel() {
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
-        savedCreditRange = sel.getRangeAt(0).cloneRange();
-      }
-    }
-    function restoreCreditSel() {
-      if (!savedCreditRange) return false;
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(savedCreditRange);
-      return true;
-    }
-
-    editor.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
-    editor.addEventListener('paste', (e) => {
-      e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
-      if (text) document.execCommand('insertText', false, text);
-    });
-    editor.addEventListener('input', () => {
-      fifiState.song_credit_text = sanitiseTaglineHTML(editor.innerHTML);
+  bindRichEditor({
+    editorId:    'fifi-credit-rt',
+    linkBtnId:   'fifi-credit-rt-link',
+    unlinkBtnId: 'fifi-credit-rt-unlink',
+    urlBarId:    'fifi-credit-url-bar',
+    urlInputId:  'fifi-credit-url-input',
+    urlApplyId:  'fifi-credit-url-apply',
+    urlCancelId: 'fifi-credit-url-cancel',
+    onUpdate(html) {
+      fifiState.song_credit_text = html;
       updateCharCounts();
       pushPreview();
-    });
-    ['mouseup', 'keyup', 'touchend'].forEach((ev) => editor.addEventListener(ev, maybeSaveCreditSel));
-
-    if (linkBtn) {
-      linkBtn.addEventListener('mousedown', (e) => { e.preventDefault(); });
-      linkBtn.addEventListener('click', () => {
-        restoreCreditSel();
-        const sel = window.getSelection();
-        if (!sel || !sel.rangeCount || !sel.toString().trim()) {
-          showFlash('Select some text in the Song Credit editor first, then click LINK.', true);
-          return;
-        }
-        const url = window.prompt('Link URL (https://...)', 'https://');
-        if (!url) return;
-        const trimmed = url.trim();
-        if (!/^https?:\/\//i.test(trimmed)) {
-          showFlash('URL must start with http:// or https://', true);
-          return;
-        }
-        document.execCommand('createLink', false, trimmed);
-        editor.querySelectorAll('a').forEach((a) => {
-          a.setAttribute('target', '_blank');
-          a.setAttribute('rel', 'noopener noreferrer');
-        });
-        fifiState.song_credit_text = sanitiseTaglineHTML(editor.innerHTML);
-        updateCharCounts();
-        pushPreview();
-      });
     }
-    if (unlinkBtn) {
-      unlinkBtn.addEventListener('mousedown', (e) => { e.preventDefault(); });
-      unlinkBtn.addEventListener('click', () => {
-        restoreCreditSel();
-        document.execCommand('unlink', false);
-        fifiState.song_credit_text = sanitiseTaglineHTML(editor.innerHTML);
-        updateCharCounts();
-        pushPreview();
-      });
-    }
-  }
-  bindSongCreditRichText();
+  });
 
   // ── Iframe preview ─────────────────────────────────────────────────────
   // The iframe loads fifi.html?preview=1, which signals 'fifi-preview-ready'

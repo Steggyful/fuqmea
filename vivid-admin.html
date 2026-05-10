@@ -383,6 +383,62 @@
       pointer-events: none;
     }
 
+    /* ── Rich-text URL bar ────────────────────────────────────── */
+    .rt-url-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      background: var(--surface-3);
+      border-bottom: 1px solid var(--border);
+      animation: rt-bar-in 120ms ease;
+    }
+    .rt-url-bar[hidden] { display: none; }
+    @keyframes rt-bar-in {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .rt-url-input {
+      flex: 1;
+      min-width: 0;
+      background: var(--bg);
+      border: 1px solid var(--lime);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 5px 8px;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(57, 255, 20, 0.10);
+    }
+    .rt-url-apply {
+      background: var(--lime-soft);
+      border: 1px solid rgba(57, 255, 20, 0.35);
+      border-radius: 4px;
+      color: var(--lime);
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      padding: 5px 10px;
+      white-space: nowrap;
+      transition: background var(--transition), color var(--transition), border-color var(--transition);
+    }
+    .rt-url-apply:hover { background: var(--lime); color: #001100; border-color: var(--lime); }
+    .rt-url-cancel {
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--muted-2);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      padding: 4px 7px;
+      transition: color var(--transition), background var(--transition), border-color var(--transition);
+    }
+    .rt-url-cancel:hover { color: var(--text); background: var(--surface-2); border-color: var(--border); }
+
     /* ── Mobile (≤720px) ──────────────────────────────────── */
     @media (max-width: 720px) {
       body { font-size: 13.5px; }
@@ -631,7 +687,12 @@
                 <div class="rt-toolbar" role="toolbar" aria-label="Text formatting">
                   <button type="button" class="rt-btn" id="fifi-rt-link" title="Wrap selected text in a link">🔗 LINK</button>
                   <button type="button" class="rt-btn" id="fifi-rt-unlink" title="Remove link at cursor">⌫ UNLINK</button>
-                  <span class="rt-hint">Select text, then click LINK</span>
+                  <span class="rt-hint">Select text → LINK, or click a link to edit</span>
+                </div>
+                <div class="rt-url-bar" id="fifi-rt-url-bar" hidden>
+                  <input class="rt-url-input" id="fifi-rt-url-input" type="text" placeholder="https://" autocomplete="off" spellcheck="false">
+                  <button type="button" class="rt-url-apply" id="fifi-rt-url-apply">APPLY</button>
+                  <button type="button" class="rt-url-cancel" id="fifi-rt-url-cancel" aria-label="Cancel">✕</button>
                 </div>
                 <div id="fifi-tagline-rt"
                      class="rt-editor"
@@ -690,6 +751,11 @@
                   <button type="button" class="rt-btn" id="fifi-credit-rt-link" title="Wrap selected text in a link">🔗 LINK</button>
                   <button type="button" class="rt-btn" id="fifi-credit-rt-unlink" title="Remove link at cursor">⌫ UNLINK</button>
                   <span class="rt-hint">e.g. "Music by @Artist"</span>
+                </div>
+                <div class="rt-url-bar" id="fifi-credit-url-bar" hidden>
+                  <input class="rt-url-input" id="fifi-credit-url-input" type="text" placeholder="https://" autocomplete="off" spellcheck="false">
+                  <button type="button" class="rt-url-apply" id="fifi-credit-url-apply">APPLY</button>
+                  <button type="button" class="rt-url-cancel" id="fifi-credit-url-cancel" aria-label="Cancel">✕</button>
                 </div>
                 <div id="fifi-credit-rt"
                      class="rt-editor"
