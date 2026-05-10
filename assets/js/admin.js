@@ -208,7 +208,7 @@
             data-action="toggle-live"
             data-username="${row.username}"
             data-target-live="${!live}">
-            ${live ? 'END LIVE' : 'GO LIVE'}
+            ${live ? 'MARK OFFLINE' : 'MARK LIVE'}
           </button>
         </div>`;
     }).join('');

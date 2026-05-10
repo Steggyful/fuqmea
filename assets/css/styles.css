@@ -1863,6 +1863,87 @@ h1 {
   outline-offset: 2px;
 }
 
+.fifi-song-credit {
+  font-size: 0.8rem;
+  opacity: 0.65;
+  margin-top: 0.6rem;
+  margin-bottom: 0.1rem;
+}
+.fifi-song-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.fifi-song-credit a:hover { opacity: 0.9; }
+
+.fifi-site-credit {
+  font-size: 0.72rem;
+  opacity: 0.38;
+  margin-top: 0.25rem;
+}
+
+/* ── Cookie consent banner ─────────────────────────────────────── */
+#fuqmea-consent-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 14px 20px;
+  background: rgba(10, 10, 10, 0.97);
+  border-top: 1px solid rgba(57, 255, 20, 0.25);
+  backdrop-filter: blur(8px);
+  flex-wrap: wrap;
+}
+.consent-msg {
+  margin: 0;
+  font-size: 0.82rem;
+  opacity: 0.85;
+  line-height: 1.4;
+  flex: 1;
+  min-width: 200px;
+}
+.consent-link {
+  color: var(--lime);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.consent-btns {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.consent-btn {
+  padding: 7px 18px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.12s;
+  border: 1px solid transparent;
+}
+.consent-btn:hover { opacity: 0.85; transform: scale(1.03); }
+.consent-btn-accept {
+  background: var(--lime);
+  color: #000;
+  border-color: var(--lime);
+}
+.consent-btn-decline {
+  background: transparent;
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+@media (max-width: 480px) {
+  #fuqmea-consent-banner { flex-direction: column; align-items: flex-start; }
+  .consent-btns { width: 100%; }
+  .consent-btn { flex: 1; text-align: center; }
+}
+
 .main-content {
   text-align: center;
   padding: 4rem 5%;

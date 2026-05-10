@@ -88,6 +88,18 @@
     }
   }
 
+  function applySongCredit(html) {
+    var el = document.getElementById('fifi-song-credit');
+    if (!el) return;
+    if (!html) {
+      el.innerHTML = '';
+      el.hidden = true;
+      return;
+    }
+    el.innerHTML = sanitiseTaglineHTML(html);
+    el.hidden = false;
+  }
+
   // ── Background song ──────────────────────────────────────────────────────
   // Browsers block unmuted autoplay until the user interacts. We start the
   // audio muted so it begins immediately on page load, then unmute on the
@@ -192,6 +204,7 @@
     if ('song_url' in s || 'song_volume' in s) {
       applySong(s.song_url || '', typeof s.song_volume === 'number' ? s.song_volume : currentVolume);
     }
+    if ('song_credit_text' in s) applySongCredit(s.song_credit_text || '');
   }
 
   function loadFifiSettings() {
@@ -199,7 +212,7 @@
     if (!cfg || !cfg.supabaseUrl) return;
     var url = cfg.supabaseUrl +
       '/rest/v1/fifi_zone_settings?id=eq.1' +
-      '&select=image_url,caption,tagline_text,tagline_url,song_url,song_volume';
+      '&select=image_url,caption,tagline_text,tagline_url,song_url,song_volume,song_credit_text';
     fetch(url, { headers: { apikey: cfg.supabaseAnonKey } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (rows) {

@@ -642,6 +642,26 @@
               </div>
             </div>
 
+            <div class="form-group">
+              <label>Song Credit <span style="font-size:0.75rem;opacity:0.55;font-weight:400">(optional — shown on the FiFi page)</span></label>
+              <div class="rt-editor-wrap">
+                <div class="rt-toolbar" role="toolbar" aria-label="Song credit formatting">
+                  <button type="button" class="rt-btn" id="fifi-credit-rt-link" title="Wrap selected text in a link">🔗 LINK</button>
+                  <button type="button" class="rt-btn" id="fifi-credit-rt-unlink" title="Remove link at cursor">⌫ UNLINK</button>
+                  <span class="rt-hint">e.g. "Music by @Artist"</span>
+                </div>
+                <div id="fifi-credit-rt"
+                     class="rt-editor"
+                     contenteditable="true"
+                     spellcheck="false"
+                     placeholder="Music by…"
+                     aria-label="Song credit"
+                     role="textbox"
+                     aria-multiline="false"></div>
+              </div>
+              <span class="char-count" id="fifi-credit-chars">0 / 300</span>
+            </div>
+
             <div class="fifi-save-row">
               <button class="btn" id="fifi-save-btn">SAVE CHANGES</button>
               <span id="va-fifi-status"></span>
@@ -660,6 +680,6 @@
 <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
 <script src="assets/js/vendor/supabase.umd.min.js"></script>
 <script src="assets/js/cloud-config.js"></script>
-<script src="assets/js/vivid-admin.js?v=1.5.1"></script>
+<script src="assets/js/vivid-admin.js?v=1.6.0"></script>
 </body>
 </html>

@@ -187,7 +187,7 @@
         <button class="btn ${isLive ? 'btn-red' : ''}"
           data-action="toggle-live"
           data-target-live="${!isLive}">
-          ${isLive ? 'END LIVE' : 'GO LIVE'}
+          ${isLive ? 'MARK OFFLINE' : 'MARK LIVE'}
         </button>
       </div>`;
   }
@@ -213,7 +213,7 @@
       await loadLiveStatus(); // resyncs the button to actual DB state
       return;
     }
-    showFlash(live ? 'You are now LIVE on TikTok 🔴' : 'Live ended.');
+    showFlash(live ? 'Marked LIVE on TikTok 🔴' : 'Marked as offline.');
     renderLiveToggle(live);
   }
 
@@ -234,6 +234,7 @@
     tagline_url: '',
     song_url: '',
     song_volume: 0.7,
+    song_credit_text: '',
   };
   let previewReady = false;
   let pendingPreviewPush = false;
@@ -241,17 +242,18 @@
   async function loadFifiSettings() {
     const { data } = await getClient()
       .from('fifi_zone_settings')
-      .select('image_url, caption, tagline_text, tagline_url, song_url, song_volume')
+      .select('image_url, caption, tagline_text, tagline_url, song_url, song_volume, song_credit_text')
       .eq('id', 1)
       .maybeSingle();
 
     if (!data) return;
 
-    fifiState.image_url    = data.image_url    || '';
-    fifiState.caption      = data.caption      || '';
-    fifiState.tagline_url  = data.tagline_url  || ''; // legacy; not edited going forward
-    fifiState.song_url     = data.song_url     || '';
-    fifiState.song_volume  = (typeof data.song_volume === 'number') ? data.song_volume : 0.7;
+    fifiState.image_url        = data.image_url        || '';
+    fifiState.caption          = data.caption          || '';
+    fifiState.tagline_url      = data.tagline_url      || ''; // legacy; not edited going forward
+    fifiState.song_url         = data.song_url         || '';
+    fifiState.song_volume      = (typeof data.song_volume === 'number') ? data.song_volume : 0.7;
+    fifiState.song_credit_text = data.song_credit_text || '';
 
     $id('fifi-img-url').value       = fifiState.image_url;
     $id('fifi-caption-input').value = fifiState.caption;
@@ -260,6 +262,8 @@
     // into a single anchor so the editor shows it as a link the user can edit.
     setTaglineEditor(data.tagline_text || '', fifiState.tagline_url);
     fifiState.tagline_text = sanitiseTaglineHTML($id('fifi-tagline-rt').innerHTML);
+
+    setSongCreditEditor(fifiState.song_credit_text);
 
     setSongUI(fifiState.song_url);
     setVolumeUI(fifiState.song_volume);
@@ -271,7 +275,8 @@
     const imgLen = ($id('fifi-img-url').value     || '').length;
     const capLen = ($id('fifi-caption-input').value || '').length;
     // Count the sanitised payload so the meter reflects what actually gets saved.
-    const tagLen = (fifiState.tagline_text || '').length;
+    const tagLen    = (fifiState.tagline_text    || '').length;
+    const creditLen = (fifiState.song_credit_text || '').length;
 
     const imgEl = $id('fifi-img-chars');
     imgEl.textContent = `${imgLen} / 500`;
@@ -284,6 +289,12 @@
     const tagEl = $id('fifi-tag-chars');
     tagEl.textContent = `${tagLen} / 500`;
     tagEl.className = 'char-count' + (tagLen > 450 ? ' warn' : '');
+
+    const creditEl = $id('fifi-credit-chars');
+    if (creditEl) {
+      creditEl.textContent = `${creditLen} / 300`;
+      creditEl.className = 'char-count' + (creditLen > 260 ? ' warn' : '');
+    }
   }
 
   // ── Rich-text tagline ────────────────────────────────────────────────
@@ -430,6 +441,88 @@
     });
   }
   bindRichText();
+
+  // ── Song credit rich-text editor ──────────────────────────────────────
+
+  function setSongCreditEditor(html) {
+    const editor = $id('fifi-credit-rt');
+    if (!editor) return;
+    if (!html) { editor.innerHTML = ''; return; }
+    editor.innerHTML = sanitiseTaglineHTML(html);
+  }
+
+  function bindSongCreditRichText() {
+    const editor   = $id('fifi-credit-rt');
+    const linkBtn  = $id('fifi-credit-rt-link');
+    const unlinkBtn = $id('fifi-credit-rt-unlink');
+    if (!editor) return;
+
+    let savedCreditRange = null;
+    function maybeSaveCreditSel() {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount && editor.contains(sel.anchorNode)) {
+        savedCreditRange = sel.getRangeAt(0).cloneRange();
+      }
+    }
+    function restoreCreditSel() {
+      if (!savedCreditRange) return false;
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(savedCreditRange);
+      return true;
+    }
+
+    editor.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+    editor.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      if (text) document.execCommand('insertText', false, text);
+    });
+    editor.addEventListener('input', () => {
+      fifiState.song_credit_text = sanitiseTaglineHTML(editor.innerHTML);
+      updateCharCounts();
+      pushPreview();
+    });
+    ['mouseup', 'keyup', 'touchend'].forEach((ev) => editor.addEventListener(ev, maybeSaveCreditSel));
+
+    if (linkBtn) {
+      linkBtn.addEventListener('mousedown', (e) => { e.preventDefault(); });
+      linkBtn.addEventListener('click', () => {
+        restoreCreditSel();
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !sel.toString().trim()) {
+          showFlash('Select some text in the Song Credit editor first, then click LINK.', true);
+          return;
+        }
+        const url = window.prompt('Link URL (https://...)', 'https://');
+        if (!url) return;
+        const trimmed = url.trim();
+        if (!/^https?:\/\//i.test(trimmed)) {
+          showFlash('URL must start with http:// or https://', true);
+          return;
+        }
+        document.execCommand('createLink', false, trimmed);
+        editor.querySelectorAll('a').forEach((a) => {
+          a.setAttribute('target', '_blank');
+          a.setAttribute('rel', 'noopener noreferrer');
+        });
+        fifiState.song_credit_text = sanitiseTaglineHTML(editor.innerHTML);
+        updateCharCounts();
+        pushPreview();
+      });
+    }
+    if (unlinkBtn) {
+      unlinkBtn.addEventListener('mousedown', (e) => { e.preventDefault(); });
+      unlinkBtn.addEventListener('click', () => {
+        restoreCreditSel();
+        document.execCommand('unlink', false);
+        fifiState.song_credit_text = sanitiseTaglineHTML(editor.innerHTML);
+        updateCharCounts();
+        pushPreview();
+      });
+    }
+  }
+  bindSongCreditRichText();
 
   // ── Iframe preview ─────────────────────────────────────────────────────
   // The iframe loads fifi.html?preview=1, which signals 'fifi-preview-ready'
@@ -601,11 +694,12 @@
     statusEl.textContent = '';
 
     // Pull the latest field values before saving.
-    const imgUrl       = $id('fifi-img-url').value.trim();
-    const caption      = $id('fifi-caption-input').value.trim();
-    const taglineText  = sanitiseTaglineHTML($id('fifi-tagline-rt').innerHTML).trim();
-    const songUrl      = fifiState.song_url;     // '' means clear
-    const songVolume   = fifiState.song_volume;
+    const imgUrl         = $id('fifi-img-url').value.trim();
+    const caption        = $id('fifi-caption-input').value.trim();
+    const taglineText    = sanitiseTaglineHTML($id('fifi-tagline-rt').innerHTML).trim();
+    const songUrl        = fifiState.song_url;          // '' means clear
+    const songVolume     = fifiState.song_volume;
+    const songCreditText = sanitiseTaglineHTML($id('fifi-credit-rt')?.innerHTML || '').trim();
 
     // Race the RPC against a hard timeout so the UI never gets stuck if the
     // Supabase client's promise stalls (mid-flight JWT refresh, dropped socket, etc.).
@@ -613,15 +707,16 @@
     let error = null;
     try {
       const rpcPromise = getClient().rpc('set_fifi_zone_settings', {
-        p_image_url:    imgUrl      || null,
-        p_caption:      caption     || null,
-        p_tagline_text: taglineText || null,
+        p_image_url:        imgUrl         || null,
+        p_caption:          caption        || null,
+        p_tagline_text:     taglineText    || null,
         // tagline_url is legacy: rich-text content lives inside p_tagline_text now.
-        // Pass null to leave whatever's already in the column untouched.
-        p_tagline_url:  null,
-        // song_url uses '' as a sentinel for "clear", null for "leave alone".
-        p_song_url:     songUrl,
-        p_song_volume:  songVolume,
+        p_tagline_url:      null,
+        // song_url uses '' as sentinel for "clear", null for "leave alone".
+        p_song_url:         songUrl,
+        p_song_volume:      songVolume,
+        // song_credit_text: '' clears, null leaves alone — always pass current value.
+        p_song_credit_text: songCreditText,
       });
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('save timed out (15s)')), 15000)
@@ -650,16 +745,18 @@
     // Sync inputs to whatever the DB stored
     if (data && data[0]) {
       const s = data[0];
-      fifiState.image_url    = s.image_url    || '';
-      fifiState.caption      = s.caption      || '';
-      fifiState.tagline_url  = s.tagline_url  || '';
-      fifiState.song_url     = s.song_url     || '';
-      fifiState.song_volume  = (typeof s.song_volume === 'number') ? s.song_volume : 0.7;
+      fifiState.image_url        = s.image_url        || '';
+      fifiState.caption          = s.caption          || '';
+      fifiState.tagline_url      = s.tagline_url      || '';
+      fifiState.song_url         = s.song_url         || '';
+      fifiState.song_volume      = (typeof s.song_volume === 'number') ? s.song_volume : 0.7;
+      fifiState.song_credit_text = s.song_credit_text || '';
 
       $id('fifi-img-url').value       = fifiState.image_url;
       $id('fifi-caption-input').value = fifiState.caption;
       setTaglineEditor(s.tagline_text || '', fifiState.tagline_url);
       fifiState.tagline_text = sanitiseTaglineHTML($id('fifi-tagline-rt').innerHTML);
+      setSongCreditEditor(fifiState.song_credit_text);
       setSongUI(fifiState.song_url);
       setVolumeUI(fifiState.song_volume);
       updateCharCounts();
