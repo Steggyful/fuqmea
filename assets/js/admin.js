@@ -319,44 +319,113 @@
         <td class="col-num">${fmt(u.weekly_rounds)}</td>
         <td class="col-num" style="color:var(--yellow)">${Number(u.rakeback_pool).toFixed(2)}</td>
         <td class="col-actions">
-          <div class="actions-cell">
-            <button class="btn btn-sm btn-yellow" data-action="adjust-tokens"
-              data-user-id="${u.user_id}" data-name="${safeName}">TOKENS</button>
-            <button class="btn btn-sm" data-action="events"
-              data-user-id="${u.user_id}" data-name="${safeName}">EVENTS</button>
-            <button class="btn btn-sm ${banned ? '' : 'btn-red'}" data-action="${banned ? 'unban' : 'ban'}"
-              data-user-id="${u.user_id}" data-name="${safeName}">${banned ? 'UNBAN' : 'BAN'}</button>
-            <button class="btn btn-sm" data-action="${excluded ? 'include-lb' : 'exclude-lb'}"
-              data-user-id="${u.user_id}" data-name="${safeName}">${excluded ? 'SHOW LB' : 'HIDE LB'}</button>
-            <button class="btn btn-sm" data-action="clear-name"
-              data-user-id="${u.user_id}" data-name="${safeName}">CLR NAME</button>
-            <button class="btn btn-sm btn-red" data-action="reset-weekly"
-              data-user-id="${u.user_id}" data-name="${safeName}">RESET WK</button>
-          </div>
+          <button class="row-menu-btn" data-user-id="${u.user_id}"
+            aria-label="Actions for ${safeName}" aria-haspopup="menu" aria-expanded="false">⋮</button>
         </td>
       </tr>`;
     }).join('');
   }
 
-  // Delegated click handler — CSP blocks inline onclick.
+  // ── Row dropdown menu ──────────────────────────────────────────────────
+  // One shared <div id="user-row-menu"> in the DOM. Each row's ⋮ button
+  // opens it, positioned next to the trigger. Items dispatch the same
+  // handler functions the old in-row buttons did.
+  let menuTrigger = null;
+
+  function closeRowMenu() {
+    const menu = $id('user-row-menu');
+    if (menu) menu.hidden = true;
+    if (menuTrigger) {
+      menuTrigger.setAttribute('aria-expanded', 'false');
+      menuTrigger = null;
+    }
+  }
+
+  function openRowMenu(triggerEl, user) {
+    const menu = $id('user-row-menu');
+    if (!menu) return;
+
+    // Configure which items are visible based on user state.
+    menu.querySelector('[data-act="ban"]').hidden = !!user.banned_at;
+    menu.querySelector('[data-act="unban"]').hidden = !user.banned_at;
+    menu.querySelector('[data-act="exclude-lb"]').hidden = !!user.leaderboard_excluded;
+    menu.querySelector('[data-act="include-lb"]').hidden = !user.leaderboard_excluded;
+
+    menu.dataset.userId = user.user_id;
+    menu.dataset.userName = user.leaderboard_name || '';
+
+    // Show first so we can measure, then position right-aligned to the trigger.
+    menu.hidden = false;
+    const triggerRect = triggerEl.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+
+    let top = triggerRect.bottom + 6;
+    // Flip above if it would overflow the viewport.
+    if (top + menuRect.height > window.innerHeight - 8) {
+      top = Math.max(8, triggerRect.top - menuRect.height - 6);
+    }
+    let left = triggerRect.right - menuRect.width;
+    if (left < 8) left = 8;
+
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+
+    menuTrigger = triggerEl;
+    triggerEl.setAttribute('aria-expanded', 'true');
+  }
+
+  // Single delegated handler: open/close the menu when a ⋮ trigger is clicked.
   $id('users-tbody').addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-action]');
-    if (!btn) return;
-    const userId = btn.dataset.userId;
-    const name = btn.dataset.name || '';
+    const trigger = e.target.closest('button.row-menu-btn');
+    if (!trigger) return;
+    e.stopPropagation();
+    const userId = trigger.dataset.userId;
+    const user = currentUsers.find(u => u.user_id === userId);
+    if (!user) return;
+    if (menuTrigger === trigger) {
+      closeRowMenu();
+    } else {
+      closeRowMenu();
+      openRowMenu(trigger, user);
+    }
+  });
+
+  // Menu item dispatch.
+  $id('user-row-menu').addEventListener('click', (e) => {
+    const item = e.target.closest('button[data-act]');
+    if (!item) return;
+    e.stopPropagation();
+    const menu = $id('user-row-menu');
+    const userId = menu.dataset.userId;
+    const name = menu.dataset.userName || '';
+    const act = item.dataset.act;
+    closeRowMenu();
     if (!userId) return;
-    const action = btn.dataset.action;
-    switch (action) {
+
+    switch (act) {
       case 'adjust-tokens': openAdjustModal(userId, name); break;
-      case 'reset-weekly':  resetWeekly(userId, name); break;
+      case 'events':        openEventsModal(userId, name); break;
       case 'ban':           openBanModal(userId, name); break;
       case 'unban':         setBanned(userId, name, false); break;
       case 'exclude-lb':    setLeaderboardExcluded(userId, name, true); break;
       case 'include-lb':    setLeaderboardExcluded(userId, name, false); break;
       case 'clear-name':    clearDisplayName(userId, name); break;
-      case 'events':        openEventsModal(userId, name); break;
+      case 'reset-weekly':  resetWeekly(userId, name); break;
     }
   });
+
+  // Close on outside click, Escape, scroll, or resize.
+  document.addEventListener('click', (e) => {
+    if (!menuTrigger) return;
+    if (e.target.closest('#user-row-menu')) return;
+    if (e.target.closest('.row-menu-btn')) return;
+    closeRowMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && menuTrigger) closeRowMenu();
+  });
+  window.addEventListener('scroll', closeRowMenu, true);
+  window.addEventListener('resize', closeRowMenu);
 
   $id('refresh-users-btn').addEventListener('click', loadUsers);
 
