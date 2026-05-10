@@ -280,19 +280,35 @@
       return;
     }
 
+    if (btn.disabled) return; // guard against duplicate fires while one is in-flight
+
     btn.disabled = true;
     btn.textContent = 'SAVING...';
     statusEl.textContent = '';
 
-    const { data, error } = await getClient().rpc('set_fifi_zone_settings', {
-      p_image_url:    imgUrl      || null,
-      p_caption:      caption     || null,
-      p_tagline_text: taglineText || null,
-      p_tagline_url:  taglineUrl  || null
-    });
-
-    btn.disabled = false;
-    btn.textContent = 'SAVE CHANGES';
+    // Race the RPC against a hard timeout so the UI never gets stuck if the
+    // Supabase client's promise stalls (mid-flight JWT refresh, dropped socket, etc.).
+    let data = null;
+    let error = null;
+    try {
+      const rpcPromise = getClient().rpc('set_fifi_zone_settings', {
+        p_image_url:    imgUrl      || null,
+        p_caption:      caption     || null,
+        p_tagline_text: taglineText || null,
+        p_tagline_url:  taglineUrl  || null
+      });
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('save timed out (15s)')), 15000)
+      );
+      const result = await Promise.race([rpcPromise, timeoutPromise]);
+      data = result.data;
+      error = result.error;
+    } catch (err) {
+      error = { message: (err && err.message) ? err.message : String(err) };
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'SAVE CHANGES';
+    }
 
     if (error) {
       statusEl.textContent = error.message;
