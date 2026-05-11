@@ -2002,6 +2002,7 @@ h1 {
   font-weight: bold;
   letter-spacing: 0.7px;
   box-shadow: 0 0 16px rgba(255, 23, 68, 0.9);
+  animation: badge-pulse 2s ease-in-out infinite;
 }
 
 .streamer-section.checking {
