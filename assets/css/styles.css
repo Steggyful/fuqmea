@@ -2051,7 +2051,10 @@ h1 {
   align-items: stretch;
 }
 
-.home-socials-card {
+.home-socials-card,
+.home-socials-card.offline,
+.home-socials-card.checking,
+.home-socials-card.live {
   padding: 0.2rem 0.5rem 0.4rem;
   border: 0;
   box-shadow: none;
@@ -3227,7 +3230,10 @@ h1 {
     margin-bottom: 0.8rem;
   }
 
-  .home-socials-card {
+  .home-socials-card,
+  .home-socials-card.offline,
+  .home-socials-card.checking,
+  .home-socials-card.live {
     padding: 0.1rem 0.3rem 0.2rem;
     border: 0;
     box-shadow: none;
