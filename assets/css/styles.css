@@ -764,6 +764,11 @@ nav a:focus-visible,
   box-shadow: none;
 }
 
+@keyframes live-badge-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(255, 23, 68, 0.6); }
+  50% { box-shadow: 0 0 20px rgba(255, 23, 68, 1), 0 0 32px rgba(255, 23, 68, 0.3); }
+}
+
 /* badge-pulse, pulse-live, platform-live-pulse all share the same 2s rhythm
    so the LIVE badge, the dot's ring, and the red social button outline all
    pulse in lockstep. */
@@ -2002,7 +2007,7 @@ h1 {
   font-weight: bold;
   letter-spacing: 0.7px;
   box-shadow: 0 0 16px rgba(255, 23, 68, 0.9);
-  animation: badge-pulse 2s ease-in-out infinite;
+  animation: live-badge-glow 2s ease-in-out infinite;
 }
 
 .streamer-section.checking {
