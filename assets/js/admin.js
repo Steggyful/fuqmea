@@ -87,7 +87,7 @@
     }
     $id('admin-user-label').textContent = session.user.email || '';
     showView('panel');
-    await Promise.all([loadLiveStatus(), loadUsers()]);
+    await Promise.all([loadLiveStatus(), loadUsers(), loadSiteConfig()]);
   }
 
   // ── OAuth (preferred — bypasses the captcha flow that's been flaky) ──────
@@ -664,6 +664,52 @@
       if (!$id('ban-modal').hidden) closeBanModal();
       if (!$id('events-modal').hidden) closeEventsModal();
     }
+  });
+
+  // ── Site Config ───────────────────────────────────────────────────────────
+
+  async function loadSiteConfig() {
+    const { data, error } = await getClient()
+      .from('site_config')
+      .select('discord_invite_url')
+      .eq('id', 1)
+      .single();
+    if (error || !data) return;
+    $id('discord-url-input').value = data.discord_invite_url || '';
+  }
+
+  $id('save-discord-url-btn').addEventListener('click', async () => {
+    const btn = $id('save-discord-url-btn');
+    const msgEl = $id('discord-url-msg');
+    const url = $id('discord-url-input').value.trim();
+    msgEl.textContent = '';
+    msgEl.style.color = 'var(--muted)';
+
+    if (!url) {
+      msgEl.textContent = 'URL cannot be empty.';
+      msgEl.style.color = 'var(--red)';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'SAVING...';
+
+    const { data, error } = await getClient().rpc('admin_set_discord_url', { p_url: url });
+
+    btn.disabled = false;
+    btn.textContent = 'SAVE';
+
+    if (error) {
+      msgEl.textContent = error.message;
+      msgEl.style.color = 'var(--red)';
+      return;
+    }
+
+    $id('discord-url-input').value = data || url;
+    msgEl.textContent = 'Saved!';
+    msgEl.style.color = 'var(--lime)';
+    setTimeout(() => { msgEl.textContent = ''; }, 3000);
+    showFlash('Discord URL updated');
   });
 
   // ── Boot ──────────────────────────────────────────────────────────────────
