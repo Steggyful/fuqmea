@@ -2,7 +2,6 @@
   "name": "fuqmea-site",
   "private": true,
   "scripts": {
-    "start": "node tools/dev-server.js",
     "gallery": "node generate-gallery.js",
     "gallery:check": "node generate-gallery.js --check",
     "setup-hooks": "node tools/setup-hooks.js"
