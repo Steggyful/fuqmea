@@ -4,39 +4,43 @@
   'use strict';
 
   // ─── TUNING ──────────────────────────────────────────────────────────────────
+  // Numbers below are the original Flappy Bird constants (288x512 playfield,
+  // 60fps) scaled to this 360x520 canvas — constant speed, short snappy hops.
   const W              = 360;
   const H              = 520;
-  const GRAVITY        = 0.44;
-  const FLAP           = -9.0;
-  const VY_MAX         = 12;
-  const PIPE_W         = 54;
-  const GAP            = 148;
-  const PIPE_SPAWN     = 198;
-  const SPEED_BASE     = 2.4;
-  const SPEED_RAMP     = 0.024;   // per pipe cleared
-  const SPEED_CAP      = 3.9;
-  const BIRD_R         = 22;
-  const BIRD_X         = 92;
+  const GROUND_H       = 72;      // scrolling ground strip at the bottom
+  const PLAY_H         = H - GROUND_H;
+  const GRAVITY        = 0.28;
+  const FLAP           = -5.2;
+  const VY_MAX         = 10.5;
+  const PIPE_W         = 64;
+  const GAP            = 124;
+  const PIPE_SPAWN     = 210;
+  const SPEED_BASE     = 2.5;     // OG never speeds up
+  const BIRD_R         = 15;
+  const BIRD_X         = 96;
   const BIRD_SPRITE_FRAMES = 4;
   const BIRD_SPRITE_PATH   = 'assets/images/FiFi Bird/fifi_sprite.png';
   const BG_SPRITE_PATH     = 'assets/images/FiFi Bird/fifi_bg.jpg';
   const PIPE_SPRITE_PATH   = 'assets/images/FiFi Bird/fifi_pipe.png';
-  const TARGET_SPRITE_HEIGHT = 88;
+  const TARGET_SPRITE_HEIGHT = 64;
   // Source frame is 256x1024 but the bird (with wings extended) only fills the
   // middle ~48% of it — these crop the empty padding so TARGET_SPRITE_HEIGHT
   // means the actual visible bird height, not the frame box height.
   const SPRITE_CROP_Y_FRAC = 0.27;
   const SPRITE_CROP_H_FRAC = 0.48;
-  const WING_FRAME_MS  = 85;
-  const FLAP_BURST_SEQUENCE = [1, 2, 3, 0];
+  // OG birds flap constantly while alive — steady loop, not a per-tap burst.
+  const WING_FRAME_MS  = 90;
+  const WING_LOOP_SEQUENCE = [0, 1, 2, 3];
   const BG_PARALLAX    = 0.25;
   const PIPE_COLLISION_INSET = 8;
 
   // ─── STATES ──────────────────────────────────────────────────────────────────
-  const S_IDLE    = 0;
-  const S_PLAYING = 1;
-  const S_DYING   = 2;
-  const S_DEAD    = 3;
+  const S_IDLE    = 0;   // title screen
+  const S_READY   = 1;   // "GET READY" — bird bobs at play position, first tap starts physics
+  const S_PLAYING = 2;
+  const S_DYING   = 3;
+  const S_DEAD    = 4;
 
   // ─── PIPE SPRITE SLICES ───────────────────────────────────────────────────────
   const PIPE_SLICE = {
@@ -53,7 +57,6 @@
   const BOT_BASE_DW = PIPE_SLICE.botBase.sw * PIPE_BODY_SCALE_BOT;
   const BOT_BASE_DH = PIPE_SLICE.botBase.sh * PIPE_BODY_SCALE_BOT;
   const BOT_BASE_DX = (PIPE_W - BOT_BASE_DW) / 2;
-  const PIPE_VIEW_EXT = Math.min(220, Math.ceil(PIPE_SLICE.topMiddle.sh * PIPE_BODY_SCALE_TOP * 0.35));
 
   // ─── EXTERNAL API ─────────────────────────────────────────────────────────────
   let pushHistory     = null;
@@ -74,20 +77,22 @@
 
   // ─── GAME STATE ───────────────────────────────────────────────────────────────
   let gameState  = S_IDLE;
-  let birdY      = H * 0.42;
+  let birdY      = PLAY_H * 0.46;
   let birdVy     = 0;
   let birdAngle  = 0;
   let pipes      = [];
   let score      = 0;
   let bestScore  = 0;
   let bgScrollX  = 0;
+  let groundScrollX = 0;
   let lastTs     = 0;
   let raf        = 0;
-  let wingBurstStart = null;
-  let scorePops  = [];   // { y, startTs }
   let shakeAmt   = 0;
   let flashAmt   = 0;
   let deadTs     = 0;    // RAF timestamp when S_DEAD was entered
+  let dieCuePlayed = false;
+  let swooshPlayed = false;
+  let deathWasNewBest = false;
 
   // ─── SERVER SESSION ───────────────────────────────────────────────────────────
   let runSessionId   = null;
@@ -225,6 +230,48 @@
     } catch (_) {}
   }
 
+  // OG "die" cue — short falling whistle right after the hit.
+  function playDie() {
+    if (reduceMotion || !soundOn) return;
+    const ac = getAudio(); if (!ac) return;
+    try {
+      if (ac.state === 'suspended') ac.resume().catch(() => {});
+      const osc = ac.createOscillator(), g = ac.createGain();
+      const t0 = ac.currentTime;
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(620, t0);
+      osc.frequency.exponentialRampToValueAtTime(140, t0 + 0.42);
+      g.gain.setValueAtTime(0.16, t0);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.45);
+      osc.connect(g); g.connect(ac.destination);
+      osc.start(t0); osc.stop(t0 + 0.5);
+    } catch (_) {}
+  }
+
+  // OG "swoosh" — noise sweep when the score panel slides in.
+  function playSwoosh() {
+    if (reduceMotion || !soundOn) return;
+    const ac = getAudio(); if (!ac) return;
+    try {
+      if (ac.state === 'suspended') ac.resume().catch(() => {});
+      const dur = 0.28;
+      const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * dur), ac.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        const t = i / data.length;
+        data[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * t) * 0.5;
+      }
+      const src = ac.createBufferSource(), filt = ac.createBiquadFilter(), g = ac.createGain();
+      filt.type = 'bandpass'; filt.Q.value = 0.8;
+      filt.frequency.setValueAtTime(900, ac.currentTime);
+      filt.frequency.exponentialRampToValueAtTime(2600, ac.currentTime + dur);
+      g.gain.value = 0.22;
+      src.buffer = buf;
+      src.connect(filt); filt.connect(g); g.connect(ac.destination);
+      src.start(ac.currentTime);
+    } catch (_) {}
+  }
+
   // ─── RNG ──────────────────────────────────────────────────────────────────────
   function mulberry32(a) {
     let state = a >>> 0;
@@ -287,7 +334,9 @@
   }
 
   function hitTest() {
-    if (birdY - BIRD_R < 8 || birdY + BIRD_R > H - 8) return true;
+    // OG rules: the ceiling never kills you (the bird just can't leave the top);
+    // the ground and pipes do.
+    if (birdY + BIRD_R >= PLAY_H) return true;
     for (let i = 0; i < pipes.length; i++) {
       const p = pipes[i];
       const rx = p.x + PIPE_COLLISION_INSET;
@@ -296,14 +345,14 @@
       const topH = p.gapY - GAP / 2;
       const botY = p.gapY + GAP / 2;
       if (circleHitsRect(BIRD_X, birdY, BIRD_R, rx, 0, rw, topH)) return true;
-      if (circleHitsRect(BIRD_X, birdY, BIRD_R, rx, botY, rw, H - botY)) return true;
+      if (circleHitsRect(BIRD_X, birdY, BIRD_R, rx, botY, rw, PLAY_H - botY)) return true;
     }
     return false;
   }
 
   function spawnPipe() {
-    const minGapY = 110 + GAP / 2;
-    const maxGapY = H - 110 - GAP / 2;
+    const minGapY = 66 + GAP / 2;
+    const maxGapY = PLAY_H - 46 - GAP / 2;
     const rnd = runRng ? runRng() : Math.random();
     const gapY = minGapY + rnd * (maxGapY - minGapY);
     let x = W + 60;
@@ -311,16 +360,9 @@
     pipes.push({ x, gapY, passed: false });
   }
 
-  function triggerWingBurst() {
-    wingBurstStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  }
-
-  function wingFrameIndex() {
-    if (wingBurstStart == null) return 0;
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const idx = Math.floor((now - wingBurstStart) / WING_FRAME_MS);
-    if (idx >= FLAP_BURST_SEQUENCE.length) { wingBurstStart = null; return 0; }
-    return FLAP_BURST_SEQUENCE[idx];
+  function wingFrameIndex(now) {
+    const idx = Math.floor(now / WING_FRAME_MS) % WING_LOOP_SEQUENCE.length;
+    return WING_LOOP_SEQUENCE[idx];
   }
 
   // ─── DRAWING HELPERS ──────────────────────────────────────────────────────────
@@ -368,7 +410,7 @@
     if (!p) return;
     const topH    = Math.max(0, p.gapY - GAP / 2);
     const botY    = p.gapY + GAP / 2;
-    const bottomH = Math.max(0, H - botY);
+    const bottomH = Math.max(0, PLAY_H - botY);
 
     if (!pipeImgOk || !pipeImg) {
       ctx.fillStyle = '#1166ff';
@@ -389,7 +431,7 @@
         const srcY = TB.sy + TB.sh - srcH;
         ctx.drawImage(pipeImg, TB.sx, srcY, TB.sw, srcH, p.x + TOP_BASE_DX, topH - baseH, TOP_BASE_DW, baseH);
       }
-      let yBottom = topH - baseH, remain = bodyH + PIPE_VIEW_EXT;
+      let yBottom = topH - baseH, remain = bodyH;
       const tileHT = TM.sh * scaleT;
       let pngYBelow = TM.sy + TM.sh;
       while (remain > 0) {
@@ -417,34 +459,66 @@
         ctx.drawImage(pipeImg, BM.sx, pngYTop, BM.sw, srcH, p.x, y, PIPE_W, dh);
         pngYTop += srcH; y += dh; remain -= dh;
       }
-      let yExt = H, remUg = PIPE_VIEW_EXT, pngUg = BM.sy;
-      while (remUg > 0) {
-        const dh = Math.min(tileHB, remUg);
-        const srcH = Math.min(BM.sh, dh / scaleB);
-        ctx.drawImage(pipeImg, BM.sx, pngUg, BM.sw, srcH, p.x, yExt, PIPE_W, dh);
-        pngUg += srcH;
-        if (pngUg >= BM.sy + BM.sh) pngUg -= BM.sh;
-        yExt += dh; remUg -= dh;
-      }
     }
   }
 
+  // Scrolling ground strip — the iconic Flappy Bird floor, restyled for the
+  // site's neon theme: lime turf edge, hatched shadow band, dark dirt body.
+  function drawGround() {
+    const y = PLAY_H;
+    ctx.fillStyle = '#0b1408';
+    ctx.fillRect(0, y, W, GROUND_H);
+
+    // Turf band
+    ctx.fillStyle = '#173a10';
+    ctx.fillRect(0, y, W, 22);
+    ctx.fillStyle = '#39ff14';
+    ctx.fillRect(0, y, W, 3);
+
+    // Diagonal hatch that scrolls with world speed
+    const stride = 24;
+    const off = ((groundScrollX % stride) + stride) % stride;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, y + 3, W, 19);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(57,255,20,0.4)';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    for (let x = -stride * 2 - off; x < W + stride; x += stride) {
+      ctx.moveTo(x, y + 24);
+      ctx.lineTo(x + 14, y + 1);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // Dirt body speckle rows
+    ctx.fillStyle = 'rgba(57,255,20,0.08)';
+    ctx.fillRect(0, y + 26, W, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, y + 22, W, 4);
+  }
+
   function drawBirdAt(x, y, now) {
-    // Update smooth rotation
+    // OG rotation: nose snaps up on a flap and holds through the top of the
+    // arc, then the bird pitches down hard toward 90° as it dives.
     if (gameState === S_PLAYING) {
-      const target = Math.max(-0.52, Math.min(1.1, birdVy * 0.075));
-      birdAngle += (target - birdAngle) * 0.22;
+      if (birdVy < 1.8) {
+        birdAngle += (-0.42 - birdAngle) * 0.38;
+      } else {
+        birdAngle = Math.min(Math.PI * 0.5, birdAngle + 0.055);
+      }
     } else if (gameState === S_DYING) {
-      birdAngle = Math.min(Math.PI * 0.55, birdAngle + 0.19);
+      birdAngle = Math.min(Math.PI * 0.5, birdAngle + 0.18);
     } else {
       birdAngle += (0 - birdAngle) * 0.1;
     }
 
-    let frameIdx = 0;
-    if (gameState === S_PLAYING) {
-      frameIdx = wingFrameIndex();
-    } else if (gameState === S_IDLE || gameState === S_DEAD) {
-      frameIdx = Math.floor(now / 420) % 2 === 0 ? 0 : 2;
+    // Wings flap constantly while the bird is alive (title, ready, playing);
+    // they freeze when it's knocked out.
+    let frameIdx = 1;
+    if (gameState !== S_DYING && gameState !== S_DEAD) {
+      frameIdx = wingFrameIndex(now);
     }
 
     ctx.save();
@@ -467,40 +541,16 @@
     ctx.restore();
   }
 
-  function drawScoreHud(now) {
-    // Pop scale: punchy on new score
-    let popScale = 1;
-    if (scorePops.length > 0) {
-      const t = Math.min(1, (now - scorePops[scorePops.length - 1].startTs) / 220);
-      popScale = 1 + 0.32 * Math.pow(1 - t, 2);
-    }
-    const fontSize = Math.round(30 * popScale);
+  // Big plain counter at the top, exactly like the OG — no pops, no "+1".
+  function drawScoreHud() {
     ctx.save();
     ctx.textAlign = 'center';
-    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-    ctx.strokeText(String(score), W / 2, 52);
+    ctx.font = 'bold 42px system-ui, "Arial Black", sans-serif';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.strokeText(String(score), W / 2, 68);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(String(score), W / 2, 52);
-    ctx.restore();
-  }
-
-  function drawScorePops(now) {
-    ctx.save();
-    ctx.textAlign = 'center';
-    for (let i = scorePops.length - 1; i >= 0; i--) {
-      const pop = scorePops[i];
-      const t = (now - pop.startTs) / 560;
-      if (t >= 1) { scorePops.splice(i, 1); continue; }
-      ctx.globalAlpha = Math.pow(1 - t, 0.65);
-      const y = pop.y - t * 48;
-      ctx.font = `bold ${Math.round(22 + t * 3)}px system-ui, sans-serif`;
-      ctx.fillStyle = '#39ff14';
-      ctx.shadowColor = 'rgba(0,0,0,0.85)';
-      ctx.shadowBlur  = 5;
-      ctx.fillText('+1', BIRD_X + 30, y);
-    }
+    ctx.fillText(String(score), W / 2, 68);
     ctx.restore();
   }
 
@@ -519,43 +569,8 @@
     ctx.fillStyle = '#39ff14';
     ctx.fillText('FiFi', W / 2, H * 0.14);
     ctx.fillStyle = '#ffffff';
-    const birdY = H * 0.235;
-    const birdW = ctx.measureText('BIRD').width;
+    ctx.fillText('BIRD', W / 2, H * 0.235);
     ctx.shadowBlur = 0;
-    ctx.font = 'bold 11px system-ui, sans-serif';
-    const betaTextW = ctx.measureText('BETA').width;
-    const betaChipW = betaTextW + 14;
-    const betaChipH = 20;
-    const gap = 10;
-    const groupW = birdW + gap + betaChipW;
-    const birdLeft = (W - groupW) / 2;
-    ctx.shadowColor = '#39ff14';
-    ctx.shadowBlur  = 26;
-    ctx.font = 'bold 58px system-ui, "Arial Black", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('BIRD', birdLeft, birdY);
-    ctx.shadowBlur = 0;
-
-    // BETA chip — sits next to BIRD, matches the HTML title badge
-    const chipX = birdLeft + birdW + gap;
-    const chipY = birdY - 38;
-    roundRect(chipX, chipY, betaChipW, betaChipH, 10);
-    ctx.fillStyle = 'rgba(57,255,20,0.16)';
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = 'rgba(57,255,20,0.7)';
-    ctx.stroke();
-    ctx.font = 'bold 11px system-ui, sans-serif';
-    ctx.fillStyle = '#39ff14';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(57,255,20,0.55)';
-    ctx.shadowBlur = 6;
-    ctx.fillText('BETA', chipX + betaChipW / 2, chipY + betaChipH / 2 + 0.5);
-    ctx.shadowBlur = 0;
-    ctx.textBaseline = 'alphabetic';
-    ctx.textAlign = 'center';
 
     // Tagline
     ctx.font = 'italic 14px system-ui, sans-serif';
@@ -590,55 +605,156 @@
     ctx.restore();
   }
 
+  // OG "GET READY" — bird bobs in place, world scrolls, first tap starts.
+  function drawReadyScreen(now) {
+    ctx.save();
+    ctx.textAlign = 'center';
+
+    ctx.font = 'bold 34px system-ui, "Arial Black", sans-serif';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.strokeText('GET READY', W / 2, H * 0.2);
+    ctx.fillStyle = '#39ff14';
+    ctx.shadowColor = 'rgba(57,255,20,0.5)';
+    ctx.shadowBlur = 14;
+    ctx.fillText('GET READY', W / 2, H * 0.2);
+    ctx.shadowBlur = 0;
+
+    // Pulsing tap hint: hand-drawn tap circle with up chevrons
+    const pulse = 0.55 + 0.45 * Math.sin(now / 420);
+    const cx = W / 2, cy = H * 0.46;
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 17, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - 9, cy - 26); ctx.lineTo(cx, cy - 36); ctx.lineTo(cx + 9, cy - 26);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + pulse * 0.5})`;
+    ctx.shadowColor = 'rgba(0,0,0,0.75)'; ctx.shadowBlur = 6;
+    ctx.fillText('TAP TO FLAP', W / 2, H * 0.56);
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+  }
+
+  // OG medal tiers: bronze 10, silver 20, gold 30, platinum 40.
+  function medalForScore(s) {
+    if (s >= 40) return { label: 'PLAT',   main: '#d9f5ff', rim: '#8fd4e8' };
+    if (s >= 30) return { label: 'GOLD',   main: '#ffd94d', rim: '#c9a227' };
+    if (s >= 20) return { label: 'SILVER', main: '#d7d7d7', rim: '#9b9b9b' };
+    if (s >= 10) return { label: 'BRONZE', main: '#e0a86c', rim: '#a5713d' };
+    return null;
+  }
+
+  function easeOutBack(t) {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  }
+
   function drawGameOverScreen(now) {
+    const elapsed = now - deadTs;
     ctx.fillStyle = 'rgba(0,0,0,0.56)';
     ctx.fillRect(0, 0, W, H);
 
-    const panelW = 272, panelH = 184;
-    const px = (W - panelW) / 2, py = H * 0.26;
-
     ctx.save();
-    ctx.shadowColor = 'rgba(57,255,20,0.42)'; ctx.shadowBlur = 30;
-    roundRect(px, py, panelW, panelH, 14);
-    ctx.fillStyle = 'rgba(7,15,9,0.96)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(57,255,20,0.72)'; ctx.lineWidth = 2.5; ctx.stroke();
-    ctx.shadowBlur = 0;
     ctx.textAlign = 'center';
 
-    ctx.font = 'bold 30px system-ui, "Arial Black", sans-serif';
+    // 1) GAME OVER drops in first
+    const tTitle = Math.min(1, elapsed / 260);
+    const titleY = H * 0.155 - (1 - easeOutBack(tTitle)) * 46;
+    ctx.globalAlpha = Math.min(1, elapsed / 140);
+    ctx.font = 'bold 36px system-ui, "Arial Black", sans-serif';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.strokeText('GAME OVER', W / 2, titleY);
     ctx.fillStyle = '#ff4040';
     ctx.shadowColor = 'rgba(255,0,0,0.45)'; ctx.shadowBlur = 14;
-    ctx.fillText('GAME OVER', W / 2, py + 48);
+    ctx.fillText('GAME OVER', W / 2, titleY);
     ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
 
-    ctx.font = 'bold 52px system-ui, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(String(score), W / 2, py + 112);
+    // 2) Score panel swooshes up from below
+    const panelW = 276, panelH = 150;
+    const px = (W - panelW) / 2;
+    const panelDelay = 320, panelDur = 340;
+    const tPanel = Math.max(0, Math.min(1, (elapsed - panelDelay) / panelDur));
+    if (tPanel > 0) {
+      const pyFinal = H * 0.28;
+      const py = pyFinal + (1 - easeOutBack(tPanel)) * (H - pyFinal);
+      if (!swooshPlayed) { swooshPlayed = true; playSwoosh(); }
 
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.48)';
-    ctx.fillText('gaps cleared', W / 2, py + 130);
-
-    const isNewBest = score > 0 && score >= bestScore;
-    if (isNewBest) {
-      ctx.font = 'bold 14px system-ui, sans-serif';
-      ctx.fillStyle = '#39ff14';
-      ctx.shadowColor = 'rgba(57,255,20,0.55)'; ctx.shadowBlur = 12;
-      ctx.fillText('★  NEW BEST  ★', W / 2, py + 163);
+      ctx.shadowColor = 'rgba(57,255,20,0.42)'; ctx.shadowBlur = 30;
+      roundRect(px, py, panelW, panelH, 14);
+      ctx.fillStyle = 'rgba(7,15,9,0.96)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(57,255,20,0.72)'; ctx.lineWidth = 2.5; ctx.stroke();
       ctx.shadowBlur = 0;
-    } else if (bestScore > 0) {
-      ctx.font = '13px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.46)';
-      ctx.fillText(`Best: ${bestScore}`, W / 2, py + 163);
+
+      // Medal slot (left)
+      const mx = px + 58, my = py + panelH / 2;
+      const medal = medalForScore(score);
+      ctx.beginPath(); ctx.arc(mx, my, 33, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2; ctx.stroke();
+      if (medal && tPanel >= 1) {
+        ctx.beginPath(); ctx.arc(mx, my, 28, 0, Math.PI * 2);
+        ctx.fillStyle = medal.main; ctx.fill();
+        ctx.strokeStyle = medal.rim; ctx.lineWidth = 4; ctx.stroke();
+        ctx.font = 'bold 26px system-ui, sans-serif';
+        ctx.fillStyle = medal.rim;
+        ctx.fillText('★', mx, my + 9);
+        ctx.font = 'bold 10px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.fillText(medal.label, mx, my + 48);
+      } else {
+        ctx.font = 'bold 10px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillText('MEDAL', mx, my + 48);
+      }
+
+      // Score column (right) — count-up like the OG tally
+      const sx = px + panelW - 72;
+      const countStart = panelDelay + panelDur;
+      const shown = elapsed <= countStart
+        ? 0
+        : Math.min(score, Math.floor((elapsed - countStart) / 36));
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillText('SCORE', sx, py + 36);
+      ctx.font = 'bold 32px system-ui, sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(String(shown), sx, py + 68);
+
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillText('BEST', sx, py + 98);
+      ctx.font = 'bold 24px system-ui, sans-serif';
+      ctx.fillStyle = '#39ff14';
+      ctx.fillText(String(bestScore), sx, py + 126);
+
+      if (deathWasNewBest && shown >= score) {
+        ctx.font = 'bold 10px system-ui, sans-serif';
+        ctx.fillStyle = '#0a140a';
+        const bw = 38, bh = 15;
+        roundRect(sx + 22, py + 88, bw, bh, 4);
+        ctx.fillStyle = '#39ff14'; ctx.fill();
+        ctx.fillStyle = '#0a140a';
+        ctx.fillText('NEW', sx + 22 + bw / 2, py + 99);
+      }
     }
 
-    // Tap again — delay 650ms so an accidental death-tap doesn't skip
-    if (now - deadTs > 650) {
+    // 3) Tap again — delay so an accidental death-tap doesn't skip
+    if (elapsed > 900) {
       const pulse = 0.65 + 0.35 * Math.sin(now / 490);
       ctx.font = 'bold 18px system-ui, sans-serif';
       ctx.fillStyle = `rgba(57,255,20,${pulse})`;
       ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 7;
-      ctx.fillText('TAP TO FLY AGAIN', W / 2, py + panelH + 42);
+      ctx.fillText('TAP TO FLY AGAIN', W / 2, H * 0.79);
       ctx.shadowBlur = 0;
     }
     ctx.restore();
@@ -662,20 +778,26 @@
 
     drawBackground();
 
-    // Pipes (not shown on start screen)
-    if (gameState !== S_IDLE) {
+    // Pipes (not shown on start / ready screens)
+    if (gameState === S_PLAYING || gameState === S_DYING || gameState === S_DEAD) {
       for (let i = 0; i < pipes.length; i++) drawPipe(pipes[i]);
     }
 
-    // Bird position — idle has centred bob
-    const bx = gameState === S_IDLE ? W / 2 : BIRD_X;
-    const by = gameState === S_IDLE ? H * 0.465 + Math.sin(now / 650) * 9 : birdY;
+    drawGround();
+
+    // Bird position — title screen centres it, ready screen bobs at play position
+    let bx = BIRD_X, by = birdY;
+    if (gameState === S_IDLE) {
+      bx = W / 2;
+      by = PLAY_H * 0.48 + Math.sin(now / 650) * 9;
+    } else if (gameState === S_READY) {
+      by = birdY + Math.sin(now / 320) * 6;
+    }
     drawBirdAt(bx, by, now);
 
-    // Score HUD during active play
-    if (gameState === S_PLAYING || gameState === S_DYING) {
-      drawScoreHud(now);
-      if (scorePops.length) drawScorePops(now);
+    // Score HUD — visible from GET READY through the death fall, like the OG
+    if (gameState === S_READY || gameState === S_PLAYING || gameState === S_DYING) {
+      drawScoreHud();
     }
 
     ctx.restore(); // end shake
@@ -689,6 +811,7 @@
 
     // Overlay screens
     if (gameState === S_IDLE) drawStartScreen(now);
+    else if (gameState === S_READY) drawReadyScreen(now);
     else if (gameState === S_DEAD) drawGameOverScreen(now);
   }
 
@@ -712,23 +835,34 @@
     if (gameState === S_IDLE) {
       // Slow parallax drift on start screen
       bgScrollX += 0.38 * dtScale;
+      groundScrollX += 0.9 * dtScale;
+    }
+
+    if (gameState === S_READY) {
+      // World scrolls at play speed while the bird bobs, just like OG Get Ready
+      const speed = SPEED_BASE * speedMul * dtScale;
+      bgScrollX += speed * BG_PARALLAX;
+      groundScrollX += speed;
     }
 
     if (gameState === S_PLAYING) {
-      const speed = Math.min(SPEED_CAP, SPEED_BASE + score * SPEED_RAMP) * speedMul * dtScale;
+      const speed = SPEED_BASE * speedMul * dtScale;   // constant — OG never speeds up
       birdVy += GRAVITY * dtScale;
       if (birdVy > VY_MAX) birdVy = VY_MAX;
       birdY  += birdVy * dtScale;
+      // Ceiling doesn't kill, it just stops you (OG behaviour)
+      if (birdY < BIRD_R) { birdY = BIRD_R; if (birdVy < 0) birdVy = 0; }
       bgScrollX += speed * BG_PARALLAX;
+      groundScrollX += speed;
 
       for (let i = pipes.length - 1; i >= 0; i--) {
         pipes[i].x -= speed;
         const p = pipes[i];
-        if (!p.passed && p.x + PIPE_W < BIRD_X - BIRD_R) {
+        // OG scores the moment the bird crosses the pipe's centre line
+        if (!p.passed && p.x + PIPE_W / 2 < BIRD_X) {
           p.passed = true;
           score += 1;
           if (els.scoreHud) els.scoreHud.textContent = String(score);
-          scorePops.push({ y: birdY - 18, startTs: ts });
           playScore();
         }
         if (p.x + PIPE_W < -20) pipes.splice(i, 1);
@@ -737,26 +871,34 @@
       if (!last || last.x < W - PIPE_SPAWN) spawnPipe();
 
       if (hitTest()) {
+        const groundHit = birdY + BIRD_R >= PLAY_H;
         gameState = S_DYING;
-        wingBurstStart = null;
         if (birdVy < 0) birdVy = 0;
         shakeAmt = 1.0;
         flashAmt = 1.0;
+        // OG: pipe hit plays the "hit" thud then a falling "die" whistle;
+        // a straight ground smack is just the thud.
+        dieCuePlayed = groundHit;
         playDeath();
       }
     }
 
     if (gameState === S_DYING) {
-      const speed = Math.min(SPEED_CAP, SPEED_BASE + score * SPEED_RAMP) * speedMul * dtScale;
       birdVy += GRAVITY * dtScale;
       if (birdVy > VY_MAX) birdVy = VY_MAX;
       birdY  += birdVy * dtScale;
+      if (!dieCuePlayed && birdVy > 2.2) {
+        dieCuePlayed = true;
+        playDie();
+      }
       if (birdY - BIRD_R < 0) { birdY = BIRD_R; if (birdVy < 0) birdVy = 0; }
-      if (birdY + BIRD_R >= H - 8) {
-        birdY = H - 8 - BIRD_R;
+      if (birdY + BIRD_R >= PLAY_H) {
+        birdY = PLAY_H - BIRD_R;
         birdVy = 0;
         gameState = S_DEAD;
         deadTs = ts;
+        swooshPlayed = false;
+        deathWasNewBest = score > 0 && score > bestScore;
         void endRound();
       }
     }
@@ -823,14 +965,16 @@
   }
 
   // ─── START RUN ────────────────────────────────────────────────────────────────
-  async function startRun() {
+  // Reset the world and show the OG "GET READY" screen. The verified server
+  // session is fetched here so the first real flap starts play instantly.
+  async function enterReady() {
     if (runStartBusy) return;
     runStartBusy = true;
     try {
-      score = 0; pipes = []; scorePops = [];
-      birdY = H * 0.42; birdVy = 0; birdAngle = 0;
-      lastTs = 0; bgScrollX = 0;
+      score = 0; pipes = [];
+      birdY = PLAY_H * 0.46; birdVy = 0; birdAngle = 0;
       smoothedDtScale = 1;
+      dieCuePlayed = false; swooshPlayed = false; deathWasNewBest = false;
       runSessionId = null; runStartedPerf = null; runRng = null;
       if (els.scoreHud) els.scoreHud.textContent = '0';
 
@@ -840,18 +984,22 @@
         if (started && started.runId != null && started.seed != null) {
           runSessionId = started.runId;
           runRng = rngFromServerSeed(started.seed);
-          if (typeof performance !== 'undefined') runStartedPerf = performance.now();
         }
       }
-      gameState = S_PLAYING;
-      birdVy = FLAP * 0.85;
-      triggerWingBurst();
-      // Defer audio so AudioContext init / source scheduling doesn't delay the next paint.
-      setTimeout(playFlap, 0);
-      spawnPipe();
+      gameState = S_READY;
     } finally {
       runStartBusy = false;
     }
+  }
+
+  // First tap out of GET READY — physics and the run timer start here.
+  function beginPlaying() {
+    gameState = S_PLAYING;
+    if (typeof performance !== 'undefined') runStartedPerf = performance.now();
+    birdVy = FLAP;
+    // Defer audio so AudioContext init / source scheduling doesn't delay the next paint.
+    setTimeout(playFlap, 0);
+    spawnPipe();
   }
 
   // ─── INPUT ────────────────────────────────────────────────────────────────────
@@ -862,20 +1010,24 @@
 
     if (gameState === S_DEAD) {
       const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-      if (now - deadTs < 650) return; // prevent accidental skip
-      await startRun();
+      if (now - deadTs < 900) return; // prevent accidental skip
+      await enterReady();
       return;
     }
 
     if (gameState === S_IDLE) {
       if (els.hint) els.hint.hidden = true;
-      await startRun();
+      await enterReady();
+      return;
+    }
+
+    if (gameState === S_READY) {
+      beginPlaying();
       return;
     }
 
     // S_PLAYING
     birdVy = FLAP;
-    triggerWingBurst();
     // Defer audio so creating BufferSource nodes doesn't push the next paint
     // past the upcoming vsync — that's what causes the "tap = pipes jump" feel.
     setTimeout(playFlap, 0);
