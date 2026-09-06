@@ -4,36 +4,45 @@
   'use strict';
 
   // ─── TUNING ──────────────────────────────────────────────────────────────────
-  // Numbers below are the original Flappy Bird constants (288x512 playfield,
-  // 60fps) scaled to this 360x520 canvas — constant speed, short snappy hops.
   const W              = 360;
   const H              = 520;
   const GROUND_H       = 72;      // scrolling ground strip at the bottom
   const PLAY_H         = H - GROUND_H;
-  const GRAVITY        = 0.28;
-  const FLAP           = -5.2;
-  const VY_MAX         = 10.5;
+  // OG-style feel: short snappy hop (apex in ~0.28s), high terminal velocity so
+  // an uncorrected fall is a fast, punishing plummet, and a tight gap with a
+  // near-honest hitbox. Keep VY_MAX high — capping fall speed low makes rhythm
+  // tapping trivially easy no matter how tight the gap is (playtested).
+  // Note: OG constants scaled 1:1 play too easy on desktop (mouse + high-Hz
+  // display vs 2013 touchscreen latency), so gap/pace are tuned tighter than
+  // the paper math — iterated against real runs, not just the bot sim.
+  const TUNING_TAG     = 'v2.4';  // bump when physics change; drawn on canvas
+  const GRAVITY        = 0.35;
+  const FLAP           = -5.7;
+  const VY_MAX         = 9;
   const PIPE_W         = 64;
-  const GAP            = 124;
-  const PIPE_SPAWN     = 210;
-  const SPEED_BASE     = 2.5;     // OG never speeds up
-  const BIRD_R         = 15;
+  const GAP            = 104;
+  const PIPE_SPAWN     = 190;
+  const SPEED_BASE     = 2.65;    // constant — OG never speeds up
+  // Hitbox sized to the bird's visual body (drawn ~38px wide at sprite height
+  // 72) — an undersized circle lets the sprite visibly clip pipes and live,
+  // which plays way easier than it looks.
+  const BIRD_R         = 18;
   const BIRD_X         = 96;
   const BIRD_SPRITE_FRAMES = 4;
   const BIRD_SPRITE_PATH   = 'assets/images/FiFi Bird/fifi_sprite.png';
   const BG_SPRITE_PATH     = 'assets/images/FiFi Bird/fifi_bg.jpg';
   const PIPE_SPRITE_PATH   = 'assets/images/FiFi Bird/fifi_pipe.png';
-  const TARGET_SPRITE_HEIGHT = 64;
+  const TARGET_SPRITE_HEIGHT = 72;
   // Source frame is 256x1024 but the bird (with wings extended) only fills the
   // middle ~48% of it — these crop the empty padding so TARGET_SPRITE_HEIGHT
   // means the actual visible bird height, not the frame box height.
   const SPRITE_CROP_Y_FRAC = 0.27;
   const SPRITE_CROP_H_FRAC = 0.48;
-  // OG birds flap constantly while alive — steady loop, not a per-tap burst.
-  const WING_FRAME_MS  = 90;
-  const WING_LOOP_SEQUENCE = [0, 1, 2, 3];
+  // Wings play a short burst on each tap, then settle back to the glide frame.
+  const WING_FRAME_MS  = 85;
+  const FLAP_BURST_SEQUENCE = [1, 2, 3, 0];
   const BG_PARALLAX    = 0.25;
-  const PIPE_COLLISION_INSET = 8;
+  const PIPE_COLLISION_INSET = 2;
 
   // ─── STATES ──────────────────────────────────────────────────────────────────
   const S_IDLE    = 0;   // title screen
@@ -87,11 +96,10 @@
   let groundScrollX = 0;
   let lastTs     = 0;
   let raf        = 0;
+  let wingBurstStart = null;
   let shakeAmt   = 0;
   let flashAmt   = 0;
   let deadTs     = 0;    // RAF timestamp when S_DEAD was entered
-  let dieCuePlayed = false;
-  let swooshPlayed = false;
   let deathWasNewBest = false;
 
   // ─── SERVER SESSION ───────────────────────────────────────────────────────────
@@ -230,48 +238,6 @@
     } catch (_) {}
   }
 
-  // OG "die" cue — short falling whistle right after the hit.
-  function playDie() {
-    if (reduceMotion || !soundOn) return;
-    const ac = getAudio(); if (!ac) return;
-    try {
-      if (ac.state === 'suspended') ac.resume().catch(() => {});
-      const osc = ac.createOscillator(), g = ac.createGain();
-      const t0 = ac.currentTime;
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(620, t0);
-      osc.frequency.exponentialRampToValueAtTime(140, t0 + 0.42);
-      g.gain.setValueAtTime(0.16, t0);
-      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.45);
-      osc.connect(g); g.connect(ac.destination);
-      osc.start(t0); osc.stop(t0 + 0.5);
-    } catch (_) {}
-  }
-
-  // OG "swoosh" — noise sweep when the score panel slides in.
-  function playSwoosh() {
-    if (reduceMotion || !soundOn) return;
-    const ac = getAudio(); if (!ac) return;
-    try {
-      if (ac.state === 'suspended') ac.resume().catch(() => {});
-      const dur = 0.28;
-      const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * dur), ac.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < data.length; i++) {
-        const t = i / data.length;
-        data[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * t) * 0.5;
-      }
-      const src = ac.createBufferSource(), filt = ac.createBiquadFilter(), g = ac.createGain();
-      filt.type = 'bandpass'; filt.Q.value = 0.8;
-      filt.frequency.setValueAtTime(900, ac.currentTime);
-      filt.frequency.exponentialRampToValueAtTime(2600, ac.currentTime + dur);
-      g.gain.value = 0.22;
-      src.buffer = buf;
-      src.connect(filt); filt.connect(g); g.connect(ac.destination);
-      src.start(ac.currentTime);
-    } catch (_) {}
-  }
-
   // ─── RNG ──────────────────────────────────────────────────────────────────────
   function mulberry32(a) {
     let state = a >>> 0;
@@ -360,9 +326,16 @@
     pipes.push({ x, gapY, passed: false });
   }
 
-  function wingFrameIndex(now) {
-    const idx = Math.floor(now / WING_FRAME_MS) % WING_LOOP_SEQUENCE.length;
-    return WING_LOOP_SEQUENCE[idx];
+  function triggerWingBurst() {
+    wingBurstStart = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  }
+
+  function wingFrameIndex() {
+    if (wingBurstStart == null) return 0;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const idx = Math.floor((now - wingBurstStart) / WING_FRAME_MS);
+    if (idx >= FLAP_BURST_SEQUENCE.length) { wingBurstStart = null; return 0; }
+    return FLAP_BURST_SEQUENCE[idx];
   }
 
   // ─── DRAWING HELPERS ──────────────────────────────────────────────────────────
@@ -514,11 +487,13 @@
       birdAngle += (0 - birdAngle) * 0.1;
     }
 
-    // Wings flap constantly while the bird is alive (title, ready, playing);
-    // they freeze when it's knocked out.
-    let frameIdx = 1;
-    if (gameState !== S_DYING && gameState !== S_DEAD) {
-      frameIdx = wingFrameIndex(now);
+    // Wings burst on each tap during play; on the title / ready / game-over
+    // screens they slowly alternate, and they freeze during the death fall.
+    let frameIdx = 0;
+    if (gameState === S_PLAYING) {
+      frameIdx = wingFrameIndex();
+    } else if (gameState === S_IDLE || gameState === S_READY || gameState === S_DEAD) {
+      frameIdx = Math.floor(now / 420) % 2 === 0 ? 0 : 2;
     }
 
     ctx.save();
@@ -687,8 +662,6 @@
     if (tPanel > 0) {
       const pyFinal = H * 0.28;
       const py = pyFinal + (1 - easeOutBack(tPanel)) * (H - pyFinal);
-      if (!swooshPlayed) { swooshPlayed = true; playSwoosh(); }
-
       ctx.shadowColor = 'rgba(57,255,20,0.42)'; ctx.shadowBlur = 30;
       roundRect(px, py, panelW, panelH, 14);
       ctx.fillStyle = 'rgba(7,15,9,0.96)'; ctx.fill();
@@ -802,6 +775,14 @@
 
     ctx.restore(); // end shake
 
+    // Tuning tag — tiny corner stamp so it's obvious which physics build is live
+    ctx.save();
+    ctx.font = '9px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillText(TUNING_TAG, W - 5, H - 5);
+    ctx.restore();
+
     // Flash (no shake)
     if (flashAmt > 0.01) {
       ctx.fillStyle = `rgba(255,255,255,${flashAmt * 0.62})`;
@@ -871,14 +852,11 @@
       if (!last || last.x < W - PIPE_SPAWN) spawnPipe();
 
       if (hitTest()) {
-        const groundHit = birdY + BIRD_R >= PLAY_H;
         gameState = S_DYING;
+        wingBurstStart = null;
         if (birdVy < 0) birdVy = 0;
         shakeAmt = 1.0;
         flashAmt = 1.0;
-        // OG: pipe hit plays the "hit" thud then a falling "die" whistle;
-        // a straight ground smack is just the thud.
-        dieCuePlayed = groundHit;
         playDeath();
       }
     }
@@ -887,17 +865,12 @@
       birdVy += GRAVITY * dtScale;
       if (birdVy > VY_MAX) birdVy = VY_MAX;
       birdY  += birdVy * dtScale;
-      if (!dieCuePlayed && birdVy > 2.2) {
-        dieCuePlayed = true;
-        playDie();
-      }
       if (birdY - BIRD_R < 0) { birdY = BIRD_R; if (birdVy < 0) birdVy = 0; }
       if (birdY + BIRD_R >= PLAY_H) {
         birdY = PLAY_H - BIRD_R;
         birdVy = 0;
         gameState = S_DEAD;
         deadTs = ts;
-        swooshPlayed = false;
         deathWasNewBest = score > 0 && score > bestScore;
         void endRound();
       }
@@ -974,7 +947,7 @@
       score = 0; pipes = [];
       birdY = PLAY_H * 0.46; birdVy = 0; birdAngle = 0;
       smoothedDtScale = 1;
-      dieCuePlayed = false; swooshPlayed = false; deathWasNewBest = false;
+      deathWasNewBest = false;
       runSessionId = null; runStartedPerf = null; runRng = null;
       if (els.scoreHud) els.scoreHud.textContent = '0';
 
@@ -997,6 +970,7 @@
     gameState = S_PLAYING;
     if (typeof performance !== 'undefined') runStartedPerf = performance.now();
     birdVy = FLAP;
+    triggerWingBurst();
     // Defer audio so AudioContext init / source scheduling doesn't delay the next paint.
     setTimeout(playFlap, 0);
     spawnPipe();
@@ -1028,6 +1002,7 @@
 
     // S_PLAYING
     birdVy = FLAP;
+    triggerWingBurst();
     // Defer audio so creating BufferSource nodes doesn't push the next paint
     // past the upcoming vsync — that's what causes the "tap = pipes jump" feel.
     setTimeout(playFlap, 0);
@@ -1202,6 +1177,13 @@
     document.addEventListener('keydown', onKey);
     wireSoundButton();
     wireFullscreenButton();
+
+    // Preload squelch samples so the death impact isn't delayed on first hit.
+    const ac = getAudio();
+    if (ac) {
+      ensureFlapBuffer(ac);
+      ensureImpactBuffer(ac);
+    }
     document.addEventListener('fuqmea-fifi-progress-sync', () => void refreshStats());
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && document.querySelector('[data-tab-panel="fifi"]:not([hidden])')) {
