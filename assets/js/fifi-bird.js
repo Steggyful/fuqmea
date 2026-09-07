@@ -97,7 +97,15 @@
   let birdLoadGen = 0, bgLoadGen = 0, pipeLoadGen = 0;
   let lockerOpen = false;
   let lockerTab = 'birds';
-  let toastTimer = 0;
+  // `bestScore` is only meaningful once the first progress fetch resolves. Until
+  // then we must NOT clamp the stored selection (that silently discards the
+  // player's equipped skin on every reload) or seed unlock toasts (that fires a
+  // spurious "UNLOCKED …" blast for every returning player). See refreshStats().
+  let statsReady   = false;
+  let unlocksSeeded = false;
+  // Runs completed in this tab only ever raise the bar — a stale cloud GET must
+  // never drop `bestScore` below something the player just achieved here.
+  let sessionBest  = 0;
 
   function skinById(id) {
     for (let i = 0; i < BIRD_SKINS.length; i++) if (BIRD_SKINS[i].id === id) return BIRD_SKINS[i];
@@ -113,11 +121,14 @@
       pipe: skin.pipe || (SKIN_DIR + 'fifi_pipe_' + skin.id + '.png')
     };
   }
-  function cosmeticsUnlocked() {
-    return unlockAll || bestScore;
-  }
   function isUnlocked(need) {
     return unlockAll || bestScore >= need;
+  }
+  // Rarity tier drives the premium locker styling (swatch ramp, ring, label).
+  function tierForNeed(need) {
+    if (need >= 65) return 'elite';
+    if (need >= 25) return 'rare';
+    return 'common';
   }
   function loadCosmetics() {
     try {
@@ -136,6 +147,9 @@
     } catch (_) {}
   }
   function clampSelectionToUnlocks() {
+    // Before the real best score is known, trust the stored selection so the
+    // player keeps the skin/arena they equipped last session.
+    if (!statsReady && !unlockAll) return;
     if (!isUnlocked(skinById(selectedSkinId).need)) selectedSkinId = 'original_blue';
     if (!isUnlocked(arenaById(selectedArenaId).need)) selectedArenaId = 'meadow';
   }
@@ -197,6 +211,7 @@
   let flashAmt   = 0;
   let deadTs     = 0;    // RAF timestamp when S_DEAD was entered
   let deathWasNewBest = false;
+  let winParticles = [];  // new-best confetti on the game-over panel
 
   // ─── SERVER SESSION ───────────────────────────────────────────────────────────
   let runSessionId   = null;
@@ -449,9 +464,26 @@
     ctx.closePath();
   }
 
+  // Centered cover-fit crop so wide strips (e.g. the spaceship arena, which only
+  // ships as a wide *_scroll.png) fill the portrait canvas without squashing.
+  function bgCoverSrc() {
+    const iw = bgImg.naturalWidth, ih = bgImg.naturalHeight;
+    const target = W / H;
+    let sw = iw, sh = ih, sx = 0, sy = 0;
+    if (iw / ih > target) {
+      sw = Math.round(ih * target);
+      sx = Math.round((iw - sw) / 2);
+    } else {
+      sh = Math.round(iw / target);
+      sy = Math.round((ih - sh) / 2);
+    }
+    return { sx, sy, sw, sh };
+  }
+
   function drawBackground() {
     if (bgImgOk && bgImg && bgImg.naturalWidth > 0) {
       const tileW  = W;
+      const c      = bgCoverSrc();
       const slot   = Math.floor(bgScrollX / tileW);
       const offset = bgScrollX - slot * tileW;
       let xPos = Math.floor(-offset), mirrored = (slot & 1) !== 0;
@@ -460,10 +492,10 @@
           ctx.save();
           ctx.translate(xPos + tileW, 0);
           ctx.scale(-1, 1);
-          ctx.drawImage(bgImg, 0, 0, tileW, H);
+          ctx.drawImage(bgImg, c.sx, c.sy, c.sw, c.sh, 0, 0, tileW, H);
           ctx.restore();
         } else {
-          ctx.drawImage(bgImg, xPos, 0, tileW, H);
+          ctx.drawImage(bgImg, c.sx, c.sy, c.sw, c.sh, xPos, 0, tileW, H);
         }
         xPos += tileW;
         mirrored = !mirrored;
@@ -716,6 +748,47 @@
     return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
   }
 
+  // ─── NEW-BEST CONFETTI ───────────────────────────────────────────────────────
+  const WIN_PARTICLE_COLORS = ['#39ff14', '#ffff00', '#7ec8e0', '#ffffff', '#00e8ff'];
+  function spawnWinParticles() {
+    winParticles = [];
+    if (reduceMotion || !deathWasNewBest) return;
+    for (let i = 0; i < 22; i++) {
+      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+      const spd = 120 + Math.random() * 240;   // px/s
+      winParticles.push({
+        x0: W / 2 + (Math.random() - 0.5) * 90,
+        y0: H * 0.3,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        size: 3 + Math.random() * 4,
+        rot: Math.random() * Math.PI,
+        spin: (Math.random() - 0.5) * 12,
+        color: WIN_PARTICLE_COLORS[i % WIN_PARTICLE_COLORS.length]
+      });
+    }
+  }
+  function drawWinParticles(now) {
+    if (!winParticles.length) return;
+    const t = (now - deadTs) / 1000;
+    if (t > 1.9) { winParticles = []; return; }
+    const G = 520;   // px/s^2
+    const fade = Math.max(0, 1 - t / 1.9);
+    for (let i = 0; i < winParticles.length; i++) {
+      const p = winParticles[i];
+      const x = p.x0 + p.vx * t;
+      const y = p.y0 + p.vy * t + 0.5 * G * t * t;
+      if (y > H + 20) continue;
+      ctx.save();
+      ctx.globalAlpha = fade;
+      ctx.translate(x, y);
+      ctx.rotate(p.rot + p.spin * t);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.6);
+      ctx.restore();
+    }
+  }
+
   function drawGameOverScreen(now) {
     const elapsed = now - deadTs;
     ctx.fillStyle = 'rgba(0,0,0,0.56)';
@@ -806,6 +879,7 @@
     }
 
     ctx.restore();
+    drawWinParticles(now);
   }
 
   // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
@@ -948,6 +1022,7 @@
         gameState = S_DEAD;
         deadTs = ts;
         deathWasNewBest = score > 0 && score > bestScore;
+        spawnWinParticles();
         void endRound();
       }
     }
@@ -956,15 +1031,43 @@
   }
 
   // ─── STATS ────────────────────────────────────────────────────────────────────
+  // Fallback best when FuqCloud isn't on the page — keeps unlocks working for
+  // offline / no-cloud sessions instead of pinning everything to best 0.
+  function readLocalBestFallback() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem('fuqmea_fifi_bird_v1');
+      if (!raw) return 0;
+      const n = Math.floor(Number(JSON.parse(raw).best) || 0);
+      return n > 0 ? n : 0;
+    } catch (_) { return 0; }
+  }
+
+  // Single place where the authoritative best score lands. Runs the unlock
+  // pipeline in the right order: raise best → clamp selection → re-apply the
+  // stored cosmetics if the clamp changed them → seed-or-toast new unlocks.
+  function applyProgress(rawBest) {
+    const prevSkin = selectedSkinId, prevArena = selectedArenaId;
+    bestScore = Math.max(0, Math.floor(Number(rawBest) || 0), sessionBest);
+    const firstResolve = !statsReady;
+    statsReady = true;
+    clampSelectionToUnlocks();
+    if (firstResolve || selectedSkinId !== prevSkin || selectedArenaId !== prevArena) {
+      applySelectedCosmetics();
+    }
+    if (!unlocksSeeded) { noteNewUnlocks(true); unlocksSeeded = true; }
+    else noteNewUnlocks();
+    renderLocker();
+  }
+
   async function refreshStats() {
     const fc = window.FuqCloud;
     if (!els.best) return;
     if (!fc || typeof fc.getFifiBirdProgress !== 'function') {
+      applyProgress(readLocalBestFallback());
       els.best.textContent = String(bestScore);
       if (els.runs)   els.runs.textContent  = '—';
       if (els.pipes)  els.pipes.textContent = '—';
       if (els.cloud)  els.cloud.textContent = '';
-      renderLocker(); noteNewUnlocks();
       return;
     }
     try {
@@ -974,15 +1077,19 @@
       if (els.runs)   els.runs.textContent  = String(p.gamesPlayed ?? 0);
       if (els.pipes)  els.pipes.textContent = String(p.totalPipes ?? 0);
       if (els.cloud)  els.cloud.textContent = p.source === 'cloud' && fc.isSignedIn?.() ? 'Saved to account' : 'On this device';
-      if (b > bestScore) bestScore = b;
-      clampSelectionToUnlocks();
-      renderLocker(); noteNewUnlocks();
-    } catch (_) { els.best.textContent = '—'; }
+      applyProgress(b);
+    } catch (_) {
+      els.best.textContent = '—';
+      // Still let unlocks settle from what we know locally so a failed fetch
+      // doesn't strand the player on OG Blue.
+      applyProgress(Math.max(bestScore, readLocalBestFallback()));
+    }
   }
 
   // ─── END ROUND ────────────────────────────────────────────────────────────────
   async function endRound() {
     const runScore = score;
+    sessionBest = Math.max(sessionBest, runScore);
     if (score > bestScore) bestScore = score;
 
     const fc = window.FuqCloud;
@@ -1027,6 +1134,7 @@
       birdY = PLAY_H * 0.46; birdVy = 0; birdAngle = 0;
       smoothedDtScale = 1;
       deathWasNewBest = false;
+      winParticles = [];
       runSessionId = null; runStartedPerf = null; runRng = null;
       if (els.scoreHud) els.scoreHud.textContent = '0';
 
@@ -1205,14 +1313,27 @@
     syncHud();
   }
 
-  function showToast(msg) {
-    if (!els.toast) return;
-    els.toast.textContent = msg;
-    els.toast.hidden = false;
-    if (toastTimer) window.clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => {
-      if (els.toast) els.toast.hidden = true;
-    }, 2800);
+  function showToast(msg, kind) {
+    const host = els.toast;
+    if (!host) return;
+    host.hidden = false;
+    const item = document.createElement('div');
+    item.className = 'games-fifi-toast-item' + (kind === 'unlock' ? ' is-unlock' : '');
+    item.setAttribute('role', 'status');
+    item.textContent = msg;
+    host.appendChild(item);
+    // Keep the stack shallow — drop the oldest if it piles up.
+    while (host.children.length > 3) host.removeChild(host.firstChild);
+    // Trigger the entrance transition on the next frame.
+    requestAnimationFrame(() => item.classList.add('is-in'));
+    window.setTimeout(() => {
+      item.classList.remove('is-in');
+      item.classList.add('is-out');
+      window.setTimeout(() => {
+        if (item.parentNode === host) host.removeChild(item);
+        if (!host.children.length) host.hidden = true;
+      }, 320);
+    }, kind === 'unlock' ? 3200 : 2400);
   }
 
   function loadSeenUnlocks() {
@@ -1250,7 +1371,7 @@
       }
     }
     saveSeenUnlocks(seen);
-    if (!quiet && fresh.length) showToast('UNLOCKED  ' + fresh.slice(0, 3).join(' · ') + (fresh.length > 3 ? ' +' + (fresh.length - 3) : ''));
+    if (!quiet && fresh.length) showToast('UNLOCKED  ' + fresh.slice(0, 3).join(' · ') + (fresh.length > 3 ? ' +' + (fresh.length - 3) : ''), 'unlock');
   }
 
   function renderLocker() {
@@ -1274,37 +1395,63 @@
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const open = isUnlocked(item.need);
+      const tier = tierForNeed(item.need);
+      const isOn = item.id === selected;
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'games-fifi-locker-card' + (item.id === selected ? ' is-selected' : '') + (open ? '' : ' is-locked');
+      btn.className = 'games-fifi-locker-card' + (isOn ? ' is-selected' : '') + (open ? '' : ' is-locked');
       btn.dataset.id = item.id;
+      btn.dataset.tier = tier;
       btn.disabled = false;
-      btn.setAttribute('aria-pressed', item.id === selected ? 'true' : 'false');
+      btn.setAttribute('role', 'option');
+      btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+      btn.setAttribute('aria-selected', isOn ? 'true' : 'false');
+      btn.setAttribute('aria-disabled', open ? 'false' : 'true');
+
+      const art = document.createElement('span');
+      art.className = lockerTab === 'arenas' ? 'games-fifi-locker-thumb' : 'games-fifi-locker-swatch';
       if (lockerTab === 'arenas') {
-        const thumb = document.createElement('span');
-        thumb.className = 'games-fifi-locker-thumb';
-        thumb.style.backgroundImage = 'url("' + item.src.replace(/"/g, '') + '")';
-        btn.appendChild(thumb);
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.alt = '';
+        img.src = item.src;
+        art.appendChild(img);
       } else {
-        const sw = document.createElement('span');
-        sw.className = 'games-fifi-locker-swatch';
-        sw.style.setProperty('--chip', item.swatch || '#39ff14');
-        btn.appendChild(sw);
+        art.style.setProperty('--chip', item.swatch || '#39ff14');
       }
+      btn.appendChild(art);
+
+      if ((tier === 'rare' || tier === 'elite') && open) {
+        const tag = document.createElement('span');
+        tag.className = 'games-fifi-locker-tier';
+        tag.textContent = tier === 'elite' ? 'ELITE' : 'RARE';
+        btn.appendChild(tag);
+      }
+
       const name = document.createElement('span');
       name.className = 'games-fifi-locker-card-name';
       name.textContent = item.label;
       btn.appendChild(name);
+
       const meta = document.createElement('span');
       meta.className = 'games-fifi-locker-card-meta';
-      meta.textContent = open ? (item.id === selected ? 'Equipped' : 'Tap to equip') : ('Best ' + item.need + ' to unlock');
+      meta.textContent = open ? (isOn ? 'Equipped' : 'Tap to equip') : ('Best ' + item.need + ' to unlock');
       btn.appendChild(meta);
-      if (item.id === selected && open) {
+
+      if (!open) {
+        const lock = document.createElement('span');
+        lock.className = 'games-fifi-locker-lock';
+        lock.setAttribute('aria-hidden', 'true');
+        lock.textContent = '🔒';
+        btn.appendChild(lock);
+      } else if (isOn) {
         const badge = document.createElement('span');
         badge.className = 'games-fifi-locker-badge';
         badge.textContent = 'ON';
         btn.appendChild(badge);
       }
+
       btn.addEventListener('click', (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
@@ -1532,11 +1679,11 @@
     });
 
     loadCosmetics();
-    clampSelectionToUnlocks();
+    // Optimistically show the stored skin/arena now; refreshStats() runs the
+    // authoritative clamp + unlock seeding once the real best score is known.
     applySelectedCosmetics();
     wireLocker();
     renderLocker();
-    noteNewUnlocks(true);
     syncHud();
 
     // Start screen is on-canvas; hide the HTML overlay hint

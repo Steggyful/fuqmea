@@ -32,10 +32,18 @@ Brand skins: `fifi_sprite_fuqmea_lime.png`, `fifi_sprite_fuqmea_hazard.png` (+ m
 
 ## Swap logic
 
-`fifi-bird.js` v2.5 loads the selected skin + arena at boot and after each run.
-Unlocks use lifetime best gaps. Choice is saved in `localStorage` key `fuq.fifiBird.cosmetics`.
+`fifi-bird.js` v2.6 shows the stored skin + arena optimistically at boot, then
+runs the authoritative unlock pass once the first progress fetch resolves:
+raise best → clamp selection to what's unlocked → re-apply cosmetics if the
+clamp changed them → seed (quiet on first load) or toast new unlocks. Unlocks
+use lifetime best gaps; `bestScore` is `max(authoritative, thisSessionRuns)` so
+a stale fetch never drops it below a run just played. Choice is saved in
+`localStorage` key `fuq.fifiBird.cosmetics`.
 
 Dev override: open games with `?fifiUnlockAll=1` to preview every chip.
+
+Locker cards carry a rarity tier from their unlock cost (common < 25, rare
+25–60, elite 65+) that drives the swatch/ring/badge styling.
 
 ## Menu
 
