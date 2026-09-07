@@ -1336,8 +1336,8 @@
 
   function openLocker() {
     lockerOpen = true;
+    syncHud();        // reveal first so the preview observer sees laid-out canvases
     renderLocker();
-    syncHud();
   }
   function closeLocker() {
     lockerOpen = false;
@@ -1405,6 +1405,111 @@
     if (!quiet && fresh.length) showToast('UNLOCKED  ' + fresh.slice(0, 3).join(' · ') + (fresh.length > 3 ? ' +' + (fresh.length - 3) : ''), 'unlock');
   }
 
+  // ─── SKIN PREVIEW (locker) ───────────────────────────────────────────────────
+  // Render a clean, tightly-framed portrait of the actual bird sprite into each
+  // card's <canvas> — measured from the sprite's own alpha so every skin sits
+  // the same way, then painted contain-fit with a soft ground shadow. Sheets
+  // load lazily as cards scroll into view.
+  const skinSheetCache  = new Map();  // src -> Promise<HTMLImageElement>
+  const skinBoxCache     = new Map();  // src -> {sx,sy,sw,sh} tight frame-0 box
+  let   previewObserver  = null;
+
+  function loadSkinSheet(src) {
+    let p = skinSheetCache.get(src);
+    if (p) return p;
+    p = new Promise((resolve, reject) => {
+      const im = new Image();
+      im.decoding = 'async';
+      im.onload = () => resolve(im);
+      im.onerror = reject;
+      im.src = src;
+    });
+    skinSheetCache.set(src, p);
+    return p;
+  }
+
+  // Alpha-scan a downscaled copy of frame 0 to find the bird's tight bounds.
+  function measureSkinBox(img, src) {
+    const cached = skinBoxCache.get(src);
+    if (cached) return cached;
+    const fw = img.naturalWidth / BIRD_SPRITE_FRAMES;
+    const fh = img.naturalHeight;
+    let box = { sx: 0, sy: fh * 0.33, sw: fw, sh: fh * 0.30 };   // safe fallback
+    try {
+      const SW = 100, SH = Math.max(1, Math.round(SW * fh / fw));
+      const oc = document.createElement('canvas');
+      oc.width = SW; oc.height = SH;
+      const octx = oc.getContext('2d', { willReadFrequently: true });
+      octx.drawImage(img, 0, 0, fw, fh, 0, 0, SW, SH);
+      const d = octx.getImageData(0, 0, SW, SH).data;
+      let minX = SW, minY = SH, maxX = -1, maxY = -1;
+      for (let y = 0; y < SH; y++) {
+        for (let x = 0; x < SW; x++) {
+          if (d[(y * SW + x) * 4 + 3] > 12) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (maxX >= 0) {
+        const kx = fw / SW, ky = fh / SH;
+        const padX = (maxX - minX + 1) * 0.07, padY = (maxY - minY + 1) * 0.07;
+        const x0 = Math.max(0, minX - padX), y0 = Math.max(0, minY - padY);
+        const x1 = Math.min(SW, maxX + 1 + padX), y1 = Math.min(SH, maxY + 1 + padY);
+        box = { sx: x0 * kx, sy: y0 * ky, sw: (x1 - x0) * kx, sh: (y1 - y0) * ky };
+      }
+    } catch (_) { /* keep fallback */ }
+    skinBoxCache.set(src, box);
+    return box;
+  }
+
+  function paintSkinPreview(canvas, img, box) {
+    const cssW = canvas.clientWidth || 120;
+    const cssH = canvas.clientHeight || 74;
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width  = Math.round(cssW * ratio);
+    canvas.height = Math.round(cssH * ratio);
+    const g = canvas.getContext('2d');
+    if (!g) return;
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    g.imageSmoothingEnabled = true;
+    if (typeof g.imageSmoothingQuality === 'string') g.imageSmoothingQuality = 'high';
+    const fit = Math.min((canvas.width * 0.9) / box.sw, (canvas.height * 0.86) / box.sh);
+    const dw = box.sw * fit, dh = box.sh * fit;
+    const dx = (canvas.width - dw) / 2;
+    const dy = (canvas.height - dh) / 2 + canvas.height * 0.02;
+    g.save();
+    g.globalAlpha = 0.3;
+    g.fillStyle = '#000';
+    g.beginPath();
+    g.ellipse(canvas.width / 2, dy + dh * 0.9, dw * 0.33, dh * 0.07, 0, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+    g.drawImage(img, box.sx, box.sy, box.sw, box.sh, dx, dy, dw, dh);
+  }
+
+  function fillSkinCanvas(canvas) {
+    const src = canvas.dataset.src;
+    if (!src || canvas.dataset.painted === '1') return;
+    canvas.dataset.painted = '1';
+    loadSkinSheet(src)
+      .then((img) => { paintSkinPreview(canvas, img, measureSkinBox(img, src)); })
+      .catch(() => { canvas.dataset.painted = ''; });
+  }
+
+  function ensurePreviewObserver() {
+    if (previewObserver || typeof IntersectionObserver !== 'function') return;
+    previewObserver = new IntersectionObserver((entries) => {
+      for (let i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting) {
+          const c = entries[i].target;
+          previewObserver.unobserve(c);
+          fillSkinCanvas(c);
+        }
+      }
+    }, { root: els.lockerGrid || null, rootMargin: '150px' });
+  }
+
   function renderQuestStrip() {
     const host = els.lockerQuest;
     if (!host) return;
@@ -1464,9 +1569,11 @@
     }
     const host = els.lockerGrid;
     if (!host) return;
+    if (previewObserver) previewObserver.disconnect();
     host.textContent = '';
     const items = lockerTab === 'arenas' ? ARENAS : BIRD_SKINS;
     const selected = lockerTab === 'arenas' ? selectedArenaId : selectedSkinId;
+    const skinCanvases = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const open = isUnlocked(item.need);
@@ -1493,16 +1600,14 @@
         img.src = item.src;
         art.appendChild(img);
       } else {
-        // Show the actual bird sprite (frame 0, cropped by CSS to the visible
-        // body) so the card previews the skin, not just its colour.
+        // Tightly-framed portrait of the real bird sprite, painted to a canvas.
         art.style.setProperty('--chip', item.swatch || '#39ff14');
-        const img = document.createElement('img');
-        img.className = 'games-fifi-locker-bird';
-        img.loading = 'lazy';
-        img.decoding = 'async';
-        img.alt = '';
-        img.src = skinPaths(item).bird;
-        art.appendChild(img);
+        const cv = document.createElement('canvas');
+        cv.className = 'games-fifi-locker-bird';
+        cv.setAttribute('aria-hidden', 'true');
+        cv.dataset.src = skinPaths(item).bird;
+        art.appendChild(cv);
+        skinCanvases.push(cv);
       }
       btn.appendChild(art);
 
@@ -1556,6 +1661,16 @@
         else selectSkin(item.id);
       });
       host.appendChild(btn);
+    }
+
+    // Paint skin portraits: lazily via the observer, or straight away if the
+    // browser has no IntersectionObserver.
+    if (skinCanvases.length) {
+      ensurePreviewObserver();
+      for (let i = 0; i < skinCanvases.length; i++) {
+        if (previewObserver) previewObserver.observe(skinCanvases[i]);
+        else fillSkinCanvas(skinCanvases[i]);
+      }
     }
   }
 

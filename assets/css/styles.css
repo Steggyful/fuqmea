@@ -5025,7 +5025,7 @@ body.fifi-bird-fs-lock {
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 8rem;
+  min-height: 8.4rem;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-color: color-mix(in srgb, var(--tier) 32%, transparent);
   border-radius: 14px;
@@ -5071,39 +5071,38 @@ body.fifi-bird-fs-lock {
   filter: grayscale(0.85) brightness(0.55);
 }
 .games-fifi-locker-card.is-locked .games-fifi-locker-card-name { color: rgba(255, 255, 255, 0.6); }
-/* Skin card: live preview of the actual bird sprite (frame 0), the `--chip`
-   colour now just tints the glow behind it. */
+/* Skin card: a framed portrait of the real bird sprite painted to a <canvas>
+   (see paintSkinPreview). The `--chip` colour tints the light behind it. */
 .games-fifi-locker-swatch {
-  --art-h: 4.4rem;   /* taller than arena thumbs — the bird sprite is portrait */
+  --art-h: 4.6rem;
   position: relative;
   width: 100%;
   height: var(--art-h);
-  border-radius: 8px;
-  margin-bottom: 0.4rem;
+  border-radius: 10px;
+  margin-bottom: 0.45rem;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 72% 58% at 50% 42%, color-mix(in srgb, var(--chip, #39ff14) 36%, transparent), transparent 72%),
-    #0a120c;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+    radial-gradient(ellipse 80% 66% at 50% 38%, color-mix(in srgb, var(--chip, #39ff14) 42%, transparent), transparent 72%),
+    linear-gradient(180deg, #101c13, #070d09 70%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 -14px 22px rgba(0, 0, 0, 0.55);
 }
 .games-fifi-locker-bird {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  /* Sprite sheets are square (1024x1024, 4 frames). Explicit w+h so the box has
-     layout area before the (lazy) image loads — otherwise width:auto is 0 and
-     the lazy-load observer never fires. Visible bird band = 0.48 of frame. */
-  width: calc(var(--art-h) / 0.48);
-  height: calc(var(--art-h) / 0.48);
-  transform: translate(-12.5%, -51%);  /* centre frame 0 + the visible body band */
-  image-rendering: auto;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
   pointer-events: none;
 }
 .games-fifi-locker-swatch::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 30%, transparent 70%, rgba(0, 0, 0, 0.4));
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 24%, transparent 66%, rgba(0, 0, 0, 0.5));
+  pointer-events: none;
 }
 .games-fifi-locker-thumb {
   position: relative;
