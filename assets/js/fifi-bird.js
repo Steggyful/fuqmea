@@ -83,7 +83,7 @@
     { id: 'neon_rooftop',   label: 'Rooftop',   need: 50,  src: ARENA_DIR + 'neon_rooftop.jpg' },
     { id: 'toxic_meadow',   label: 'Toxic',     need: 65,  src: ARENA_DIR + 'toxic_meadow.jpg' },
     { id: 'starfield',      label: 'Starfield', need: 80,  src: ARENA_DIR + 'starfield_poster.jpg' },
-    { id: 'spaceship',      label: 'Ship',      need: 100, src: ARENA_DIR + 'spaceship.jpg' },
+    { id: 'spaceship',      label: 'Ship',      need: 100, src: ARENA_DIR + 'spaceship_scroll.png' },
     { id: 'spaceship_lime', label: 'Lime Ship', need: 120, src: ARENA_DIR + 'spaceship_lime.jpg' }
   ];
 
