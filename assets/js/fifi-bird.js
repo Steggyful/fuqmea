@@ -35,6 +35,7 @@
   const SKIN_DIR           = 'assets/images/FiFi Bird/skins/';
   const ARENA_DIR          = 'assets/images/FiFi Bird/arenas/';
   const COSMETIC_KEY       = 'fuq.fifiBird.cosmetics';
+  const UNLOCK_SEEN_KEY    = 'fuq.fifiBird.unlockSeen';
   const TARGET_SPRITE_HEIGHT = 72;
   // Source frame is 256x1024 but the bird (with wings extended) only fills the
   // middle ~48% of it — these crop the empty padding so TARGET_SPRITE_HEIGHT
@@ -86,12 +87,17 @@
     { id: 'spaceship_lime', label: 'Lime Ship', need: 120, src: ARENA_DIR + 'spaceship_lime.jpg' }
   ];
 
+  BIRD_SKINS.sort((a, b) => a.need - b.need || a.label.localeCompare(b.label));
+
   let unlockAll = false;
   try { unlockAll = /(?:\?|&)fifiUnlockAll=1(?:&|$)/.test(window.location.search || ''); } catch (_) {}
 
   let selectedSkinId  = 'original_blue';
   let selectedArenaId = 'meadow';
   let birdLoadGen = 0, bgLoadGen = 0, pipeLoadGen = 0;
+  let lockerOpen = false;
+  let lockerTab = 'birds';
+  let toastTimer = 0;
 
   function skinById(id) {
     for (let i = 0; i < BIRD_SKINS.length; i++) if (BIRD_SKINS[i].id === id) return BIRD_SKINS[i];
@@ -642,9 +648,8 @@
     ctx.fillStyle = 'rgba(255,255,255,0.58)';
     ctx.fillText('no FUQ · just vibes', W / 2, H * 0.305);
 
-    // Best score chip
     if (bestScore > 0) {
-      const chipW = 126, chipH = 38, cx = W / 2, cy = H * 0.625;
+      const chipW = 126, chipH = 38, cx = W / 2, cy = H * 0.62;
       roundRect(cx - chipW / 2, cy - chipH / 2, chipW, chipH, 10);
       ctx.fillStyle = 'rgba(57,255,20,0.16)'; ctx.fill();
       ctx.strokeStyle = 'rgba(57,255,20,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -655,17 +660,6 @@
       ctx.fillStyle = '#39ff14';
       ctx.fillText(String(bestScore), cx, cy + 13);
     }
-
-    // Tap to start (pulsing)
-    const pulse = 0.65 + 0.35 * Math.sin(now / 550);
-    ctx.font = 'bold 22px system-ui, sans-serif';
-    ctx.fillStyle = `rgba(255,255,255,${pulse})`;
-    ctx.shadowColor = 'rgba(0,0,0,0.75)'; ctx.shadowBlur = 8;
-    ctx.fillText('TAP TO START', W / 2, H * 0.79);
-    ctx.shadowBlur = 0;
-    ctx.font = '13px system-ui, sans-serif';
-    ctx.fillStyle = `rgba(200,200,200,${pulse * 0.65})`;
-    ctx.fillText('or press SPACE', W / 2, H * 0.845);
 
     ctx.restore();
   }
@@ -811,15 +805,6 @@
       }
     }
 
-    // 3) Tap again — delay so an accidental death-tap doesn't skip
-    if (elapsed > 900) {
-      const pulse = 0.65 + 0.35 * Math.sin(now / 490);
-      ctx.font = 'bold 18px system-ui, sans-serif';
-      ctx.fillStyle = `rgba(57,255,20,${pulse})`;
-      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 7;
-      ctx.fillText('TAP TO FLY AGAIN', W / 2, H * 0.79);
-      ctx.shadowBlur = 0;
-    }
     ctx.restore();
   }
 
@@ -884,6 +869,7 @@
     if (gameState === S_IDLE) drawStartScreen(now);
     else if (gameState === S_READY) drawReadyScreen(now);
     else if (gameState === S_DEAD) drawGameOverScreen(now);
+    syncHud();
   }
 
   // ─── GAME LOOP ────────────────────────────────────────────────────────────────
@@ -978,7 +964,7 @@
       if (els.runs)   els.runs.textContent  = '—';
       if (els.pipes)  els.pipes.textContent = '—';
       if (els.cloud)  els.cloud.textContent = '';
-      renderCosmeticPickers();
+      renderLocker(); noteNewUnlocks();
       return;
     }
     try {
@@ -990,7 +976,7 @@
       if (els.cloud)  els.cloud.textContent = p.source === 'cloud' && fc.isSignedIn?.() ? 'Saved to account' : 'On this device';
       if (b > bestScore) bestScore = b;
       clampSelectionToUnlocks();
-      renderCosmeticPickers();
+      renderLocker(); noteNewUnlocks();
     } catch (_) { els.best.textContent = '—'; }
   }
 
@@ -1072,7 +1058,7 @@
   // ─── INPUT ────────────────────────────────────────────────────────────────────
   async function flap(e) {
     if (e && e.type === 'touchstart') e.preventDefault();
-
+    if (lockerOpen) return;
     if (gameState === S_DYING) return;
 
     if (gameState === S_DEAD) {
@@ -1102,9 +1088,19 @@
   }
 
   function onKey(e) {
-    if (e.code !== 'Space' && e.key !== ' ') return;
     const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.tagName === 'BUTTON')) return;
+    if (e.key === 'Escape' || e.code === 'Escape') {
+      if (lockerOpen) { e.preventDefault(); closeLocker(); }
+      return;
+    }
+    if (e.key === 'l' || e.key === 'L') {
+      e.preventDefault();
+      if (gameState === S_PLAYING || gameState === S_DYING || gameState === S_READY) return;
+      if (lockerOpen) closeLocker(); else openLocker();
+      return;
+    }
+    if (e.code !== 'Space' && e.key !== ' ') return;
     e.preventDefault();
     void flap();
   }
@@ -1168,7 +1164,7 @@
     const paths = skinPaths(skin);
     loadBirdSprite(paths.bird);
     loadPipeSprite(paths.pipe);
-    renderCosmeticPickers();
+    renderLocker();
     return true;
   }
   function selectArena(id) {
@@ -1177,47 +1173,192 @@
     selectedArenaId = arena.id;
     saveCosmetics();
     loadBgSprite(arena.src);
-    renderCosmeticPickers();
+    renderLocker();
     return true;
   }
-  function renderChipRow(host, items, selectedId, onPick, kind) {
+
+  function equippedLine() {
+    return 'Equipped: ' + skinById(selectedSkinId).label + ' · ' + arenaById(selectedArenaId).label;
+  }
+
+  function setHidden(el, hide) {
+    if (!el) return;
+    el.hidden = !!hide;
+  }
+
+  function syncHud() {
+    const menuOn = gameState === S_IDLE && !lockerOpen;
+    const overOn = gameState === S_DEAD && !lockerOpen && deadTs && ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - deadTs > 900);
+    setHidden(els.menuHud, !menuOn);
+    setHidden(els.overHud, !overOn);
+    setHidden(els.locker, !lockerOpen);
+    if (els.equipped) els.equipped.textContent = equippedLine();
+  }
+
+  function openLocker() {
+    lockerOpen = true;
+    renderLocker();
+    syncHud();
+  }
+  function closeLocker() {
+    lockerOpen = false;
+    syncHud();
+  }
+
+  function showToast(msg) {
+    if (!els.toast) return;
+    els.toast.textContent = msg;
+    els.toast.hidden = false;
+    if (toastTimer) window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => {
+      if (els.toast) els.toast.hidden = true;
+    }, 2800);
+  }
+
+  function loadSeenUnlocks() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem(UNLOCK_SEEN_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return {
+        skins: Array.isArray(parsed && parsed.skins) ? parsed.skins : ['original_blue'],
+        arenas: Array.isArray(parsed && parsed.arenas) ? parsed.arenas : ['meadow']
+      };
+    } catch (_) {
+      return { skins: ['original_blue'], arenas: ['meadow'] };
+    }
+  }
+  function saveSeenUnlocks(seen) {
+    try {
+      if (window.localStorage) window.localStorage.setItem(UNLOCK_SEEN_KEY, JSON.stringify(seen));
+    } catch (_) {}
+  }
+  function noteNewUnlocks(quiet) {
+    const seen = loadSeenUnlocks();
+    const fresh = [];
+    for (let i = 0; i < BIRD_SKINS.length; i++) {
+      const s = BIRD_SKINS[i];
+      if (isUnlocked(s.need) && seen.skins.indexOf(s.id) < 0) {
+        seen.skins.push(s.id);
+        if (s.need > 0) fresh.push(s.label);
+      }
+    }
+    for (let i = 0; i < ARENAS.length; i++) {
+      const a = ARENAS[i];
+      if (isUnlocked(a.need) && seen.arenas.indexOf(a.id) < 0) {
+        seen.arenas.push(a.id);
+        if (a.need > 0) fresh.push(a.label);
+      }
+    }
+    saveSeenUnlocks(seen);
+    if (!quiet && fresh.length) showToast('UNLOCKED  ' + fresh.slice(0, 3).join(' · ') + (fresh.length > 3 ? ' +' + (fresh.length - 3) : ''));
+  }
+
+  function renderLocker() {
+    if (els.lockerBest) {
+      els.lockerBest.textContent = unlockAll ? 'All unlocked (dev)' : ('Best ' + bestScore + '  ·  score to open locked cards');
+    }
+    if (els.equipped) els.equipped.textContent = equippedLine();
+    if (els.lockerTabs) {
+      const tabs = els.lockerTabs.querySelectorAll('[data-locker-tab]');
+      for (let i = 0; i < tabs.length; i++) {
+        const on = tabs[i].getAttribute('data-locker-tab') === lockerTab;
+        tabs[i].classList.toggle('is-active', on);
+        tabs[i].setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+    }
+    const host = els.lockerGrid;
     if (!host) return;
     host.textContent = '';
+    const items = lockerTab === 'arenas' ? ARENAS : BIRD_SKINS;
+    const selected = lockerTab === 'arenas' ? selectedArenaId : selectedSkinId;
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const open = isUnlocked(item.need);
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'games-fifi-chip' + (item.id === selectedId ? ' is-selected' : '') + (open ? '' : ' is-locked');
+      btn.className = 'games-fifi-locker-card' + (item.id === selected ? ' is-selected' : '') + (open ? '' : ' is-locked');
       btn.dataset.id = item.id;
-      btn.disabled = !open;
-      if (item.swatch) {
-        btn.style.setProperty('--chip', item.swatch);
-        btn.classList.add('games-fifi-chip--swatch');
+      btn.disabled = false;
+      btn.setAttribute('aria-pressed', item.id === selected ? 'true' : 'false');
+      if (lockerTab === 'arenas') {
+        const thumb = document.createElement('span');
+        thumb.className = 'games-fifi-locker-thumb';
+        thumb.style.backgroundImage = 'url("' + item.src.replace(/"/g, '') + '")';
+        btn.appendChild(thumb);
+      } else {
+        const sw = document.createElement('span');
+        sw.className = 'games-fifi-locker-swatch';
+        sw.style.setProperty('--chip', item.swatch || '#39ff14');
+        btn.appendChild(sw);
       }
-      btn.title = open ? item.label : (item.label + ' — best ' + item.need + ' to unlock');
-      btn.setAttribute('aria-label', btn.title);
-      btn.setAttribute('aria-pressed', item.id === selectedId ? 'true' : 'false');
       const name = document.createElement('span');
-      name.className = 'games-fifi-chip-name';
-      name.textContent = open ? item.label : (item.need + '+');
+      name.className = 'games-fifi-locker-card-name';
+      name.textContent = item.label;
       btn.appendChild(name);
+      const meta = document.createElement('span');
+      meta.className = 'games-fifi-locker-card-meta';
+      meta.textContent = open ? (item.id === selected ? 'Equipped' : 'Tap to equip') : ('Best ' + item.need + ' to unlock');
+      btn.appendChild(meta);
+      if (item.id === selected && open) {
+        const badge = document.createElement('span');
+        badge.className = 'games-fifi-locker-badge';
+        badge.textContent = 'ON';
+        btn.appendChild(badge);
+      }
       btn.addEventListener('click', (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
-        if (!open) return;
-        onPick(item.id);
+        if (!open) {
+          showToast('Score ' + item.need + ' to unlock ' + item.label);
+          return;
+        }
+        if (lockerTab === 'arenas') selectArena(item.id);
+        else selectSkin(item.id);
       });
       host.appendChild(btn);
     }
   }
-  function renderCosmeticPickers() {
-    renderChipRow(els.skinPicker, BIRD_SKINS, selectedSkinId, selectSkin, 'skin');
-    renderChipRow(els.arenaPicker, ARENAS, selectedArenaId, selectArena, 'arena');
-    if (els.unlockHint) {
-      els.unlockHint.textContent = unlockAll
-        ? 'Dev unlock on — all cosmetics open.'
-        : ('Best ' + bestScore + '. Locked chips show the score you need.');
+
+  function wireLocker() {
+    const openers = [els.lockerOpen, els.overLocker, els.menuLockerBtn];
+    for (let i = 0; i < openers.length; i++) {
+      if (!openers[i]) continue;
+      openers[i].addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (gameState === S_PLAYING || gameState === S_DYING || gameState === S_READY) return;
+        openLocker();
+      });
+    }
+    if (els.lockerClose) {
+      els.lockerClose.addEventListener('click', (ev) => { ev.stopPropagation(); closeLocker(); });
+    }
+    if (els.locker) {
+      els.locker.addEventListener('click', (ev) => {
+        if (ev.target === els.locker) closeLocker();
+      });
+    }
+    if (els.lockerTabs) {
+      els.lockerTabs.addEventListener('click', (ev) => {
+        const tab = ev.target && ev.target.closest ? ev.target.closest('[data-locker-tab]') : null;
+        if (!tab) return;
+        lockerTab = tab.getAttribute('data-locker-tab') === 'arenas' ? 'arenas' : 'birds';
+        renderLocker();
+      });
+    }
+    if (els.playBtn) {
+      els.playBtn.addEventListener('click', (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        closeLocker();
+        void enterReady();
+      });
+    }
+    if (els.againBtn) {
+      els.againBtn.addEventListener('click', (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        closeLocker();
+        void enterReady();
+      });
     }
   }
 
@@ -1344,11 +1485,22 @@
     els.scoreHud = $('fifi-bird-run-score');
     els.hint     = $('fifi-bird-hint');
     els.wrap     = $('fifi-bird-canvas-wrap');
-    els.soundBtn    = $('fifi-bird-sound-btn');
-    els.fsBtn       = $('fifi-bird-fullscreen-btn');
-    els.skinPicker  = $('fifi-bird-skin-picker');
-    els.arenaPicker = $('fifi-bird-arena-picker');
-    els.unlockHint  = $('fifi-bird-unlock-hint');
+    els.soundBtn      = $('fifi-bird-sound-btn');
+    els.fsBtn         = $('fifi-bird-fullscreen-btn');
+    els.menuHud       = $('fifi-bird-menu');
+    els.overHud       = $('fifi-bird-over');
+    els.playBtn       = $('fifi-bird-play-btn');
+    els.againBtn      = $('fifi-bird-again-btn');
+    els.locker        = $('fifi-bird-locker');
+    els.lockerGrid    = $('fifi-bird-locker-grid');
+    els.lockerBest    = $('fifi-bird-locker-best');
+    els.lockerClose   = $('fifi-bird-locker-close');
+    els.lockerTabs    = document.querySelector('.games-fifi-locker-tabs');
+    els.lockerOpen    = $('fifi-bird-locker-open');
+    els.overLocker    = $('fifi-bird-over-locker');
+    els.menuLockerBtn = $('fifi-bird-menu-locker-btn');
+    els.toast         = $('fifi-bird-toast');
+    els.equipped      = $('fifi-bird-equipped');
 
     syncSpeedFromReduceMotion();
     const mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -1382,7 +1534,10 @@
     loadCosmetics();
     clampSelectionToUnlocks();
     applySelectedCosmetics();
-    renderCosmeticPickers();
+    wireLocker();
+    renderLocker();
+    noteNewUnlocks(true);
+    syncHud();
 
     // Start screen is on-canvas; hide the HTML overlay hint
     if (els.hint) els.hint.hidden = true;

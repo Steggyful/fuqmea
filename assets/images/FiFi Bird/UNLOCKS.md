@@ -36,3 +36,9 @@ Brand skins: `fifi_sprite_fuqmea_lime.png`, `fifi_sprite_fuqmea_hazard.png` (+ m
 Unlocks use lifetime best gaps. Choice is saved in `localStorage` key `fuq.fifiBird.cosmetics`.
 
 Dev override: open games with `?fifiUnlockAll=1` to preview every chip.
+
+## Menu
+
+Title and game-over use on-stage PLAY / LOCKER buttons (44px targets).
+Locker is a fullscreen-safe sheet with Birds and Arenas tabs.
+New unlocks toast after a best-beating run. `L` toggles locker, `Esc` closes it.

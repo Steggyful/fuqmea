@@ -7,7 +7,7 @@
   <meta name="description" content="Fuqmea arcade — aura farm (crash-style), blackjack, coin flip, RPS, slots · fun FUQ tokens">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://*.functions.supabase.co https://www.google-analytics.com https://*.analytics.google.com https://*.google-analytics.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com • GAMES</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.61">
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.62">
   <script src="assets/js/cookie-consent.js?v=1.0.0"></script>
 </head>
 <body class="games-page">
@@ -632,20 +632,46 @@
                     <path fill="currentColor" d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
                   </svg>
                 </button>
+                <button type="button" id="fifi-bird-menu-locker-btn" class="games-fifi-control-btn" aria-label="Open locker" title="Locker">
+                  <svg class="games-fifi-control-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path fill="currentColor" d="M7 4h10l1 4H6l1-4zm-2 6h14v10H5V10zm4 2v2h2v-2H9zm4 0v2h2v-2h-2z"/>
+                  </svg>
+                </button>
               </div>
+              <div class="games-fifi-hud" id="fifi-bird-menu" hidden>
+                <p class="games-fifi-hud-kicker">FUQMEA ARCADE</p>
+                <div class="games-fifi-hud-actions">
+                  <button type="button" id="fifi-bird-play-btn" class="games-fifi-cta">PLAY</button>
+                  <button type="button" id="fifi-bird-locker-open" class="games-fifi-cta games-fifi-cta--ghost">LOCKER</button>
+                </div>
+                <p class="games-fifi-hud-keys">Tap / click / space to fly · L opens locker</p>
+              </div>
+              <div class="games-fifi-hud games-fifi-hud--over" id="fifi-bird-over" hidden>
+                <div class="games-fifi-hud-actions">
+                  <button type="button" id="fifi-bird-again-btn" class="games-fifi-cta">PLAY AGAIN</button>
+                  <button type="button" id="fifi-bird-over-locker" class="games-fifi-cta games-fifi-cta--ghost">LOCKER</button>
+                </div>
+              </div>
+              <div class="games-fifi-locker" id="fifi-bird-locker" hidden>
+                <div class="games-fifi-locker-sheet" role="dialog" aria-modal="true" aria-labelledby="fifi-locker-title">
+                  <header class="games-fifi-locker-head">
+                    <div>
+                      <h3 id="fifi-locker-title">LOCKER</h3>
+                      <p id="fifi-bird-locker-best" class="games-fifi-locker-best">Best 0</p>
+                    </div>
+                    <button type="button" id="fifi-bird-locker-close" class="games-fifi-locker-close" aria-label="Close locker">✕</button>
+                  </header>
+                  <div class="games-fifi-locker-tabs" role="tablist">
+                    <button type="button" class="games-fifi-locker-tab is-active" data-locker-tab="birds" role="tab" aria-selected="true">BIRDS</button>
+                    <button type="button" class="games-fifi-locker-tab" data-locker-tab="arenas" role="tab" aria-selected="false">ARENAS</button>
+                  </div>
+                  <div id="fifi-bird-locker-grid" class="games-fifi-locker-grid" role="listbox"></div>
+                </div>
+              </div>
+              <div id="fifi-bird-toast" class="games-fifi-toast" hidden></div>
             </div>
             <p class="games-fifi-run-label">This run: <strong id="fifi-bird-run-score">0</strong> gaps</p>
-            <div class="games-fifi-unlocks" aria-label="FiFi cosmetics">
-              <div class="games-fifi-unlock-row">
-                <span class="games-fifi-unlock-label">BIRD</span>
-                <div id="fifi-bird-skin-picker" class="games-fifi-chip-row" role="listbox" aria-label="Bird skin"></div>
-              </div>
-              <div class="games-fifi-unlock-row">
-                <span class="games-fifi-unlock-label">ARENA</span>
-                <div id="fifi-bird-arena-picker" class="games-fifi-chip-row" role="listbox" aria-label="Arena"></div>
-              </div>
-              <p id="fifi-bird-unlock-hint" class="games-fifi-unlock-hint"></p>
-            </div>
+            <p id="fifi-bird-equipped" class="games-fifi-equipped">Equipped: OG Blue · Meadow</p>
           </section>
         </div>
       </div>
@@ -664,7 +690,7 @@
   <script src="assets/js/vendor/supabase.umd.min.js?v=2.49.8" defer></script>
   <script src="assets/js/display-name-policy.js?v=1.0.0" defer></script>
   <script src="assets/js/cloud-sync.js?v=1.30.0" defer></script>
-  <script src="assets/js/fifi-bird.js?v=2.5.0" defer></script>
+  <script src="assets/js/fifi-bird.js?v=2.6.0" defer></script>
   <script src="assets/js/games.js?v=2.8.9" defer></script>
   <script src="assets/js/discord-link.js?v=1.0.0" defer></script>
 </body>
