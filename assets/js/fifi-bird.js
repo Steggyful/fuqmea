@@ -130,6 +130,37 @@
     if (need >= 25) return 'rare';
     return 'common';
   }
+  // The unlock ladder IS the quest: the lowest-cost thing you haven't earned yet.
+  function nextLockedGoal() {
+    if (unlockAll) return null;
+    let goal = null;
+    const scan = (arr, kind) => {
+      for (let i = 0; i < arr.length; i++) {
+        const it = arr[i];
+        if (it.need > 0 && !isUnlocked(it.need) && (!goal || it.need < goal.need)) {
+          goal = { label: it.label, need: it.need, kind };
+        }
+      }
+    };
+    scan(BIRD_SKINS, 'skin');
+    scan(ARENAS, 'arena');
+    return goal;
+  }
+  // One-line progression cue shown on the title menu.
+  function questHintText() {
+    if (unlockAll) return '';
+    const g = nextLockedGoal();
+    if (!g) return '✦ Every skin & arena unlocked';
+    if (bestScore <= 0) return '◈ Score ' + g.need + ' to unlock your first ' + (g.kind === 'arena' ? 'arena' : 'skin');
+    return '◈ Next unlock: ' + g.label + ' — beat ' + g.need + ' (best ' + bestScore + ')';
+  }
+  function updateQuestHints() {
+    if (els.menuQuest) {
+      const t = questHintText();
+      els.menuQuest.textContent = t;
+      els.menuQuest.hidden = !t;
+    }
+  }
   function loadCosmetics() {
     try {
       const raw = window.localStorage && window.localStorage.getItem(COSMETIC_KEY);
@@ -1374,10 +1405,54 @@
     if (!quiet && fresh.length) showToast('UNLOCKED  ' + fresh.slice(0, 3).join(' · ') + (fresh.length > 3 ? ' +' + (fresh.length - 3) : ''), 'unlock');
   }
 
+  function renderQuestStrip() {
+    const host = els.lockerQuest;
+    if (!host) return;
+    host.textContent = '';
+    if (unlockAll) { host.hidden = true; return; }
+    const g = nextLockedGoal();
+    host.hidden = false;
+    if (!g) {
+      host.dataset.state = 'done';
+      const done = document.createElement('span');
+      done.className = 'games-fifi-quest-label';
+      done.textContent = '✦ Every skin & arena unlocked';
+      host.appendChild(done);
+      return;
+    }
+    host.dataset.state = 'active';
+    const have = Math.max(0, Math.min(bestScore, g.need));
+    const pct = Math.round((have / g.need) * 100);
+
+    const tag = document.createElement('span');
+    tag.className = 'games-fifi-quest-tag';
+    tag.textContent = 'NEXT QUEST';
+    host.appendChild(tag);
+
+    const label = document.createElement('span');
+    label.className = 'games-fifi-quest-label';
+    label.textContent = (g.kind === 'arena' ? '🏙 ' : '🐦 ') + g.label;
+    host.appendChild(label);
+
+    const num = document.createElement('span');
+    num.className = 'games-fifi-quest-num';
+    num.textContent = have + ' / ' + g.need;
+    host.appendChild(num);
+
+    const bar = document.createElement('span');
+    bar.className = 'games-fifi-quest-bar';
+    const fill = document.createElement('i');
+    fill.style.width = pct + '%';
+    bar.appendChild(fill);
+    host.appendChild(bar);
+  }
+
   function renderLocker() {
     if (els.lockerBest) {
-      els.lockerBest.textContent = unlockAll ? 'All unlocked (dev)' : ('Best ' + bestScore + '  ·  score to open locked cards');
+      els.lockerBest.textContent = unlockAll ? 'All unlocked (dev)' : ('Lifetime best · ' + bestScore + ' gaps');
     }
+    renderQuestStrip();
+    updateQuestHints();
     if (els.equipped) els.equipped.textContent = equippedLine();
     if (els.lockerTabs) {
       const tabs = els.lockerTabs.querySelectorAll('[data-locker-tab]');
@@ -1418,7 +1493,16 @@
         img.src = item.src;
         art.appendChild(img);
       } else {
+        // Show the actual bird sprite (frame 0, cropped by CSS to the visible
+        // body) so the card previews the skin, not just its colour.
         art.style.setProperty('--chip', item.swatch || '#39ff14');
+        const img = document.createElement('img');
+        img.className = 'games-fifi-locker-bird';
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.alt = '';
+        img.src = skinPaths(item).bird;
+        art.appendChild(img);
       }
       btn.appendChild(art);
 
@@ -1436,10 +1520,19 @@
 
       const meta = document.createElement('span');
       meta.className = 'games-fifi-locker-card-meta';
-      meta.textContent = open ? (isOn ? 'Equipped' : 'Tap to equip') : ('Best ' + item.need + ' to unlock');
+      meta.textContent = open
+        ? (isOn ? 'Equipped' : 'Tap to equip')
+        : ('Quest · ' + Math.max(0, Math.min(bestScore, item.need)) + ' / ' + item.need + ' gaps');
       btn.appendChild(meta);
 
       if (!open) {
+        const cardbar = document.createElement('span');
+        cardbar.className = 'games-fifi-locker-cardbar';
+        const cf = document.createElement('i');
+        cf.style.width = Math.round((Math.max(0, Math.min(bestScore, item.need)) / item.need) * 100) + '%';
+        cardbar.appendChild(cf);
+        btn.appendChild(cardbar);
+
         const lock = document.createElement('span');
         lock.className = 'games-fifi-locker-lock';
         lock.setAttribute('aria-hidden', 'true');
@@ -1648,6 +1741,8 @@
     els.menuLockerBtn = $('fifi-bird-menu-locker-btn');
     els.toast         = $('fifi-bird-toast');
     els.equipped      = $('fifi-bird-equipped');
+    els.lockerQuest   = $('fifi-bird-locker-quest');
+    els.menuQuest     = $('fifi-bird-menu-quest');
 
     syncSpeedFromReduceMotion();
     const mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');

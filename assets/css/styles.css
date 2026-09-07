@@ -4827,6 +4827,19 @@ body.fifi-bird-fs-lock {
   color: rgba(255, 255, 255, 0.66);
   text-shadow: 0 1px 4px #000;
 }
+.games-fifi-hud-quest {
+  margin: 0;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(57, 255, 20, 0.4);
+  background: rgba(4, 12, 6, 0.78);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #eafff0;
+  text-shadow: 0 1px 4px #000;
+  box-shadow: 0 0 14px rgba(57, 255, 20, 0.22);
+}
 
 .games-fifi-locker {
   position: absolute;
@@ -4904,6 +4917,62 @@ body.fifi-bird-fs-lock {
   outline: none;
 }
 .games-fifi-locker-close:active { transform: scale(0.92); }
+
+/* Quest strip — makes the score-ladder progression explicit */
+.games-fifi-locker-quest {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.55rem;
+  margin: 0.6rem 0.8rem 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(57, 255, 20, 0.3);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(57, 255, 20, 0.1), rgba(57, 255, 20, 0.02));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.games-fifi-locker-quest[data-state="done"] { justify-content: center; }
+.games-fifi-quest-tag {
+  font-size: 0.54rem;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-indent: 0.16em;
+  padding: 0.18rem 0.4rem;
+  border-radius: 999px;
+  color: #05100a;
+  background: var(--fifi-lime);
+  box-shadow: 0 0 12px rgba(57, 255, 20, 0.5);
+}
+.games-fifi-quest-label {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #fff;
+}
+.games-fifi-quest-num {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--fifi-lime);
+  font-variant-numeric: tabular-nums;
+}
+.games-fifi-quest-bar {
+  flex: 1 1 100%;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(57, 255, 20, 0.2);
+  overflow: hidden;
+}
+.games-fifi-quest-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1e7a28, var(--fifi-lime));
+  box-shadow: 0 0 12px rgba(57, 255, 20, 0.6);
+  transition: width 0.6s var(--fifi-ease);
+}
+
 .games-fifi-locker-tabs {
   display: flex;
   gap: 0.4rem;
@@ -4956,7 +5025,7 @@ body.fifi-bird-fs-lock {
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 6rem;
+  min-height: 8rem;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-color: color-mix(in srgb, var(--tier) 32%, transparent);
   border-radius: 14px;
@@ -5002,28 +5071,46 @@ body.fifi-bird-fs-lock {
   filter: grayscale(0.85) brightness(0.55);
 }
 .games-fifi-locker-card.is-locked .games-fifi-locker-card-name { color: rgba(255, 255, 255, 0.6); }
+/* Skin card: live preview of the actual bird sprite (frame 0), the `--chip`
+   colour now just tints the glow behind it. */
 .games-fifi-locker-swatch {
+  --art-h: 4.4rem;   /* taller than arena thumbs — the bird sprite is portrait */
   position: relative;
   width: 100%;
-  height: 1.7rem;
+  height: var(--art-h);
   border-radius: 8px;
-  margin-bottom: 0.45rem;
-  background: linear-gradient(135deg, var(--chip, #1860c0), color-mix(in srgb, var(--chip, #1860c0) 55%, #000));
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3), inset 0 6px 10px rgba(255, 255, 255, 0.25);
+  margin-bottom: 0.4rem;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 72% 58% at 50% 42%, color-mix(in srgb, var(--chip, #39ff14) 36%, transparent), transparent 72%),
+    #0a120c;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+.games-fifi-locker-bird {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  /* Sprite sheets are square (1024x1024, 4 frames). Explicit w+h so the box has
+     layout area before the (lazy) image loads — otherwise width:auto is 0 and
+     the lazy-load observer never fires. Visible bird band = 0.48 of frame. */
+  width: calc(var(--art-h) / 0.48);
+  height: calc(var(--art-h) / 0.48);
+  transform: translate(-12.5%, -51%);  /* centre frame 0 + the visible body band */
+  image-rendering: auto;
+  pointer-events: none;
 }
 .games-fifi-locker-swatch::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: 8px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), transparent 45%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), transparent 30%, transparent 70%, rgba(0, 0, 0, 0.4));
 }
 .games-fifi-locker-thumb {
   position: relative;
   width: 100%;
-  height: 2.7rem;
+  height: 3.4rem;
   border-radius: 8px;
-  margin-bottom: 0.45rem;
+  margin-bottom: 0.4rem;
   overflow: hidden;
   background: #0a120c;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
@@ -5088,6 +5175,22 @@ body.fifi-bird-fs-lock {
   font-size: 0.8rem;
   filter: drop-shadow(0 1px 2px #000);
   opacity: 0.85;
+}
+/* Per-card quest progress — flush to the card's bottom edge */
+.games-fifi-locker-cardbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.games-fifi-locker-cardbar > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #1e7a28, var(--tier));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--tier) 60%, transparent);
+  transition: width 0.6s var(--fifi-ease);
 }
 
 .games-fifi-toast {
@@ -5171,6 +5274,8 @@ body.fifi-bird-fs-lock {
   .games-fifi-locker-card.is-selected::after,
   .games-fifi-toast-item.is-unlock::after { display: none; }
   .games-fifi-toast-item { opacity: 1; transform: none; }
+  .games-fifi-quest-bar > i,
+  .games-fifi-locker-cardbar > i { transition: none; }
 }
 
 .games-card--crash {
