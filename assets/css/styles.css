@@ -4701,6 +4701,72 @@ body.fifi-bird-fs-lock {
   overflow: hidden;
 }
 
+.games-fifi-unlocks {
+  margin: 0.35rem auto 0.75rem;
+  max-width: min(420px, 100%);
+}
+.games-fifi-unlock-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0 0 0.45rem;
+}
+.games-fifi-unlock-label {
+  flex: 0 0 3.4rem;
+  padding-top: 0.35rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--lime);
+  opacity: 0.85;
+}
+.games-fifi-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.games-fifi-chip {
+  appearance: none;
+  border: 1.5px solid rgba(57, 255, 20, 0.35);
+  background: rgba(0, 0, 0, 0.45);
+  color: #d8ffd8;
+  border-radius: 999px;
+  padding: 0.22rem 0.55rem;
+  font: inherit;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  line-height: 1.3;
+  -webkit-tap-highlight-color: transparent;
+}
+.games-fifi-chip--swatch {
+  padding-left: 0.42rem;
+  box-shadow: inset 4px 0 0 var(--chip, var(--lime));
+}
+.games-fifi-chip.is-selected {
+  border-color: var(--lime);
+  background: rgba(57, 255, 20, 0.16);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.35), inset 4px 0 0 var(--chip, var(--lime));
+}
+.games-fifi-chip.is-locked {
+  opacity: 0.42;
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+}
+.games-fifi-chip:not(.is-locked):hover,
+.games-fifi-chip:not(.is-locked):focus-visible {
+  border-color: var(--yellow);
+  outline: none;
+}
+.games-fifi-unlock-hint {
+  margin: 0.15rem 0 0;
+  font-size: 0.72rem;
+  opacity: 0.75;
+}
+
 .games-card--crash {
   --games-card-accent: #ff8f5a;
   --games-card-glow: rgba(255, 120, 60, 0.38);

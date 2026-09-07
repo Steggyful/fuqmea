@@ -7,7 +7,7 @@
   <meta name="description" content="Fuqmea arcade — aura farm (crash-style), blackjack, coin flip, RPS, slots · fun FUQ tokens">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://*.functions.supabase.co https://www.google-analytics.com https://*.analytics.google.com https://*.google-analytics.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com • GAMES</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.60">
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.61">
   <script src="assets/js/cookie-consent.js?v=1.0.0"></script>
 </head>
 <body class="games-page">
@@ -635,6 +635,17 @@
               </div>
             </div>
             <p class="games-fifi-run-label">This run: <strong id="fifi-bird-run-score">0</strong> gaps</p>
+            <div class="games-fifi-unlocks" aria-label="FiFi cosmetics">
+              <div class="games-fifi-unlock-row">
+                <span class="games-fifi-unlock-label">BIRD</span>
+                <div id="fifi-bird-skin-picker" class="games-fifi-chip-row" role="listbox" aria-label="Bird skin"></div>
+              </div>
+              <div class="games-fifi-unlock-row">
+                <span class="games-fifi-unlock-label">ARENA</span>
+                <div id="fifi-bird-arena-picker" class="games-fifi-chip-row" role="listbox" aria-label="Arena"></div>
+              </div>
+              <p id="fifi-bird-unlock-hint" class="games-fifi-unlock-hint"></p>
+            </div>
           </section>
         </div>
       </div>
@@ -653,7 +664,7 @@
   <script src="assets/js/vendor/supabase.umd.min.js?v=2.49.8" defer></script>
   <script src="assets/js/display-name-policy.js?v=1.0.0" defer></script>
   <script src="assets/js/cloud-sync.js?v=1.30.0" defer></script>
-  <script src="assets/js/fifi-bird.js?v=2.4.1" defer></script>
+  <script src="assets/js/fifi-bird.js?v=2.5.0" defer></script>
   <script src="assets/js/games.js?v=2.8.9" defer></script>
   <script src="assets/js/discord-link.js?v=1.0.0" defer></script>
 </body>

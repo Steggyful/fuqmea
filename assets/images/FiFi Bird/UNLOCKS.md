@@ -29,3 +29,10 @@ Portrait `.jpg` files match the current renderer (stretched to 360×520 and mirr
 Same 4-frame sprite sheet and pipe atlas as the originals. White cap, outlines, and slice coords are unchanged.
 
 Brand skins: `fifi_sprite_fuqmea_lime.png`, `fifi_sprite_fuqmea_hazard.png` (+ matching pipes).
+
+## Swap logic
+
+`fifi-bird.js` v2.5 loads the selected skin + arena at boot and after each run.
+Unlocks use lifetime best gaps. Choice is saved in `localStorage` key `fuq.fifiBird.cosmetics`.
+
+Dev override: open games with `?fifiUnlockAll=1` to preview every chip.

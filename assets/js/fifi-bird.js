@@ -32,6 +32,9 @@
   const BIRD_SPRITE_PATH   = 'assets/images/FiFi Bird/fifi_sprite.png';
   const BG_SPRITE_PATH     = 'assets/images/FiFi Bird/fifi_bg.jpg';
   const PIPE_SPRITE_PATH   = 'assets/images/FiFi Bird/fifi_pipe.png';
+  const SKIN_DIR           = 'assets/images/FiFi Bird/skins/';
+  const ARENA_DIR          = 'assets/images/FiFi Bird/arenas/';
+  const COSMETIC_KEY       = 'fuq.fifiBird.cosmetics';
   const TARGET_SPRITE_HEIGHT = 72;
   // Source frame is 256x1024 but the bird (with wings extended) only fills the
   // middle ~48% of it — these crop the empty padding so TARGET_SPRITE_HEIGHT
@@ -43,6 +46,93 @@
   const FLAP_BURST_SEQUENCE = [1, 2, 3, 0];
   const BG_PARALLAX    = 0.25;
   const PIPE_COLLISION_INSET = 2;
+
+
+  // ─── COSMETICS ──────────────────────────────────────────────────────────────
+  // Unlock gate is lifetime best run (gaps). ?fifiUnlockAll=1 unlocks everything.
+  const BIRD_SKINS = [
+    { id: 'original_blue', label: 'OG Blue',   need: 0,   swatch: '#1860c0', bird: BIRD_SPRITE_PATH, pipe: PIPE_SPRITE_PATH },
+    { id: 'fuqmea_lime',   label: 'Fuqmea',    need: 5,   swatch: '#39ff14', bird: SKIN_DIR + 'fifi_sprite_fuqmea_lime.png', pipe: SKIN_DIR + 'fifi_pipe_fuqmea_lime.png' },
+    { id: 'crimson',       label: 'Crimson',   need: 10,  swatch: '#c41414' },
+    { id: 'sunset_orange', label: 'Sunset',    need: 15,  swatch: '#e06010' },
+    { id: 'gold',          label: 'Gold',      need: 20,  swatch: '#d4a017' },
+    { id: 'fuqmea_hazard', label: 'Hazard',    need: 25,  swatch: '#ffff00', bird: SKIN_DIR + 'fifi_sprite_fuqmea_hazard.png', pipe: SKIN_DIR + 'fifi_pipe_fuqmea_hazard.png' },
+    { id: 'teal',          label: 'Teal',      need: 30,  swatch: '#1aa8a8' },
+    { id: 'hot_pink',      label: 'Hot Pink',  need: 35,  swatch: '#e02080' },
+    { id: 'ice',           label: 'Ice',       need: 40,  swatch: '#7ec8e0' },
+    { id: 'neon',          label: 'Neon',      need: 50,  swatch: '#00e8ff' },
+    { id: 'midnight',      label: 'Midnight',  need: 60,  swatch: '#3a1a80' },
+    { id: 'solar',         label: 'Solar',     need: 70,  swatch: '#f0c000' },
+    { id: 'pearl',         label: 'Pearl',     need: 85,  swatch: '#d0d8e0' },
+    { id: 'obsidian',      label: 'Obsidian',  need: 100, swatch: '#1a2430' },
+    { id: 'lime',          label: 'Lime',      need: 12,  swatch: '#32c428' },
+    { id: 'mint',          label: 'Mint',      need: 18,  swatch: '#3ecf9a' },
+    { id: 'forest',        label: 'Forest',    need: 22,  swatch: '#1e7a28' },
+    { id: 'royal_purple',  label: 'Purple',    need: 45,  swatch: '#7a28c8' },
+    { id: 'magenta',       label: 'Magenta',   need: 48,  swatch: '#c02080' },
+    { id: 'lavender',      label: 'Lavender',  need: 55,  swatch: '#b070d0' },
+    { id: 'copper',        label: 'Copper',    need: 65,  swatch: '#b06020' },
+    { id: 'slate',         label: 'Slate',     need: 80,  swatch: '#6a7380' }
+  ];
+  const ARENAS = [
+    { id: 'meadow',         label: 'Meadow',    need: 0,   src: BG_SPRITE_PATH },
+    { id: 'sunset_city',    label: 'Sunset',    need: 15,  src: ARENA_DIR + 'sunset_city.jpg' },
+    { id: 'terminal_city',  label: 'Terminal',  need: 25,  src: ARENA_DIR + 'terminal_city.jpg' },
+    { id: 'night_city',     label: 'Night',     need: 35,  src: ARENA_DIR + 'night_city.jpg' },
+    { id: 'neon_rooftop',   label: 'Rooftop',   need: 50,  src: ARENA_DIR + 'neon_rooftop.jpg' },
+    { id: 'toxic_meadow',   label: 'Toxic',     need: 65,  src: ARENA_DIR + 'toxic_meadow.jpg' },
+    { id: 'starfield',      label: 'Starfield', need: 80,  src: ARENA_DIR + 'starfield_poster.jpg' },
+    { id: 'spaceship',      label: 'Ship',      need: 100, src: ARENA_DIR + 'spaceship.jpg' },
+    { id: 'spaceship_lime', label: 'Lime Ship', need: 120, src: ARENA_DIR + 'spaceship_lime.jpg' }
+  ];
+
+  let unlockAll = false;
+  try { unlockAll = /(?:\?|&)fifiUnlockAll=1(?:&|$)/.test(window.location.search || ''); } catch (_) {}
+
+  let selectedSkinId  = 'original_blue';
+  let selectedArenaId = 'meadow';
+  let birdLoadGen = 0, bgLoadGen = 0, pipeLoadGen = 0;
+
+  function skinById(id) {
+    for (let i = 0; i < BIRD_SKINS.length; i++) if (BIRD_SKINS[i].id === id) return BIRD_SKINS[i];
+    return BIRD_SKINS[0];
+  }
+  function arenaById(id) {
+    for (let i = 0; i < ARENAS.length; i++) if (ARENAS[i].id === id) return ARENAS[i];
+    return ARENAS[0];
+  }
+  function skinPaths(skin) {
+    return {
+      bird: skin.bird || (SKIN_DIR + 'fifi_sprite_' + skin.id + '.png'),
+      pipe: skin.pipe || (SKIN_DIR + 'fifi_pipe_' + skin.id + '.png')
+    };
+  }
+  function cosmeticsUnlocked() {
+    return unlockAll || bestScore;
+  }
+  function isUnlocked(need) {
+    return unlockAll || bestScore >= need;
+  }
+  function loadCosmetics() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem(COSMETIC_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.skin === 'string' && skinById(parsed.skin).id === parsed.skin) selectedSkinId = parsed.skin;
+      if (parsed && typeof parsed.arena === 'string' && arenaById(parsed.arena).id === parsed.arena) selectedArenaId = parsed.arena;
+    } catch (_) {}
+  }
+  function saveCosmetics() {
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(COSMETIC_KEY, JSON.stringify({ skin: selectedSkinId, arena: selectedArenaId }));
+      }
+    } catch (_) {}
+  }
+  function clampSelectionToUnlocks() {
+    if (!isUnlocked(skinById(selectedSkinId).need)) selectedSkinId = 'original_blue';
+    if (!isUnlocked(arenaById(selectedArenaId).need)) selectedArenaId = 'meadow';
+  }
 
   // ─── STATES ──────────────────────────────────────────────────────────────────
   const S_IDLE    = 0;   // title screen
@@ -884,10 +974,11 @@
     const fc = window.FuqCloud;
     if (!els.best) return;
     if (!fc || typeof fc.getFifiBirdProgress !== 'function') {
-      els.best.textContent = '—';
+      els.best.textContent = String(bestScore);
       if (els.runs)   els.runs.textContent  = '—';
       if (els.pipes)  els.pipes.textContent = '—';
       if (els.cloud)  els.cloud.textContent = '';
+      renderCosmeticPickers();
       return;
     }
     try {
@@ -898,6 +989,8 @@
       if (els.pipes)  els.pipes.textContent = String(p.totalPipes ?? 0);
       if (els.cloud)  els.cloud.textContent = p.source === 'cloud' && fc.isSignedIn?.() ? 'Saved to account' : 'On this device';
       if (b > bestScore) bestScore = b;
+      clampSelectionToUnlocks();
+      renderCosmeticPickers();
     } catch (_) { els.best.textContent = '—'; }
   }
 
@@ -1017,23 +1110,115 @@
   }
 
   // ─── ASSET LOADING ────────────────────────────────────────────────────────────
-  function loadBirdSprite() {
-    const img = new Image(); img.decoding = 'async';
-    img.onload  = () => { birdImg = img; birdSpriteOk = true; };
-    img.onerror = () => { birdSpriteOk = false; birdImg = null; };
-    img.src = BIRD_SPRITE_PATH;
+  function loadImage(src, onOk, onFail) {
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => onOk(img);
+    img.onerror = onFail;
+    img.src = src;
   }
-  function loadBgSprite() {
-    const img = new Image(); img.decoding = 'async';
-    img.onload  = () => { bgImg = img; bgImgOk = true; };
-    img.onerror = () => { bgImgOk = false; bgImg = null; };
-    img.src = BG_SPRITE_PATH;
+  function loadBirdSprite(src) {
+    const path = src || skinPaths(skinById(selectedSkinId)).bird;
+    const gen = ++birdLoadGen;
+    loadImage(path, (img) => {
+      if (gen !== birdLoadGen) return;
+      birdImg = img; birdSpriteOk = true;
+    }, () => {
+      if (gen !== birdLoadGen) return;
+      if (path !== BIRD_SPRITE_PATH) { loadBirdSprite(BIRD_SPRITE_PATH); return; }
+      birdSpriteOk = false; birdImg = null;
+    });
   }
-  function loadPipeSprite() {
-    const img = new Image(); img.decoding = 'async';
-    img.onload  = () => { pipeImg = img; pipeImgOk = true; };
-    img.onerror = () => { pipeImgOk = false; pipeImg = null; };
-    img.src = PIPE_SPRITE_PATH;
+  function loadPipeSprite(src) {
+    const path = src || skinPaths(skinById(selectedSkinId)).pipe;
+    const gen = ++pipeLoadGen;
+    loadImage(path, (img) => {
+      if (gen !== pipeLoadGen) return;
+      pipeImg = img; pipeImgOk = true;
+    }, () => {
+      if (gen !== pipeLoadGen) return;
+      if (path !== PIPE_SPRITE_PATH) { loadPipeSprite(PIPE_SPRITE_PATH); return; }
+      pipeImgOk = false; pipeImg = null;
+    });
+  }
+  function loadBgSprite(src) {
+    const path = src || arenaById(selectedArenaId).src;
+    const gen = ++bgLoadGen;
+    loadImage(path, (img) => {
+      if (gen !== bgLoadGen) return;
+      bgImg = img; bgImgOk = true;
+    }, () => {
+      if (gen !== bgLoadGen) return;
+      if (path !== BG_SPRITE_PATH) { loadBgSprite(BG_SPRITE_PATH); return; }
+      bgImgOk = false; bgImg = null;
+    });
+  }
+  function applySelectedCosmetics() {
+    clampSelectionToUnlocks();
+    const paths = skinPaths(skinById(selectedSkinId));
+    loadBirdSprite(paths.bird);
+    loadPipeSprite(paths.pipe);
+    loadBgSprite(arenaById(selectedArenaId).src);
+  }
+  function selectSkin(id) {
+    const skin = skinById(id);
+    if (!isUnlocked(skin.need)) return false;
+    selectedSkinId = skin.id;
+    saveCosmetics();
+    const paths = skinPaths(skin);
+    loadBirdSprite(paths.bird);
+    loadPipeSprite(paths.pipe);
+    renderCosmeticPickers();
+    return true;
+  }
+  function selectArena(id) {
+    const arena = arenaById(id);
+    if (!isUnlocked(arena.need)) return false;
+    selectedArenaId = arena.id;
+    saveCosmetics();
+    loadBgSprite(arena.src);
+    renderCosmeticPickers();
+    return true;
+  }
+  function renderChipRow(host, items, selectedId, onPick, kind) {
+    if (!host) return;
+    host.textContent = '';
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const open = isUnlocked(item.need);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'games-fifi-chip' + (item.id === selectedId ? ' is-selected' : '') + (open ? '' : ' is-locked');
+      btn.dataset.id = item.id;
+      btn.disabled = !open;
+      if (item.swatch) {
+        btn.style.setProperty('--chip', item.swatch);
+        btn.classList.add('games-fifi-chip--swatch');
+      }
+      btn.title = open ? item.label : (item.label + ' — best ' + item.need + ' to unlock');
+      btn.setAttribute('aria-label', btn.title);
+      btn.setAttribute('aria-pressed', item.id === selectedId ? 'true' : 'false');
+      const name = document.createElement('span');
+      name.className = 'games-fifi-chip-name';
+      name.textContent = open ? item.label : (item.need + '+');
+      btn.appendChild(name);
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (!open) return;
+        onPick(item.id);
+      });
+      host.appendChild(btn);
+    }
+  }
+  function renderCosmeticPickers() {
+    renderChipRow(els.skinPicker, BIRD_SKINS, selectedSkinId, selectSkin, 'skin');
+    renderChipRow(els.arenaPicker, ARENAS, selectedArenaId, selectArena, 'arena');
+    if (els.unlockHint) {
+      els.unlockHint.textContent = unlockAll
+        ? 'Dev unlock on — all cosmetics open.'
+        : ('Best ' + bestScore + '. Locked chips show the score you need.');
+    }
   }
 
   // ─── REDUCE MOTION ────────────────────────────────────────────────────────────
@@ -1159,8 +1344,11 @@
     els.scoreHud = $('fifi-bird-run-score');
     els.hint     = $('fifi-bird-hint');
     els.wrap     = $('fifi-bird-canvas-wrap');
-    els.soundBtn = $('fifi-bird-sound-btn');
-    els.fsBtn    = $('fifi-bird-fullscreen-btn');
+    els.soundBtn    = $('fifi-bird-sound-btn');
+    els.fsBtn       = $('fifi-bird-fullscreen-btn');
+    els.skinPicker  = $('fifi-bird-skin-picker');
+    els.arenaPicker = $('fifi-bird-arena-picker');
+    els.unlockHint  = $('fifi-bird-unlock-hint');
 
     syncSpeedFromReduceMotion();
     const mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -1191,9 +1379,10 @@
       }
     });
 
-    loadBirdSprite();
-    loadBgSprite();
-    loadPipeSprite();
+    loadCosmetics();
+    clampSelectionToUnlocks();
+    applySelectedCosmetics();
+    renderCosmeticPickers();
 
     // Start screen is on-canvas; hide the HTML overlay hint
     if (els.hint) els.hint.hidden = true;
