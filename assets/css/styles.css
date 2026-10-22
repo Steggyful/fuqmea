@@ -5066,7 +5066,11 @@ body.fifi-bird-fs-lock {
   cursor: pointer;
   border-color: rgba(255, 255, 255, 0.1);
 }
-.games-fifi-locker-card.is-locked .games-fifi-locker-swatch,
+/* Grey out the bird silhouette itself, but leave the swatch's --chip-colored
+   glow alone — it's the only hint of a locked skin's real color, and graying
+   out the whole swatch (as before) erased it, leaving every locked card looking
+   like the same flat grey tile. Arena thumbs are photos, so they grey out whole. */
+.games-fifi-locker-card.is-locked .games-fifi-locker-bird,
 .games-fifi-locker-card.is-locked .games-fifi-locker-thumb {
   filter: grayscale(0.85) brightness(0.55);
 }

@@ -77,14 +77,12 @@
   ];
   const ARENAS = [
     { id: 'meadow',         label: 'Meadow',    need: 0,   src: BG_SPRITE_PATH },
-    { id: 'sunset_city',    label: 'Sunset',    need: 15,  src: ARENA_DIR + 'sunset_city.jpg' },
+    { id: 'sunset_city',    label: 'Sunset',    need: 15,  src: ARENA_DIR + 'sunset_city_scroll.png' },
     { id: 'terminal_city',  label: 'Terminal',  need: 25,  src: ARENA_DIR + 'terminal_city.jpg' },
-    { id: 'night_city',     label: 'Night',     need: 35,  src: ARENA_DIR + 'night_city.jpg' },
-    { id: 'neon_rooftop',   label: 'Rooftop',   need: 50,  src: ARENA_DIR + 'neon_rooftop.jpg' },
-    { id: 'toxic_meadow',   label: 'Toxic',     need: 65,  src: ARENA_DIR + 'toxic_meadow.jpg' },
-    { id: 'starfield',      label: 'Starfield', need: 80,  src: ARENA_DIR + 'starfield_poster.jpg' },
-    { id: 'spaceship',      label: 'Ship',      need: 100, src: ARENA_DIR + 'spaceship_scroll.png' },
-    { id: 'spaceship_lime', label: 'Lime Ship', need: 120, src: ARENA_DIR + 'spaceship_lime.jpg' }
+    { id: 'night_city',     label: 'Night',     need: 35,  src: ARENA_DIR + 'night_city_scroll.png' },
+    { id: 'neon_rooftop',   label: 'Rooftop',   need: 50,  src: ARENA_DIR + 'neon_rooftop_scroll.png' },
+    { id: 'toxic_meadow',   label: 'Toxic',     need: 65,  src: ARENA_DIR + 'toxic_meadow_scroll.png' },
+    { id: 'spaceship',      label: 'Ship',      need: 80,  src: ARENA_DIR + 'spaceship_scroll.png' }
   ];
 
   BIRD_SKINS.sort((a, b) => a.need - b.need || a.label.localeCompare(b.label));
@@ -250,6 +248,17 @@
   let runRng         = null;
   let runStartBusy   = false;
 
+  // ─── GHOST (beat-your-best replay) ────────────────────────────────────────────
+  // Samples are [elapsedMs, birdY, birdVy] tuples recorded for the CURRENT run and,
+  // once it ends, kept as the new ghost only if it beat the stored one. Replaying
+  // vy (not just y) lets the ghost re-derive the same nose-up/nose-down tilt the
+  // live bird gets, via the identical smoothing step in drawGhost().
+  const GHOST_KEY    = 'fuq.fifiBird.ghost';
+  let ghostSamples   = null;   // loaded/saved [t,y,vy][] — null until a run is ever recorded
+  let ghostScore     = 0;
+  let ghostRecording = [];     // in-progress recording for the run currently being played
+  let ghostAngle     = 0;
+
   const els = {};
   function $(id) { return document.getElementById(id); }
 
@@ -380,6 +389,16 @@
     } catch (_) {}
   }
 
+  // ─── HAPTICS ──────────────────────────────────────────────────────────────────
+  // Android Chrome supports navigator.vibrate; iOS Safari doesn't expose it at
+  // all, so this is a silent no-op there rather than a fallback worth building.
+  function vibrate(pattern) {
+    try {
+      if (reduceMotion) return;
+      if (navigator.vibrate) navigator.vibrate(pattern);
+    } catch (_) {}
+  }
+
   // ─── RNG ──────────────────────────────────────────────────────────────────────
   function mulberry32(a) {
     let state = a >>> 0;
@@ -416,21 +435,26 @@
 
   function resizeCanvas() {
     if (!canvas || !ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    dpr = Math.min(canvasDprCap(), window.devicePixelRatio || 1);
-    canvas.width  = Math.floor(W * dpr);
-    canvas.height = Math.floor(H * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingEnabled = true;
-    if (typeof ctx.imageSmoothingQuality === 'string') ctx.imageSmoothingQuality = 'high';
     const fsActive = pseudoFsActive || !!(document.fullscreenElement || document.webkitFullscreenElement);
     if (fsActive) {
       // Let CSS drive sizing in fullscreen so the canvas fits the viewport height.
       canvas.style.height = '';
     } else {
-      const cw = rect.width || canvas.clientWidth || W;
+      const cw = canvas.getBoundingClientRect().width || canvas.clientWidth || W;
       canvas.style.height = `${(cw * H) / W}px`;
     }
+    // Match the backing-store resolution to the canvas's actual on-screen size
+    // (not the fixed W×H logical size) so fullscreen's CSS upscale doesn't blur —
+    // the rendered box can be far bigger than the 360×520 base in fullscreen.
+    const rect = canvas.getBoundingClientRect();
+    const cssW = rect.width || W;
+    const cssH = rect.height || H;
+    dpr = Math.min(canvasDprCap(), window.devicePixelRatio || 1);
+    canvas.width  = Math.max(1, Math.round(cssW * dpr));
+    canvas.height = Math.max(1, Math.round(cssH * dpr));
+    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    if (typeof ctx.imageSmoothingQuality === 'string') ctx.imageSmoothingQuality = 'high';
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -519,14 +543,18 @@
       const offset = bgScrollX - slot * tileW;
       let xPos = Math.floor(-offset), mirrored = (slot & 1) !== 0;
       while (xPos < W + 1) {
+        // Dest width is 1px wider than the tile stride so adjacent tiles overlap
+        // slightly — otherwise non-integer canvas scale factors (e.g. fullscreen,
+        // where backing-store px no longer divide evenly into W) leave a hairline
+        // seam between tiles.
         if (mirrored) {
           ctx.save();
           ctx.translate(xPos + tileW, 0);
           ctx.scale(-1, 1);
-          ctx.drawImage(bgImg, c.sx, c.sy, c.sw, c.sh, 0, 0, tileW, H);
+          ctx.drawImage(bgImg, c.sx, c.sy, c.sw, c.sh, 0, 0, tileW + 1, H);
           ctx.restore();
         } else {
-          ctx.drawImage(bgImg, c.sx, c.sy, c.sw, c.sh, xPos, 0, tileW, H);
+          ctx.drawImage(bgImg, c.sx, c.sy, c.sw, c.sh, xPos, 0, tileW + 1, H);
         }
         xPos += tileW;
         mirrored = !mirrored;
@@ -631,6 +659,29 @@
     ctx.fillRect(0, y + 22, W, 4);
   }
 
+  // Pure sprite blit shared by the live bird and the ghost replay — takes an
+  // already-resolved angle/frame rather than reading birdAngle itself, so the
+  // ghost can drive it with its own (separately smoothed) tilt.
+  function blitBirdSprite(x, y, angle, frameIdx) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    if (birdSpriteOk && birdImg && birdImg.naturalWidth > 0) {
+      const fw = birdImg.naturalWidth / BIRD_SPRITE_FRAMES;
+      const fh = birdImg.naturalHeight;
+      const sy = fh * SPRITE_CROP_Y_FRAC;
+      const sh = fh * SPRITE_CROP_H_FRAC;
+      const scale = TARGET_SPRITE_HEIGHT / sh;
+      const dw = fw * scale, dh = sh * scale;
+      ctx.drawImage(birdImg, frameIdx * fw, sy, fw, sh, -dw * 0.5, -dh * 0.5, dw, dh);
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, BIRD_R, 0, Math.PI * 2);
+      ctx.fillStyle = '#39ff14'; ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function drawBirdAt(x, y, now) {
     // OG rotation: nose snaps up on a flap and holds through the top of the
     // arc, then the bird pitches down hard toward 90° as it dives.
@@ -655,24 +706,7 @@
       frameIdx = Math.floor(now / 420) % 2 === 0 ? 0 : 2;
     }
 
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(birdAngle);
-
-    if (birdSpriteOk && birdImg && birdImg.naturalWidth > 0) {
-      const fw = birdImg.naturalWidth / BIRD_SPRITE_FRAMES;
-      const fh = birdImg.naturalHeight;
-      const sy = fh * SPRITE_CROP_Y_FRAC;
-      const sh = fh * SPRITE_CROP_H_FRAC;
-      const scale = TARGET_SPRITE_HEIGHT / sh;
-      const dw = fw * scale, dh = sh * scale;
-      ctx.drawImage(birdImg, frameIdx * fw, sy, fw, sh, -dw * 0.5, -dh * 0.5, dw, dh);
-    } else {
-      ctx.beginPath();
-      ctx.arc(0, 0, BIRD_R, 0, Math.PI * 2);
-      ctx.fillStyle = '#39ff14'; ctx.fill();
-    }
-    ctx.restore();
+    blitBirdSprite(x, y, birdAngle, frameIdx);
   }
 
   // Big plain counter at the top, exactly like the OG — no pops, no "+1".
@@ -946,6 +980,7 @@
     } else if (gameState === S_READY) {
       by = birdY + Math.sin(now / 320) * 6;
     }
+    drawGhost(now);
     drawBirdAt(bx, by, now);
 
     // Score HUD — visible from GET READY through the death fall, like the OG
@@ -1017,6 +1052,10 @@
       bgScrollX += speed * BG_PARALLAX;
       groundScrollX += speed;
 
+      if (runStartedPerf != null && ghostRecording.length < 20000) {
+        ghostRecording.push([ts - runStartedPerf, birdY, birdVy]);
+      }
+
       for (let i = pipes.length - 1; i >= 0; i--) {
         pipes[i].x -= speed;
         const p = pipes[i];
@@ -1039,6 +1078,7 @@
         shakeAmt = 1.0;
         flashAmt = 1.0;
         playDeath();
+        vibrate(30);
       }
     }
 
@@ -1054,11 +1094,81 @@
         deadTs = ts;
         deathWasNewBest = score > 0 && score > bestScore;
         spawnWinParticles();
+        if (deathWasNewBest) vibrate([20, 40, 20, 40, 20]);
         void endRound();
       }
     }
 
     drawFrame(ts);
+  }
+
+  // ─── GHOST ────────────────────────────────────────────────────────────────────
+  function loadGhostBest() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem(GHOST_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.samples) || parsed.samples.length < 2) return null;
+      return parsed;
+    } catch (_) { return null; }
+  }
+
+  // Thins a run down to a bounded point count and rounds values before it's
+  // persisted, so a long run doesn't blow up localStorage — shared by the save
+  // path and the in-memory copy so both end up with identical playback data.
+  function buildGhostSamples(recording) {
+    const MAX_POINTS = 1500;
+    let samples = recording;
+    if (samples.length > MAX_POINTS) {
+      const stride = samples.length / MAX_POINTS;
+      const out = [];
+      for (let i = 0; i < MAX_POINTS; i++) out.push(samples[Math.floor(i * stride)]);
+      out.push(samples[samples.length - 1]);
+      samples = out;
+    }
+    return samples.map((p) => [Math.round(p[0]), Math.round(p[1] * 10) / 10, Math.round(p[2] * 100) / 100]);
+  }
+
+  function saveGhostBest(score, recording) {
+    try {
+      if (!window.localStorage || !Array.isArray(recording) || recording.length < 2) return null;
+      const samples = buildGhostSamples(recording);
+      window.localStorage.setItem(GHOST_KEY, JSON.stringify({ score, samples }));
+      return samples;
+    } catch (_) { return null; }
+  }
+
+  // Interpolates the ghost's y/vy at a point in the run's timeline. Returns null
+  // once elapsedMs runs past the ghost's own recorded death — there's nothing to
+  // show beyond where that run ended.
+  function ghostValueAt(elapsedMs) {
+    const s = ghostSamples;
+    if (!s || s.length < 2) return null;
+    if (elapsedMs > s[s.length - 1][0]) return null;
+    if (elapsedMs <= s[0][0]) return { y: s[0][1], vy: s[0][2] };
+    let lo = 0, hi = s.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (s[mid][0] <= elapsedMs) lo = mid; else hi = mid;
+    }
+    const a = s[lo], b = s[hi];
+    const span = b[0] - a[0];
+    const f = span > 0 ? (elapsedMs - a[0]) / span : 0;
+    return { y: a[1] + (b[1] - a[1]) * f, vy: a[2] + (b[2] - a[2]) * f };
+  }
+
+  function drawGhost(now) {
+    if (!ghostSamples || gameState !== S_PLAYING || runStartedPerf == null) return;
+    const v = ghostValueAt(now - runStartedPerf);
+    if (!v) return;
+    // Same nose-up/nose-down smoothing drawBirdAt() applies to the live bird,
+    // just driven by the ghost's own recorded vy instead of the live one.
+    if (v.vy < 1.8) ghostAngle += (-0.42 - ghostAngle) * 0.38;
+    else ghostAngle = Math.min(Math.PI * 0.5, ghostAngle + 0.055);
+    ctx.save();
+    ctx.globalAlpha = 0.32;
+    blitBirdSprite(BIRD_X, v.y, ghostAngle, 0);
+    ctx.restore();
   }
 
   // ─── STATS ────────────────────────────────────────────────────────────────────
@@ -1123,6 +1233,13 @@
     sessionBest = Math.max(sessionBest, runScore);
     if (score > bestScore) bestScore = score;
 
+    // This run becomes the new ghost only once it actually beat the one on file —
+    // otherwise the next run would start replaying a worse flight than before.
+    if (runScore > 0 && (!ghostSamples || runScore > ghostScore)) {
+      const saved = saveGhostBest(runScore, ghostRecording);
+      if (saved) { ghostSamples = saved; ghostScore = runScore; }
+    }
+
     const fc = window.FuqCloud;
     let saved = { ok: true };
     let durationMs = 800;
@@ -1166,6 +1283,7 @@
       smoothedDtScale = 1;
       deathWasNewBest = false;
       winParticles = [];
+      ghostRecording = []; ghostAngle = 0;
       runSessionId = null; runStartedPerf = null; runRng = null;
       if (els.scoreHud) els.scoreHud.textContent = '0';
 
@@ -1189,6 +1307,7 @@
     if (typeof performance !== 'undefined') runStartedPerf = performance.now();
     birdVy = FLAP;
     triggerWingBurst();
+    vibrate(10);
     // Defer audio so AudioContext init / source scheduling doesn't delay the next paint.
     setTimeout(playFlap, 0);
     spawnPipe();
@@ -1221,6 +1340,7 @@
     // S_PLAYING
     birdVy = FLAP;
     triggerWingBurst();
+    vibrate(10);
     // Defer audio so creating BufferSource nodes doesn't push the next paint
     // past the upcoming vsync — that's what causes the "tap = pipes jump" feel.
     setTimeout(playFlap, 0);
@@ -1597,6 +1717,13 @@
         img.loading = 'lazy';
         img.decoding = 'async';
         img.alt = '';
+        // Mirror drawBackground()'s own fallback: an arena whose art isn't in yet
+        // shows the Meadow thumbnail instead of a broken-image icon.
+        img.addEventListener('error', () => {
+          if (img.dataset.fallback) return;
+          img.dataset.fallback = '1';
+          img.src = BG_SPRITE_PATH;
+        });
         img.src = item.src;
         art.appendChild(img);
       } else {
@@ -1832,6 +1959,9 @@
     canvas = $('fifi-bird-canvas');
     if (!canvas) return;
     ctx = canvas.getContext('2d', { alpha: false });
+
+    const storedGhost = loadGhostBest();
+    if (storedGhost) { ghostSamples = storedGhost.samples; ghostScore = storedGhost.score; }
 
     els.best     = $('fifi-bird-stat-best');
     els.runs     = $('fifi-bird-stat-runs');
