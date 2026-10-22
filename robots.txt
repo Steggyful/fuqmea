@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /vivid-admin.html
+Disallow: /fifi.html
+
+Sitemap: https://fuqmea.com/sitemap.xml

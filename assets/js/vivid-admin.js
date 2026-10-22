@@ -33,7 +33,9 @@
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
-  const ALLOWED_ROLES = ['vivid', 'admin'];
+  // 'vivid' role retired (see migration 20260513130000_retire_vivid_role.sql) —
+  // the backend functions no longer accept it either, so this is now admin-only.
+  const ALLOWED_ROLES = ['admin'];
 
   // Tracks which user the panel is currently rendered for, so we can skip
   // redundant reloads from token refreshes / duplicate initial events

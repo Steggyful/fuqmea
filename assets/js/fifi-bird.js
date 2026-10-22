@@ -6,37 +6,194 @@
   // ─── TUNING ──────────────────────────────────────────────────────────────────
   const W              = 360;
   const H              = 520;
-  const GRAVITY        = 0.44;
-  const FLAP           = -9.0;
-  const VY_MAX         = 12;
-  const PIPE_W         = 54;
-  const GAP            = 148;
-  const PIPE_SPAWN     = 198;
-  const SPEED_BASE     = 2.4;
-  const SPEED_RAMP     = 0.024;   // per pipe cleared
-  const SPEED_CAP      = 3.9;
-  const BIRD_R         = 22;
-  const BIRD_X         = 92;
+  const GROUND_H       = 72;      // scrolling ground strip at the bottom
+  const PLAY_H         = H - GROUND_H;
+  // OG-style feel: short snappy hop (apex in ~0.28s), high terminal velocity so
+  // an uncorrected fall is a fast, punishing plummet, and a tight gap with a
+  // near-honest hitbox. Keep VY_MAX high — capping fall speed low makes rhythm
+  // tapping trivially easy no matter how tight the gap is (playtested).
+  // Note: OG constants scaled 1:1 play too easy on desktop (mouse + high-Hz
+  // display vs 2013 touchscreen latency), so gap/pace are tuned tighter than
+  // the paper math — iterated against real runs, not just the bot sim.
+  const TUNING_TAG     = 'v2.4';  // bump when physics change; drawn on canvas
+  const GRAVITY        = 0.35;
+  const FLAP           = -5.7;
+  const VY_MAX         = 9;
+  const PIPE_W         = 64;
+  const GAP            = 104;
+  const PIPE_SPAWN     = 190;
+  const SPEED_BASE     = 2.65;    // constant — OG never speeds up
+  // Hitbox sized to the bird's visual body (drawn ~38px wide at sprite height
+  // 72) — an undersized circle lets the sprite visibly clip pipes and live,
+  // which plays way easier than it looks.
+  const BIRD_R         = 18;
+  const BIRD_X         = 96;
   const BIRD_SPRITE_FRAMES = 4;
   const BIRD_SPRITE_PATH   = 'assets/images/FiFi Bird/fifi_sprite.png';
   const BG_SPRITE_PATH     = 'assets/images/FiFi Bird/fifi_bg.jpg';
   const PIPE_SPRITE_PATH   = 'assets/images/FiFi Bird/fifi_pipe.png';
-  const TARGET_SPRITE_HEIGHT = 88;
+  const SKIN_DIR           = 'assets/images/FiFi Bird/skins/';
+  const ARENA_DIR          = 'assets/images/FiFi Bird/arenas/';
+  const COSMETIC_KEY       = 'fuq.fifiBird.cosmetics';
+  const UNLOCK_SEEN_KEY    = 'fuq.fifiBird.unlockSeen';
+  const TARGET_SPRITE_HEIGHT = 72;
   // Source frame is 256x1024 but the bird (with wings extended) only fills the
   // middle ~48% of it — these crop the empty padding so TARGET_SPRITE_HEIGHT
   // means the actual visible bird height, not the frame box height.
   const SPRITE_CROP_Y_FRAC = 0.27;
   const SPRITE_CROP_H_FRAC = 0.48;
+  // Wings play a short burst on each tap, then settle back to the glide frame.
   const WING_FRAME_MS  = 85;
   const FLAP_BURST_SEQUENCE = [1, 2, 3, 0];
   const BG_PARALLAX    = 0.25;
-  const PIPE_COLLISION_INSET = 8;
+  const PIPE_COLLISION_INSET = 2;
+
+
+  // ─── COSMETICS ──────────────────────────────────────────────────────────────
+  // Unlock gate is lifetime best run (gaps). ?fifiUnlockAll=1 unlocks everything.
+  const BIRD_SKINS = [
+    { id: 'original_blue', label: 'OG Blue',   need: 0,   swatch: '#1860c0', bird: BIRD_SPRITE_PATH, pipe: PIPE_SPRITE_PATH },
+    { id: 'fuqmea_lime',   label: 'Fuqmea',    need: 5,   swatch: '#39ff14', bird: SKIN_DIR + 'fifi_sprite_fuqmea_lime.png', pipe: SKIN_DIR + 'fifi_pipe_fuqmea_lime.png' },
+    { id: 'crimson',       label: 'Crimson',   need: 10,  swatch: '#c41414' },
+    { id: 'sunset_orange', label: 'Sunset',    need: 15,  swatch: '#e06010' },
+    { id: 'gold',          label: 'Gold',      need: 100, swatch: '#d4a017' }, // capstone — highest need of any skin
+    { id: 'fuqmea_hazard', label: 'Hazard',    need: 25,  swatch: '#ffff00', bird: SKIN_DIR + 'fifi_sprite_fuqmea_hazard.png', pipe: SKIN_DIR + 'fifi_pipe_fuqmea_hazard.png' },
+    { id: 'teal',          label: 'Teal',      need: 30,  swatch: '#1aa8a8' },
+    { id: 'hot_pink',      label: 'Hot Pink',  need: 35,  swatch: '#e02080' },
+    { id: 'ice',           label: 'Ice',       need: 40,  swatch: '#7ec8e0' },
+    { id: 'neon',          label: 'Neon',      need: 50,  swatch: '#00e8ff' },
+    { id: 'midnight',      label: 'Midnight',  need: 60,  swatch: '#3a1a80' },
+    { id: 'solar',         label: 'Solar',     need: 70,  swatch: '#f0c000' },
+    { id: 'pearl',         label: 'Pearl',     need: 85,  swatch: '#d0d8e0' },
+    { id: 'obsidian',      label: 'Obsidian',  need: 20,  swatch: '#1a2430' },
+    { id: 'lime',          label: 'Lime',      need: 12,  swatch: '#32c428' },
+    { id: 'mint',          label: 'Mint',      need: 18,  swatch: '#3ecf9a' },
+    { id: 'forest',        label: 'Forest',    need: 22,  swatch: '#1e7a28' },
+    { id: 'royal_purple',  label: 'Purple',    need: 45,  swatch: '#7a28c8' },
+    { id: 'magenta',       label: 'Magenta',   need: 48,  swatch: '#c02080' },
+    { id: 'lavender',      label: 'Lavender',  need: 55,  swatch: '#b070d0' },
+    { id: 'copper',        label: 'Copper',    need: 65,  swatch: '#b06020' },
+    { id: 'slate',         label: 'Slate',     need: 80,  swatch: '#6a7380' }
+  ];
+  // Arena needs are deliberately offset from the skin ladder below (8/28/42/58/75/92
+  // vs skins' 5/10/12.../100) rather than landing on the same numbers — six of them
+  // used to fall on an exact skin threshold too, so the ladder delivered nothing for
+  // long stretches and then two rewards at once. Staggered, something new unlocks
+  // roughly every 2-5 gaps almost everywhere, widening only near the very end.
+  const ARENAS = [
+    { id: 'meadow',         label: 'Meadow',    need: 0,   src: BG_SPRITE_PATH },
+    { id: 'sunset_city',    label: 'Sunset',    need: 8,   src: ARENA_DIR + 'sunset_city_scroll.png' },
+    { id: 'terminal_city',  label: 'Terminal',  need: 28,  src: ARENA_DIR + 'terminal_city.jpg' },
+    { id: 'night_city',     label: 'Night',     need: 42,  src: ARENA_DIR + 'night_city_scroll.png' },
+    { id: 'neon_rooftop',   label: 'Rooftop',   need: 58,  src: ARENA_DIR + 'neon_rooftop_scroll.png' },
+    { id: 'toxic_meadow',   label: 'Toxic',     need: 75,  src: ARENA_DIR + 'toxic_meadow_scroll.png' },
+    { id: 'spaceship',      label: 'Ship',      need: 92,  src: ARENA_DIR + 'spaceship_scroll.png' }
+  ];
+
+  BIRD_SKINS.sort((a, b) => a.need - b.need || a.label.localeCompare(b.label));
+
+  let unlockAll = false;
+  try { unlockAll = /(?:\?|&)fifiUnlockAll=1(?:&|$)/.test(window.location.search || ''); } catch (_) {}
+
+  let selectedSkinId  = 'original_blue';
+  let selectedArenaId = 'meadow';
+  let birdLoadGen = 0, bgLoadGen = 0, pipeLoadGen = 0;
+  let lockerOpen = false;
+  let lockerTab = 'birds';
+  // `bestScore` is only meaningful once the first progress fetch resolves. Until
+  // then we must NOT clamp the stored selection (that silently discards the
+  // player's equipped skin on every reload) or seed unlock toasts (that fires a
+  // spurious "UNLOCKED …" blast for every returning player). See refreshStats().
+  let statsReady   = false;
+  let unlocksSeeded = false;
+  // Runs completed in this tab only ever raise the bar — a stale cloud GET must
+  // never drop `bestScore` below something the player just achieved here.
+  let sessionBest  = 0;
+
+  function skinById(id) {
+    for (let i = 0; i < BIRD_SKINS.length; i++) if (BIRD_SKINS[i].id === id) return BIRD_SKINS[i];
+    return BIRD_SKINS[0];
+  }
+  function arenaById(id) {
+    for (let i = 0; i < ARENAS.length; i++) if (ARENAS[i].id === id) return ARENAS[i];
+    return ARENAS[0];
+  }
+  function skinPaths(skin) {
+    return {
+      bird: skin.bird || (SKIN_DIR + 'fifi_sprite_' + skin.id + '.png'),
+      pipe: skin.pipe || (SKIN_DIR + 'fifi_pipe_' + skin.id + '.png')
+    };
+  }
+  function isUnlocked(need) {
+    return unlockAll || bestScore >= need;
+  }
+  // Rarity tier drives the premium locker styling (swatch ramp, ring, label).
+  function tierForNeed(need) {
+    if (need >= 65) return 'elite';
+    if (need >= 25) return 'rare';
+    return 'common';
+  }
+  // The unlock ladder IS the quest: the lowest-cost thing you haven't earned yet.
+  function nextLockedGoal() {
+    if (unlockAll) return null;
+    let goal = null;
+    const scan = (arr, kind) => {
+      for (let i = 0; i < arr.length; i++) {
+        const it = arr[i];
+        if (it.need > 0 && !isUnlocked(it.need) && (!goal || it.need < goal.need)) {
+          goal = { label: it.label, need: it.need, kind };
+        }
+      }
+    };
+    scan(BIRD_SKINS, 'skin');
+    scan(ARENAS, 'arena');
+    return goal;
+  }
+  // One-line progression cue shown on the title menu.
+  function questHintText() {
+    if (unlockAll) return '';
+    const g = nextLockedGoal();
+    if (!g) return '✦ Every skin & arena unlocked';
+    if (bestScore <= 0) return '◈ Score ' + g.need + ' to unlock your first ' + (g.kind === 'arena' ? 'arena' : 'skin');
+    return '◈ Next unlock: ' + g.label + ' — beat ' + g.need + ' (best ' + bestScore + ')';
+  }
+  function updateQuestHints() {
+    if (els.menuQuest) {
+      const t = questHintText();
+      els.menuQuest.textContent = t;
+      els.menuQuest.hidden = !t;
+    }
+  }
+  function loadCosmetics() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem(COSMETIC_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.skin === 'string' && skinById(parsed.skin).id === parsed.skin) selectedSkinId = parsed.skin;
+      if (parsed && typeof parsed.arena === 'string' && arenaById(parsed.arena).id === parsed.arena) selectedArenaId = parsed.arena;
+    } catch (_) {}
+  }
+  function saveCosmetics() {
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(COSMETIC_KEY, JSON.stringify({ skin: selectedSkinId, arena: selectedArenaId }));
+      }
+    } catch (_) {}
+  }
+  function clampSelectionToUnlocks() {
+    // Before the real best score is known, trust the stored selection so the
+    // player keeps the skin/arena they equipped last session.
+    if (!statsReady && !unlockAll) return;
+    if (!isUnlocked(skinById(selectedSkinId).need)) selectedSkinId = 'original_blue';
+    if (!isUnlocked(arenaById(selectedArenaId).need)) selectedArenaId = 'meadow';
+  }
 
   // ─── STATES ──────────────────────────────────────────────────────────────────
-  const S_IDLE    = 0;
-  const S_PLAYING = 1;
-  const S_DYING   = 2;
-  const S_DEAD    = 3;
+  const S_IDLE    = 0;   // title screen
+  const S_READY   = 1;   // "GET READY" — bird bobs at play position, first tap starts physics
+  const S_PLAYING = 2;
+  const S_DYING   = 3;
+  const S_DEAD    = 4;
 
   // ─── PIPE SPRITE SLICES ───────────────────────────────────────────────────────
   const PIPE_SLICE = {
@@ -53,7 +210,6 @@
   const BOT_BASE_DW = PIPE_SLICE.botBase.sw * PIPE_BODY_SCALE_BOT;
   const BOT_BASE_DH = PIPE_SLICE.botBase.sh * PIPE_BODY_SCALE_BOT;
   const BOT_BASE_DX = (PIPE_W - BOT_BASE_DW) / 2;
-  const PIPE_VIEW_EXT = Math.min(220, Math.ceil(PIPE_SLICE.topMiddle.sh * PIPE_BODY_SCALE_TOP * 0.35));
 
   // ─── EXTERNAL API ─────────────────────────────────────────────────────────────
   let pushHistory     = null;
@@ -74,26 +230,38 @@
 
   // ─── GAME STATE ───────────────────────────────────────────────────────────────
   let gameState  = S_IDLE;
-  let birdY      = H * 0.42;
+  let birdY      = PLAY_H * 0.46;
   let birdVy     = 0;
   let birdAngle  = 0;
   let pipes      = [];
   let score      = 0;
   let bestScore  = 0;
   let bgScrollX  = 0;
+  let groundScrollX = 0;
   let lastTs     = 0;
   let raf        = 0;
   let wingBurstStart = null;
-  let scorePops  = [];   // { y, startTs }
   let shakeAmt   = 0;
   let flashAmt   = 0;
   let deadTs     = 0;    // RAF timestamp when S_DEAD was entered
+  let deathWasNewBest = false;
 
   // ─── SERVER SESSION ───────────────────────────────────────────────────────────
   let runSessionId   = null;
   let runStartedPerf = null;
   let runRng         = null;
   let runStartBusy   = false;
+
+  // ─── GHOST (beat-your-best replay) ────────────────────────────────────────────
+  // Samples are [elapsedMs, birdY, birdVy] tuples recorded for the CURRENT run and,
+  // once it ends, kept as the new ghost only if it beat the stored one. Replaying
+  // vy (not just y) lets the ghost re-derive the same nose-up/nose-down tilt the
+  // live bird gets, via the identical smoothing step in drawGhost().
+  const GHOST_KEY    = 'fuq.fifiBird.ghost';
+  let ghostSamples   = null;   // loaded/saved [t,y,vy][] — null until a run is ever recorded
+  let ghostScore     = 0;
+  let ghostRecording = [];     // in-progress recording for the run currently being played
+  let ghostAngle     = 0;
 
   const els = {};
   function $(id) { return document.getElementById(id); }
@@ -225,6 +393,16 @@
     } catch (_) {}
   }
 
+  // ─── HAPTICS ──────────────────────────────────────────────────────────────────
+  // Android Chrome supports navigator.vibrate; iOS Safari doesn't expose it at
+  // all, so this is a silent no-op there rather than a fallback worth building.
+  function vibrate(pattern) {
+    try {
+      if (reduceMotion) return;
+      if (navigator.vibrate) navigator.vibrate(pattern);
+    } catch (_) {}
+  }
+
   // ─── RNG ──────────────────────────────────────────────────────────────────────
   function mulberry32(a) {
     let state = a >>> 0;
@@ -261,21 +439,26 @@
 
   function resizeCanvas() {
     if (!canvas || !ctx) return;
-    const rect = canvas.getBoundingClientRect();
-    dpr = Math.min(canvasDprCap(), window.devicePixelRatio || 1);
-    canvas.width  = Math.floor(W * dpr);
-    canvas.height = Math.floor(H * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingEnabled = true;
-    if (typeof ctx.imageSmoothingQuality === 'string') ctx.imageSmoothingQuality = 'high';
     const fsActive = pseudoFsActive || !!(document.fullscreenElement || document.webkitFullscreenElement);
     if (fsActive) {
       // Let CSS drive sizing in fullscreen so the canvas fits the viewport height.
       canvas.style.height = '';
     } else {
-      const cw = rect.width || canvas.clientWidth || W;
+      const cw = canvas.getBoundingClientRect().width || canvas.clientWidth || W;
       canvas.style.height = `${(cw * H) / W}px`;
     }
+    // Match the backing-store resolution to the canvas's actual on-screen size
+    // (not the fixed W×H logical size) so fullscreen's CSS upscale doesn't blur —
+    // the rendered box can be far bigger than the 360×520 base in fullscreen.
+    const rect = canvas.getBoundingClientRect();
+    const cssW = rect.width || W;
+    const cssH = rect.height || H;
+    dpr = Math.min(canvasDprCap(), window.devicePixelRatio || 1);
+    canvas.width  = Math.max(1, Math.round(cssW * dpr));
+    canvas.height = Math.max(1, Math.round(cssH * dpr));
+    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    if (typeof ctx.imageSmoothingQuality === 'string') ctx.imageSmoothingQuality = 'high';
   }
 
   // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -287,7 +470,9 @@
   }
 
   function hitTest() {
-    if (birdY - BIRD_R < 8 || birdY + BIRD_R > H - 8) return true;
+    // OG rules: the ceiling never kills you (the bird just can't leave the top);
+    // the ground and pipes do.
+    if (birdY + BIRD_R >= PLAY_H) return true;
     for (let i = 0; i < pipes.length; i++) {
       const p = pipes[i];
       const rx = p.x + PIPE_COLLISION_INSET;
@@ -296,14 +481,14 @@
       const topH = p.gapY - GAP / 2;
       const botY = p.gapY + GAP / 2;
       if (circleHitsRect(BIRD_X, birdY, BIRD_R, rx, 0, rw, topH)) return true;
-      if (circleHitsRect(BIRD_X, birdY, BIRD_R, rx, botY, rw, H - botY)) return true;
+      if (circleHitsRect(BIRD_X, birdY, BIRD_R, rx, botY, rw, PLAY_H - botY)) return true;
     }
     return false;
   }
 
   function spawnPipe() {
-    const minGapY = 110 + GAP / 2;
-    const maxGapY = H - 110 - GAP / 2;
+    const minGapY = 66 + GAP / 2;
+    const maxGapY = PLAY_H - 46 - GAP / 2;
     const rnd = runRng ? runRng() : Math.random();
     const gapY = minGapY + rnd * (maxGapY - minGapY);
     let x = W + 60;
@@ -338,21 +523,42 @@
     ctx.closePath();
   }
 
+  // Centered cover-fit crop so wide strips (e.g. the spaceship arena, which only
+  // ships as a wide *_scroll.png) fill the portrait canvas without squashing.
+  function bgCoverSrc() {
+    const iw = bgImg.naturalWidth, ih = bgImg.naturalHeight;
+    const target = W / H;
+    let sw = iw, sh = ih, sx = 0, sy = 0;
+    if (iw / ih > target) {
+      sw = Math.round(ih * target);
+      sx = Math.round((iw - sw) / 2);
+    } else {
+      sh = Math.round(iw / target);
+      sy = Math.round((ih - sh) / 2);
+    }
+    return { sx, sy, sw, sh };
+  }
+
   function drawBackground() {
     if (bgImgOk && bgImg && bgImg.naturalWidth > 0) {
       const tileW  = W;
+      const c      = bgCoverSrc();
       const slot   = Math.floor(bgScrollX / tileW);
       const offset = bgScrollX - slot * tileW;
       let xPos = Math.floor(-offset), mirrored = (slot & 1) !== 0;
       while (xPos < W + 1) {
+        // Dest width is 1px wider than the tile stride so adjacent tiles overlap
+        // slightly — otherwise non-integer canvas scale factors (e.g. fullscreen,
+        // where backing-store px no longer divide evenly into W) leave a hairline
+        // seam between tiles.
         if (mirrored) {
           ctx.save();
           ctx.translate(xPos + tileW, 0);
           ctx.scale(-1, 1);
-          ctx.drawImage(bgImg, 0, 0, tileW, H);
+          ctx.drawImage(bgImg, c.sx, c.sy, c.sw, c.sh, 0, 0, tileW + 1, H);
           ctx.restore();
         } else {
-          ctx.drawImage(bgImg, xPos, 0, tileW, H);
+          ctx.drawImage(bgImg, c.sx, c.sy, c.sw, c.sh, xPos, 0, tileW + 1, H);
         }
         xPos += tileW;
         mirrored = !mirrored;
@@ -368,7 +574,7 @@
     if (!p) return;
     const topH    = Math.max(0, p.gapY - GAP / 2);
     const botY    = p.gapY + GAP / 2;
-    const bottomH = Math.max(0, H - botY);
+    const bottomH = Math.max(0, PLAY_H - botY);
 
     if (!pipeImgOk || !pipeImg) {
       ctx.fillStyle = '#1166ff';
@@ -389,7 +595,7 @@
         const srcY = TB.sy + TB.sh - srcH;
         ctx.drawImage(pipeImg, TB.sx, srcY, TB.sw, srcH, p.x + TOP_BASE_DX, topH - baseH, TOP_BASE_DW, baseH);
       }
-      let yBottom = topH - baseH, remain = bodyH + PIPE_VIEW_EXT;
+      let yBottom = topH - baseH, remain = bodyH;
       const tileHT = TM.sh * scaleT;
       let pngYBelow = TM.sy + TM.sh;
       while (remain > 0) {
@@ -417,40 +623,53 @@
         ctx.drawImage(pipeImg, BM.sx, pngYTop, BM.sw, srcH, p.x, y, PIPE_W, dh);
         pngYTop += srcH; y += dh; remain -= dh;
       }
-      let yExt = H, remUg = PIPE_VIEW_EXT, pngUg = BM.sy;
-      while (remUg > 0) {
-        const dh = Math.min(tileHB, remUg);
-        const srcH = Math.min(BM.sh, dh / scaleB);
-        ctx.drawImage(pipeImg, BM.sx, pngUg, BM.sw, srcH, p.x, yExt, PIPE_W, dh);
-        pngUg += srcH;
-        if (pngUg >= BM.sy + BM.sh) pngUg -= BM.sh;
-        yExt += dh; remUg -= dh;
-      }
     }
   }
 
-  function drawBirdAt(x, y, now) {
-    // Update smooth rotation
-    if (gameState === S_PLAYING) {
-      const target = Math.max(-0.52, Math.min(1.1, birdVy * 0.075));
-      birdAngle += (target - birdAngle) * 0.22;
-    } else if (gameState === S_DYING) {
-      birdAngle = Math.min(Math.PI * 0.55, birdAngle + 0.19);
-    } else {
-      birdAngle += (0 - birdAngle) * 0.1;
-    }
+  // Scrolling ground strip — the iconic Flappy Bird floor, restyled for the
+  // site's neon theme: lime turf edge, hatched shadow band, dark dirt body.
+  function drawGround() {
+    const y = PLAY_H;
+    ctx.fillStyle = '#0b1408';
+    ctx.fillRect(0, y, W, GROUND_H);
 
-    let frameIdx = 0;
-    if (gameState === S_PLAYING) {
-      frameIdx = wingFrameIndex();
-    } else if (gameState === S_IDLE || gameState === S_DEAD) {
-      frameIdx = Math.floor(now / 420) % 2 === 0 ? 0 : 2;
-    }
+    // Turf band
+    ctx.fillStyle = '#173a10';
+    ctx.fillRect(0, y, W, 22);
+    ctx.fillStyle = '#39ff14';
+    ctx.fillRect(0, y, W, 3);
 
+    // Diagonal hatch that scrolls with world speed
+    const stride = 24;
+    const off = ((groundScrollX % stride) + stride) % stride;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, y + 3, W, 19);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(57,255,20,0.4)';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    for (let x = -stride * 2 - off; x < W + stride; x += stride) {
+      ctx.moveTo(x, y + 24);
+      ctx.lineTo(x + 14, y + 1);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // Dirt body speckle rows
+    ctx.fillStyle = 'rgba(57,255,20,0.08)';
+    ctx.fillRect(0, y + 26, W, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, y + 22, W, 4);
+  }
+
+  // Pure sprite blit shared by the live bird and the ghost replay — takes an
+  // already-resolved angle/frame rather than reading birdAngle itself, so the
+  // ghost can drive it with its own (separately smoothed) tilt.
+  function blitBirdSprite(x, y, angle, frameIdx) {
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(birdAngle);
-
+    ctx.rotate(angle);
     if (birdSpriteOk && birdImg && birdImg.naturalWidth > 0) {
       const fw = birdImg.naturalWidth / BIRD_SPRITE_FRAMES;
       const fh = birdImg.naturalHeight;
@@ -467,40 +686,43 @@
     ctx.restore();
   }
 
-  function drawScoreHud(now) {
-    // Pop scale: punchy on new score
-    let popScale = 1;
-    if (scorePops.length > 0) {
-      const t = Math.min(1, (now - scorePops[scorePops.length - 1].startTs) / 220);
-      popScale = 1 + 0.32 * Math.pow(1 - t, 2);
+  function drawBirdAt(x, y, now) {
+    // OG rotation: nose snaps up on a flap and holds through the top of the
+    // arc, then the bird pitches down hard toward 90° as it dives.
+    if (gameState === S_PLAYING) {
+      if (birdVy < 1.8) {
+        birdAngle += (-0.42 - birdAngle) * 0.38;
+      } else {
+        birdAngle = Math.min(Math.PI * 0.5, birdAngle + 0.055);
+      }
+    } else if (gameState === S_DYING) {
+      birdAngle = Math.min(Math.PI * 0.5, birdAngle + 0.18);
+    } else {
+      birdAngle += (0 - birdAngle) * 0.1;
     }
-    const fontSize = Math.round(30 * popScale);
-    ctx.save();
-    ctx.textAlign = 'center';
-    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-    ctx.strokeText(String(score), W / 2, 52);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(String(score), W / 2, 52);
-    ctx.restore();
+
+    // Wings burst on each tap during play; on the title / ready / game-over
+    // screens they slowly alternate, and they freeze during the death fall.
+    let frameIdx = 0;
+    if (gameState === S_PLAYING) {
+      frameIdx = wingFrameIndex();
+    } else if (gameState === S_IDLE || gameState === S_READY || gameState === S_DEAD) {
+      frameIdx = Math.floor(now / 420) % 2 === 0 ? 0 : 2;
+    }
+
+    blitBirdSprite(x, y, birdAngle, frameIdx);
   }
 
-  function drawScorePops(now) {
+  // Big plain counter at the top, exactly like the OG — no pops, no "+1".
+  function drawScoreHud() {
     ctx.save();
     ctx.textAlign = 'center';
-    for (let i = scorePops.length - 1; i >= 0; i--) {
-      const pop = scorePops[i];
-      const t = (now - pop.startTs) / 560;
-      if (t >= 1) { scorePops.splice(i, 1); continue; }
-      ctx.globalAlpha = Math.pow(1 - t, 0.65);
-      const y = pop.y - t * 48;
-      ctx.font = `bold ${Math.round(22 + t * 3)}px system-ui, sans-serif`;
-      ctx.fillStyle = '#39ff14';
-      ctx.shadowColor = 'rgba(0,0,0,0.85)';
-      ctx.shadowBlur  = 5;
-      ctx.fillText('+1', BIRD_X + 30, y);
-    }
+    ctx.font = 'bold 42px system-ui, "Arial Black", sans-serif';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.strokeText(String(score), W / 2, 68);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(String(score), W / 2, 68);
     ctx.restore();
   }
 
@@ -519,52 +741,16 @@
     ctx.fillStyle = '#39ff14';
     ctx.fillText('FiFi', W / 2, H * 0.14);
     ctx.fillStyle = '#ffffff';
-    const birdY = H * 0.235;
-    const birdW = ctx.measureText('BIRD').width;
+    ctx.fillText('BIRD', W / 2, H * 0.235);
     ctx.shadowBlur = 0;
-    ctx.font = 'bold 11px system-ui, sans-serif';
-    const betaTextW = ctx.measureText('BETA').width;
-    const betaChipW = betaTextW + 14;
-    const betaChipH = 20;
-    const gap = 10;
-    const groupW = birdW + gap + betaChipW;
-    const birdLeft = (W - groupW) / 2;
-    ctx.shadowColor = '#39ff14';
-    ctx.shadowBlur  = 26;
-    ctx.font = 'bold 58px system-ui, "Arial Black", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('BIRD', birdLeft, birdY);
-    ctx.shadowBlur = 0;
-
-    // BETA chip — sits next to BIRD, matches the HTML title badge
-    const chipX = birdLeft + birdW + gap;
-    const chipY = birdY - 38;
-    roundRect(chipX, chipY, betaChipW, betaChipH, 10);
-    ctx.fillStyle = 'rgba(57,255,20,0.16)';
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = 'rgba(57,255,20,0.7)';
-    ctx.stroke();
-    ctx.font = 'bold 11px system-ui, sans-serif';
-    ctx.fillStyle = '#39ff14';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(57,255,20,0.55)';
-    ctx.shadowBlur = 6;
-    ctx.fillText('BETA', chipX + betaChipW / 2, chipY + betaChipH / 2 + 0.5);
-    ctx.shadowBlur = 0;
-    ctx.textBaseline = 'alphabetic';
-    ctx.textAlign = 'center';
 
     // Tagline
     ctx.font = 'italic 14px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(255,255,255,0.58)';
     ctx.fillText('no FUQ · just vibes', W / 2, H * 0.305);
 
-    // Best score chip
     if (bestScore > 0) {
-      const chipW = 126, chipH = 38, cx = W / 2, cy = H * 0.625;
+      const chipW = 126, chipH = 38, cx = W / 2, cy = H * 0.62;
       roundRect(cx - chipW / 2, cy - chipH / 2, chipW, chipH, 10);
       ctx.fillStyle = 'rgba(57,255,20,0.16)'; ctx.fill();
       ctx.strokeStyle = 'rgba(57,255,20,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -576,71 +762,150 @@
       ctx.fillText(String(bestScore), cx, cy + 13);
     }
 
-    // Tap to start (pulsing)
-    const pulse = 0.65 + 0.35 * Math.sin(now / 550);
-    ctx.font = 'bold 22px system-ui, sans-serif';
-    ctx.fillStyle = `rgba(255,255,255,${pulse})`;
-    ctx.shadowColor = 'rgba(0,0,0,0.75)'; ctx.shadowBlur = 8;
-    ctx.fillText('TAP TO START', W / 2, H * 0.79);
+    ctx.restore();
+  }
+
+  // OG "GET READY" — bird bobs in place, world scrolls, first tap starts.
+  function drawReadyScreen(now) {
+    ctx.save();
+    ctx.textAlign = 'center';
+
+    ctx.font = 'bold 34px system-ui, "Arial Black", sans-serif';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.strokeText('GET READY', W / 2, H * 0.2);
+    ctx.fillStyle = '#39ff14';
+    ctx.shadowColor = 'rgba(57,255,20,0.5)';
+    ctx.shadowBlur = 14;
+    ctx.fillText('GET READY', W / 2, H * 0.2);
     ctx.shadowBlur = 0;
-    ctx.font = '13px system-ui, sans-serif';
-    ctx.fillStyle = `rgba(200,200,200,${pulse * 0.65})`;
-    ctx.fillText('or press SPACE', W / 2, H * 0.845);
+
+    // Pulsing tap hint: hand-drawn tap circle with up chevrons
+    const pulse = 0.55 + 0.45 * Math.sin(now / 420);
+    const cx = W / 2, cy = H * 0.46;
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 17, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx - 9, cy - 26); ctx.lineTo(cx, cy - 36); ctx.lineTo(cx + 9, cy - 26);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + pulse * 0.5})`;
+    ctx.shadowColor = 'rgba(0,0,0,0.75)'; ctx.shadowBlur = 6;
+    ctx.fillText('TAP TO FLAP', W / 2, H * 0.56);
+    ctx.shadowBlur = 0;
 
     ctx.restore();
   }
 
+  // OG medal tiers: bronze 10, silver 20, gold 30, platinum 40.
+  function medalForScore(s) {
+    if (s >= 40) return { label: 'PLAT',   main: '#d9f5ff', rim: '#8fd4e8' };
+    if (s >= 30) return { label: 'GOLD',   main: '#ffd94d', rim: '#c9a227' };
+    if (s >= 20) return { label: 'SILVER', main: '#d7d7d7', rim: '#9b9b9b' };
+    if (s >= 10) return { label: 'BRONZE', main: '#e0a86c', rim: '#a5713d' };
+    return null;
+  }
+
+  function easeOutBack(t) {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  }
+
   function drawGameOverScreen(now) {
+    const elapsed = now - deadTs;
     ctx.fillStyle = 'rgba(0,0,0,0.56)';
     ctx.fillRect(0, 0, W, H);
 
-    const panelW = 272, panelH = 184;
-    const px = (W - panelW) / 2, py = H * 0.26;
-
     ctx.save();
-    ctx.shadowColor = 'rgba(57,255,20,0.42)'; ctx.shadowBlur = 30;
-    roundRect(px, py, panelW, panelH, 14);
-    ctx.fillStyle = 'rgba(7,15,9,0.96)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(57,255,20,0.72)'; ctx.lineWidth = 2.5; ctx.stroke();
-    ctx.shadowBlur = 0;
     ctx.textAlign = 'center';
 
-    ctx.font = 'bold 30px system-ui, "Arial Black", sans-serif';
+    // 1) GAME OVER drops in first
+    const tTitle = Math.min(1, elapsed / 260);
+    const titleY = H * 0.155 - (1 - easeOutBack(tTitle)) * 46;
+    ctx.globalAlpha = Math.min(1, elapsed / 140);
+    ctx.font = 'bold 36px system-ui, "Arial Black", sans-serif';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.strokeText('GAME OVER', W / 2, titleY);
     ctx.fillStyle = '#ff4040';
     ctx.shadowColor = 'rgba(255,0,0,0.45)'; ctx.shadowBlur = 14;
-    ctx.fillText('GAME OVER', W / 2, py + 48);
+    ctx.fillText('GAME OVER', W / 2, titleY);
     ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
 
-    ctx.font = 'bold 52px system-ui, sans-serif';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(String(score), W / 2, py + 112);
+    // 2) Score panel swooshes up from below
+    const panelW = 276, panelH = 150;
+    const px = (W - panelW) / 2;
+    const panelDelay = 320, panelDur = 340;
+    const tPanel = Math.max(0, Math.min(1, (elapsed - panelDelay) / panelDur));
+    if (tPanel > 0) {
+      const pyFinal = H * 0.28;
+      const py = pyFinal + (1 - easeOutBack(tPanel)) * (H - pyFinal);
+      ctx.shadowColor = 'rgba(57,255,20,0.42)'; ctx.shadowBlur = 30;
+      roundRect(px, py, panelW, panelH, 14);
+      ctx.fillStyle = 'rgba(7,15,9,0.96)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(57,255,20,0.72)'; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.shadowBlur = 0;
 
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.48)';
-    ctx.fillText('gaps cleared', W / 2, py + 130);
+      // Medal slot (left)
+      const mx = px + 58, my = py + panelH / 2;
+      const medal = medalForScore(score);
+      ctx.beginPath(); ctx.arc(mx, my, 33, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2; ctx.stroke();
+      if (medal && tPanel >= 1) {
+        ctx.beginPath(); ctx.arc(mx, my, 28, 0, Math.PI * 2);
+        ctx.fillStyle = medal.main; ctx.fill();
+        ctx.strokeStyle = medal.rim; ctx.lineWidth = 4; ctx.stroke();
+        ctx.font = 'bold 26px system-ui, sans-serif';
+        ctx.fillStyle = medal.rim;
+        ctx.fillText('★', mx, my + 9);
+        ctx.font = 'bold 10px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.fillText(medal.label, mx, my + 48);
+      } else {
+        ctx.font = 'bold 10px system-ui, sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.fillText('MEDAL', mx, my + 48);
+      }
 
-    const isNewBest = score > 0 && score >= bestScore;
-    if (isNewBest) {
-      ctx.font = 'bold 14px system-ui, sans-serif';
+      // Score column (right) — count-up like the OG tally
+      const sx = px + panelW - 72;
+      const countStart = panelDelay + panelDur;
+      const shown = elapsed <= countStart
+        ? 0
+        : Math.min(score, Math.floor((elapsed - countStart) / 36));
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillText('SCORE', sx, py + 36);
+      ctx.font = 'bold 32px system-ui, sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(String(shown), sx, py + 68);
+
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillText('BEST', sx, py + 98);
+      ctx.font = 'bold 24px system-ui, sans-serif';
       ctx.fillStyle = '#39ff14';
-      ctx.shadowColor = 'rgba(57,255,20,0.55)'; ctx.shadowBlur = 12;
-      ctx.fillText('★  NEW BEST  ★', W / 2, py + 163);
-      ctx.shadowBlur = 0;
-    } else if (bestScore > 0) {
-      ctx.font = '13px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.46)';
-      ctx.fillText(`Best: ${bestScore}`, W / 2, py + 163);
+      ctx.fillText(String(bestScore), sx, py + 126);
+
+      if (deathWasNewBest && shown >= score) {
+        ctx.font = 'bold 10px system-ui, sans-serif';
+        ctx.fillStyle = '#0a140a';
+        const bw = 38, bh = 15;
+        roundRect(sx + 22, py + 88, bw, bh, 4);
+        ctx.fillStyle = '#39ff14'; ctx.fill();
+        ctx.fillStyle = '#0a140a';
+        ctx.fillText('NEW', sx + 22 + bw / 2, py + 99);
+      }
     }
 
-    // Tap again — delay 650ms so an accidental death-tap doesn't skip
-    if (now - deadTs > 650) {
-      const pulse = 0.65 + 0.35 * Math.sin(now / 490);
-      ctx.font = 'bold 18px system-ui, sans-serif';
-      ctx.fillStyle = `rgba(57,255,20,${pulse})`;
-      ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 7;
-      ctx.fillText('TAP TO FLY AGAIN', W / 2, py + panelH + 42);
-      ctx.shadowBlur = 0;
-    }
     ctx.restore();
   }
 
@@ -662,23 +927,38 @@
 
     drawBackground();
 
-    // Pipes (not shown on start screen)
-    if (gameState !== S_IDLE) {
+    // Pipes (not shown on start / ready screens)
+    if (gameState === S_PLAYING || gameState === S_DYING || gameState === S_DEAD) {
       for (let i = 0; i < pipes.length; i++) drawPipe(pipes[i]);
     }
 
-    // Bird position — idle has centred bob
-    const bx = gameState === S_IDLE ? W / 2 : BIRD_X;
-    const by = gameState === S_IDLE ? H * 0.465 + Math.sin(now / 650) * 9 : birdY;
+    drawGround();
+
+    // Bird position — title screen centres it, ready screen bobs at play position
+    let bx = BIRD_X, by = birdY;
+    if (gameState === S_IDLE) {
+      bx = W / 2;
+      by = PLAY_H * 0.48 + Math.sin(now / 650) * 9;
+    } else if (gameState === S_READY) {
+      by = birdY + Math.sin(now / 320) * 6;
+    }
+    drawGhost(now);
     drawBirdAt(bx, by, now);
 
-    // Score HUD during active play
-    if (gameState === S_PLAYING || gameState === S_DYING) {
-      drawScoreHud(now);
-      if (scorePops.length) drawScorePops(now);
+    // Score HUD — visible from GET READY through the death fall, like the OG
+    if (gameState === S_READY || gameState === S_PLAYING || gameState === S_DYING) {
+      drawScoreHud();
     }
 
     ctx.restore(); // end shake
+
+    // Tuning tag — tiny corner stamp so it's obvious which physics build is live
+    ctx.save();
+    ctx.font = '9px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fillText(TUNING_TAG, W - 5, H - 5);
+    ctx.restore();
 
     // Flash (no shake)
     if (flashAmt > 0.01) {
@@ -689,7 +969,9 @@
 
     // Overlay screens
     if (gameState === S_IDLE) drawStartScreen(now);
+    else if (gameState === S_READY) drawReadyScreen(now);
     else if (gameState === S_DEAD) drawGameOverScreen(now);
+    syncHud();
   }
 
   // ─── GAME LOOP ────────────────────────────────────────────────────────────────
@@ -702,6 +984,14 @@
     if (!lastTs) lastTs = ts;
     const dt = Math.min(32, ts - lastTs);
     lastTs = ts;
+
+    // The locker is a DOM overlay with backdrop-filter: blur() — cheap over the
+    // small windowed canvas, but re-blurring a full-screen backdrop every tick
+    // got expensive in fullscreen. Nothing behind it needs to keep animating
+    // (the locker can only open on the idle/game-over screens anyway), so just
+    // freeze the canvas instead of redrawing a frame nobody can see move.
+    if (lockerOpen) return;
+
     const rawScale = dt / 16.67;
     // EMA smoothing: a single delayed frame (e.g. just after a tap) doesn't
     // produce a one-frame leap in pipes/bird — extra dt is spread across the
@@ -712,23 +1002,38 @@
     if (gameState === S_IDLE) {
       // Slow parallax drift on start screen
       bgScrollX += 0.38 * dtScale;
+      groundScrollX += 0.9 * dtScale;
+    }
+
+    if (gameState === S_READY) {
+      // World scrolls at play speed while the bird bobs, just like OG Get Ready
+      const speed = SPEED_BASE * speedMul * dtScale;
+      bgScrollX += speed * BG_PARALLAX;
+      groundScrollX += speed;
     }
 
     if (gameState === S_PLAYING) {
-      const speed = Math.min(SPEED_CAP, SPEED_BASE + score * SPEED_RAMP) * speedMul * dtScale;
+      const speed = SPEED_BASE * speedMul * dtScale;   // constant — OG never speeds up
       birdVy += GRAVITY * dtScale;
       if (birdVy > VY_MAX) birdVy = VY_MAX;
       birdY  += birdVy * dtScale;
+      // Ceiling doesn't kill, it just stops you (OG behaviour)
+      if (birdY < BIRD_R) { birdY = BIRD_R; if (birdVy < 0) birdVy = 0; }
       bgScrollX += speed * BG_PARALLAX;
+      groundScrollX += speed;
+
+      if (runStartedPerf != null && ghostRecording.length < 20000) {
+        ghostRecording.push([ts - runStartedPerf, birdY, birdVy]);
+      }
 
       for (let i = pipes.length - 1; i >= 0; i--) {
         pipes[i].x -= speed;
         const p = pipes[i];
-        if (!p.passed && p.x + PIPE_W < BIRD_X - BIRD_R) {
+        // OG scores the moment the bird crosses the pipe's centre line
+        if (!p.passed && p.x + PIPE_W / 2 < BIRD_X) {
           p.passed = true;
           score += 1;
           if (els.scoreHud) els.scoreHud.textContent = String(score);
-          scorePops.push({ y: birdY - 18, startTs: ts });
           playScore();
         }
         if (p.x + PIPE_W < -20) pipes.splice(i, 1);
@@ -743,20 +1048,22 @@
         shakeAmt = 1.0;
         flashAmt = 1.0;
         playDeath();
+        vibrate(30);
       }
     }
 
     if (gameState === S_DYING) {
-      const speed = Math.min(SPEED_CAP, SPEED_BASE + score * SPEED_RAMP) * speedMul * dtScale;
       birdVy += GRAVITY * dtScale;
       if (birdVy > VY_MAX) birdVy = VY_MAX;
       birdY  += birdVy * dtScale;
       if (birdY - BIRD_R < 0) { birdY = BIRD_R; if (birdVy < 0) birdVy = 0; }
-      if (birdY + BIRD_R >= H - 8) {
-        birdY = H - 8 - BIRD_R;
+      if (birdY + BIRD_R >= PLAY_H) {
+        birdY = PLAY_H - BIRD_R;
         birdVy = 0;
         gameState = S_DEAD;
         deadTs = ts;
+        deathWasNewBest = score > 0 && score > bestScore;
+        if (deathWasNewBest) vibrate([20, 40, 20, 40, 20]);
         void endRound();
       }
     }
@@ -764,12 +1071,110 @@
     drawFrame(ts);
   }
 
+  // ─── GHOST ────────────────────────────────────────────────────────────────────
+  function loadGhostBest() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem(GHOST_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.samples) || parsed.samples.length < 2) return null;
+      return parsed;
+    } catch (_) { return null; }
+  }
+
+  // Thins a run down to a bounded point count and rounds values before it's
+  // persisted, so a long run doesn't blow up localStorage — shared by the save
+  // path and the in-memory copy so both end up with identical playback data.
+  function buildGhostSamples(recording) {
+    const MAX_POINTS = 1500;
+    let samples = recording;
+    if (samples.length > MAX_POINTS) {
+      const stride = samples.length / MAX_POINTS;
+      const out = [];
+      for (let i = 0; i < MAX_POINTS; i++) out.push(samples[Math.floor(i * stride)]);
+      out.push(samples[samples.length - 1]);
+      samples = out;
+    }
+    return samples.map((p) => [Math.round(p[0]), Math.round(p[1] * 10) / 10, Math.round(p[2] * 100) / 100]);
+  }
+
+  function saveGhostBest(score, recording) {
+    try {
+      if (!window.localStorage || !Array.isArray(recording) || recording.length < 2) return null;
+      const samples = buildGhostSamples(recording);
+      window.localStorage.setItem(GHOST_KEY, JSON.stringify({ score, samples }));
+      return samples;
+    } catch (_) { return null; }
+  }
+
+  // Interpolates the ghost's y/vy at a point in the run's timeline. Returns null
+  // once elapsedMs runs past the ghost's own recorded death — there's nothing to
+  // show beyond where that run ended.
+  function ghostValueAt(elapsedMs) {
+    const s = ghostSamples;
+    if (!s || s.length < 2) return null;
+    if (elapsedMs > s[s.length - 1][0]) return null;
+    if (elapsedMs <= s[0][0]) return { y: s[0][1], vy: s[0][2] };
+    let lo = 0, hi = s.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (s[mid][0] <= elapsedMs) lo = mid; else hi = mid;
+    }
+    const a = s[lo], b = s[hi];
+    const span = b[0] - a[0];
+    const f = span > 0 ? (elapsedMs - a[0]) / span : 0;
+    return { y: a[1] + (b[1] - a[1]) * f, vy: a[2] + (b[2] - a[2]) * f };
+  }
+
+  function drawGhost(now) {
+    if (!ghostSamples || gameState !== S_PLAYING || runStartedPerf == null) return;
+    const v = ghostValueAt(now - runStartedPerf);
+    if (!v) return;
+    // Same nose-up/nose-down smoothing drawBirdAt() applies to the live bird,
+    // just driven by the ghost's own recorded vy instead of the live one.
+    if (v.vy < 1.8) ghostAngle += (-0.42 - ghostAngle) * 0.38;
+    else ghostAngle = Math.min(Math.PI * 0.5, ghostAngle + 0.055);
+    ctx.save();
+    ctx.globalAlpha = 0.32;
+    blitBirdSprite(BIRD_X, v.y, ghostAngle, 0);
+    ctx.restore();
+  }
+
   // ─── STATS ────────────────────────────────────────────────────────────────────
+  // Fallback best when FuqCloud isn't on the page — keeps unlocks working for
+  // offline / no-cloud sessions instead of pinning everything to best 0.
+  function readLocalBestFallback() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem('fuqmea_fifi_bird_v1');
+      if (!raw) return 0;
+      const n = Math.floor(Number(JSON.parse(raw).best) || 0);
+      return n > 0 ? n : 0;
+    } catch (_) { return 0; }
+  }
+
+  // Single place where the authoritative best score lands. Runs the unlock
+  // pipeline in the right order: raise best → clamp selection → re-apply the
+  // stored cosmetics if the clamp changed them → seed-or-toast new unlocks.
+  function applyProgress(rawBest) {
+    const prevSkin = selectedSkinId, prevArena = selectedArenaId;
+    bestScore = Math.max(0, Math.floor(Number(rawBest) || 0), sessionBest);
+    const firstResolve = !statsReady;
+    statsReady = true;
+    clampSelectionToUnlocks();
+    if (firstResolve || selectedSkinId !== prevSkin || selectedArenaId !== prevArena) {
+      applySelectedCosmetics();
+    }
+    if (!unlocksSeeded) { noteNewUnlocks(true); unlocksSeeded = true; }
+    else noteNewUnlocks();
+    renderLocker();
+  }
+
   async function refreshStats() {
     const fc = window.FuqCloud;
     if (!els.best) return;
     if (!fc || typeof fc.getFifiBirdProgress !== 'function') {
-      els.best.textContent = '—';
+      applyProgress(readLocalBestFallback());
+      els.best.textContent = String(bestScore);
       if (els.runs)   els.runs.textContent  = '—';
       if (els.pipes)  els.pipes.textContent = '—';
       if (els.cloud)  els.cloud.textContent = '';
@@ -782,14 +1187,27 @@
       if (els.runs)   els.runs.textContent  = String(p.gamesPlayed ?? 0);
       if (els.pipes)  els.pipes.textContent = String(p.totalPipes ?? 0);
       if (els.cloud)  els.cloud.textContent = p.source === 'cloud' && fc.isSignedIn?.() ? 'Saved to account' : 'On this device';
-      if (b > bestScore) bestScore = b;
-    } catch (_) { els.best.textContent = '—'; }
+      applyProgress(b);
+    } catch (_) {
+      els.best.textContent = '—';
+      // Still let unlocks settle from what we know locally so a failed fetch
+      // doesn't strand the player on OG Blue.
+      applyProgress(Math.max(bestScore, readLocalBestFallback()));
+    }
   }
 
   // ─── END ROUND ────────────────────────────────────────────────────────────────
   async function endRound() {
     const runScore = score;
+    sessionBest = Math.max(sessionBest, runScore);
     if (score > bestScore) bestScore = score;
+
+    // This run becomes the new ghost only once it actually beat the one on file —
+    // otherwise the next run would start replaying a worse flight than before.
+    if (runScore > 0 && (!ghostSamples || runScore > ghostScore)) {
+      const saved = saveGhostBest(runScore, ghostRecording);
+      if (saved) { ghostSamples = saved; ghostScore = runScore; }
+    }
 
     const fc = window.FuqCloud;
     let saved = { ok: true };
@@ -823,14 +1241,17 @@
   }
 
   // ─── START RUN ────────────────────────────────────────────────────────────────
-  async function startRun() {
+  // Reset the world and show the OG "GET READY" screen. The verified server
+  // session is fetched here so the first real flap starts play instantly.
+  async function enterReady() {
     if (runStartBusy) return;
     runStartBusy = true;
     try {
-      score = 0; pipes = []; scorePops = [];
-      birdY = H * 0.42; birdVy = 0; birdAngle = 0;
-      lastTs = 0; bgScrollX = 0;
+      score = 0; pipes = [];
+      birdY = PLAY_H * 0.46; birdVy = 0; birdAngle = 0;
       smoothedDtScale = 1;
+      deathWasNewBest = false;
+      ghostRecording = []; ghostAngle = 0;
       runSessionId = null; runStartedPerf = null; runRng = null;
       if (els.scoreHud) els.scoreHud.textContent = '0';
 
@@ -840,73 +1261,587 @@
         if (started && started.runId != null && started.seed != null) {
           runSessionId = started.runId;
           runRng = rngFromServerSeed(started.seed);
-          if (typeof performance !== 'undefined') runStartedPerf = performance.now();
         }
       }
-      gameState = S_PLAYING;
-      birdVy = FLAP * 0.85;
-      triggerWingBurst();
-      // Defer audio so AudioContext init / source scheduling doesn't delay the next paint.
-      setTimeout(playFlap, 0);
-      spawnPipe();
+      gameState = S_READY;
     } finally {
       runStartBusy = false;
     }
   }
 
+  // First tap out of GET READY — physics and the run timer start here.
+  function beginPlaying() {
+    gameState = S_PLAYING;
+    if (typeof performance !== 'undefined') runStartedPerf = performance.now();
+    birdVy = FLAP;
+    triggerWingBurst();
+    vibrate(10);
+    // Defer audio so AudioContext init / source scheduling doesn't delay the next paint.
+    setTimeout(playFlap, 0);
+    spawnPipe();
+  }
+
   // ─── INPUT ────────────────────────────────────────────────────────────────────
   async function flap(e) {
     if (e && e.type === 'touchstart') e.preventDefault();
-
+    if (lockerOpen) return;
     if (gameState === S_DYING) return;
 
     if (gameState === S_DEAD) {
       const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-      if (now - deadTs < 650) return; // prevent accidental skip
-      await startRun();
+      if (now - deadTs < 900) return; // prevent accidental skip
+      await enterReady();
       return;
     }
 
     if (gameState === S_IDLE) {
       if (els.hint) els.hint.hidden = true;
-      await startRun();
+      await enterReady();
+      return;
+    }
+
+    if (gameState === S_READY) {
+      beginPlaying();
       return;
     }
 
     // S_PLAYING
     birdVy = FLAP;
     triggerWingBurst();
+    vibrate(10);
     // Defer audio so creating BufferSource nodes doesn't push the next paint
     // past the upcoming vsync — that's what causes the "tap = pipes jump" feel.
     setTimeout(playFlap, 0);
   }
 
   function onKey(e) {
-    if (e.code !== 'Space' && e.key !== ' ') return;
     const t = e.target;
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable || t.tagName === 'BUTTON')) return;
+    if (e.key === 'Escape' || e.code === 'Escape') {
+      if (lockerOpen) { e.preventDefault(); closeLocker(); }
+      return;
+    }
+    if (e.key === 'l' || e.key === 'L') {
+      e.preventDefault();
+      if (gameState === S_PLAYING || gameState === S_DYING || gameState === S_READY) return;
+      if (lockerOpen) closeLocker(); else openLocker();
+      return;
+    }
+    if (e.code !== 'Space' && e.key !== ' ') return;
     e.preventDefault();
     void flap();
   }
 
   // ─── ASSET LOADING ────────────────────────────────────────────────────────────
-  function loadBirdSprite() {
-    const img = new Image(); img.decoding = 'async';
-    img.onload  = () => { birdImg = img; birdSpriteOk = true; };
-    img.onerror = () => { birdSpriteOk = false; birdImg = null; };
-    img.src = BIRD_SPRITE_PATH;
+  function loadImage(src, onOk, onFail) {
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => onOk(img);
+    img.onerror = onFail;
+    img.src = src;
   }
-  function loadBgSprite() {
-    const img = new Image(); img.decoding = 'async';
-    img.onload  = () => { bgImg = img; bgImgOk = true; };
-    img.onerror = () => { bgImgOk = false; bgImg = null; };
-    img.src = BG_SPRITE_PATH;
+  function loadBirdSprite(src) {
+    const path = src || skinPaths(skinById(selectedSkinId)).bird;
+    const gen = ++birdLoadGen;
+    loadImage(path, (img) => {
+      if (gen !== birdLoadGen) return;
+      birdImg = img; birdSpriteOk = true;
+    }, () => {
+      if (gen !== birdLoadGen) return;
+      if (path !== BIRD_SPRITE_PATH) { loadBirdSprite(BIRD_SPRITE_PATH); return; }
+      birdSpriteOk = false; birdImg = null;
+    });
   }
-  function loadPipeSprite() {
-    const img = new Image(); img.decoding = 'async';
-    img.onload  = () => { pipeImg = img; pipeImgOk = true; };
-    img.onerror = () => { pipeImgOk = false; pipeImg = null; };
-    img.src = PIPE_SPRITE_PATH;
+  function loadPipeSprite(src) {
+    const path = src || skinPaths(skinById(selectedSkinId)).pipe;
+    const gen = ++pipeLoadGen;
+    loadImage(path, (img) => {
+      if (gen !== pipeLoadGen) return;
+      pipeImg = img; pipeImgOk = true;
+    }, () => {
+      if (gen !== pipeLoadGen) return;
+      if (path !== PIPE_SPRITE_PATH) { loadPipeSprite(PIPE_SPRITE_PATH); return; }
+      pipeImgOk = false; pipeImg = null;
+    });
+  }
+  function loadBgSprite(src) {
+    const path = src || arenaById(selectedArenaId).src;
+    const gen = ++bgLoadGen;
+    loadImage(path, (img) => {
+      if (gen !== bgLoadGen) return;
+      bgImg = img; bgImgOk = true;
+    }, () => {
+      if (gen !== bgLoadGen) return;
+      if (path !== BG_SPRITE_PATH) { loadBgSprite(BG_SPRITE_PATH); return; }
+      bgImgOk = false; bgImg = null;
+    });
+  }
+  function applySelectedCosmetics() {
+    clampSelectionToUnlocks();
+    const paths = skinPaths(skinById(selectedSkinId));
+    loadBirdSprite(paths.bird);
+    loadPipeSprite(paths.pipe);
+    loadBgSprite(arenaById(selectedArenaId).src);
+  }
+  function selectSkin(id) {
+    const skin = skinById(id);
+    if (!isUnlocked(skin.need)) return false;
+    selectedSkinId = skin.id;
+    saveCosmetics();
+    const paths = skinPaths(skin);
+    loadBirdSprite(paths.bird);
+    loadPipeSprite(paths.pipe);
+    updateLockerSelection();
+    return true;
+  }
+  function selectArena(id) {
+    const arena = arenaById(id);
+    if (!isUnlocked(arena.need)) return false;
+    selectedArenaId = arena.id;
+    saveCosmetics();
+    loadBgSprite(arena.src);
+    updateLockerSelection();
+    return true;
+  }
+
+  // Swapping skins/arenas used to call the full renderLocker(), which wipes and
+  // rebuilds every card (and repaints every skin canvas) from scratch — visible
+  // as the whole grid flashing on every tap. Just move the selected/equipped
+  // state between the two affected cards instead.
+  function updateLockerSelection() {
+    if (els.equipped) els.equipped.textContent = equippedLine();
+    const host = els.lockerGrid;
+    if (!host) return;
+    const selected = lockerTab === 'arenas' ? selectedArenaId : selectedSkinId;
+    const cards = host.querySelectorAll('.games-fifi-locker-card');
+    for (let i = 0; i < cards.length; i++) {
+      const btn = cards[i];
+      const isOn = btn.dataset.id === selected;
+      if (isOn === btn.classList.contains('is-selected')) continue;
+      btn.classList.toggle('is-selected', isOn);
+      btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+      btn.setAttribute('aria-selected', isOn ? 'true' : 'false');
+      if (btn.classList.contains('is-locked')) continue; // meta/badge below only exist on unlocked cards
+      const meta = btn.querySelector('.games-fifi-locker-card-meta');
+      if (meta) meta.textContent = isOn ? 'Equipped' : 'Tap to equip';
+      let badge = btn.querySelector('.games-fifi-locker-badge');
+      if (isOn && !badge) {
+        badge = document.createElement('span');
+        badge.className = 'games-fifi-locker-badge';
+        badge.textContent = 'ON';
+        btn.appendChild(badge);
+      } else if (!isOn && badge) {
+        badge.remove();
+      }
+    }
+  }
+
+  function equippedLine() {
+    return 'Equipped: ' + skinById(selectedSkinId).label + ' · ' + arenaById(selectedArenaId).label;
+  }
+
+  function setHidden(el, hide) {
+    if (!el) return;
+    el.hidden = !!hide;
+  }
+
+  function syncHud() {
+    const menuOn = gameState === S_IDLE && !lockerOpen;
+    const overOn = gameState === S_DEAD && !lockerOpen && deadTs && ((typeof performance !== 'undefined' ? performance.now() : Date.now()) - deadTs > 900);
+    setHidden(els.menuHud, !menuOn);
+    setHidden(els.overHud, !overOn);
+    setHidden(els.locker, !lockerOpen);
+    if (els.equipped) els.equipped.textContent = equippedLine();
+  }
+
+  function openLocker() {
+    lockerOpen = true;
+    syncHud();        // reveal first so the preview observer sees laid-out canvases
+    renderLocker();
+  }
+  function closeLocker() {
+    lockerOpen = false;
+    syncHud();
+  }
+
+  function showToast(msg, kind) {
+    const host = els.toast;
+    if (!host) return;
+    host.hidden = false;
+    const item = document.createElement('div');
+    item.className = 'games-fifi-toast-item' + (kind === 'unlock' ? ' is-unlock' : '');
+    item.setAttribute('role', 'status');
+    item.textContent = msg;
+    host.appendChild(item);
+    // Keep the stack shallow — drop the oldest if it piles up.
+    while (host.children.length > 3) host.removeChild(host.firstChild);
+    // Trigger the entrance transition on the next frame.
+    requestAnimationFrame(() => item.classList.add('is-in'));
+    window.setTimeout(() => {
+      item.classList.remove('is-in');
+      item.classList.add('is-out');
+      window.setTimeout(() => {
+        if (item.parentNode === host) host.removeChild(item);
+        if (!host.children.length) host.hidden = true;
+      }, 320);
+    }, kind === 'unlock' ? 3200 : 2400);
+  }
+
+  function loadSeenUnlocks() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem(UNLOCK_SEEN_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return {
+        skins: Array.isArray(parsed && parsed.skins) ? parsed.skins : ['original_blue'],
+        arenas: Array.isArray(parsed && parsed.arenas) ? parsed.arenas : ['meadow']
+      };
+    } catch (_) {
+      return { skins: ['original_blue'], arenas: ['meadow'] };
+    }
+  }
+  function saveSeenUnlocks(seen) {
+    try {
+      if (window.localStorage) window.localStorage.setItem(UNLOCK_SEEN_KEY, JSON.stringify(seen));
+    } catch (_) {}
+  }
+  function noteNewUnlocks(quiet) {
+    const seen = loadSeenUnlocks();
+    const fresh = [];
+    for (let i = 0; i < BIRD_SKINS.length; i++) {
+      const s = BIRD_SKINS[i];
+      if (isUnlocked(s.need) && seen.skins.indexOf(s.id) < 0) {
+        seen.skins.push(s.id);
+        if (s.need > 0) fresh.push(s.label);
+      }
+    }
+    for (let i = 0; i < ARENAS.length; i++) {
+      const a = ARENAS[i];
+      if (isUnlocked(a.need) && seen.arenas.indexOf(a.id) < 0) {
+        seen.arenas.push(a.id);
+        if (a.need > 0) fresh.push(a.label);
+      }
+    }
+    saveSeenUnlocks(seen);
+    if (!quiet && fresh.length) showToast('UNLOCKED  ' + fresh.slice(0, 3).join(' · ') + (fresh.length > 3 ? ' +' + (fresh.length - 3) : ''), 'unlock');
+  }
+
+  // ─── SKIN PREVIEW (locker) ───────────────────────────────────────────────────
+  // Render a clean, tightly-framed portrait of the actual bird sprite into each
+  // card's <canvas> — measured from the sprite's own alpha so every skin sits
+  // the same way, then painted contain-fit with a soft ground shadow. Sheets
+  // load lazily as cards scroll into view.
+  const skinSheetCache  = new Map();  // src -> Promise<HTMLImageElement>
+  const skinBoxCache     = new Map();  // src -> {sx,sy,sw,sh} tight frame-0 box
+  let   previewObserver  = null;
+
+  function loadSkinSheet(src) {
+    let p = skinSheetCache.get(src);
+    if (p) return p;
+    p = new Promise((resolve, reject) => {
+      const im = new Image();
+      im.decoding = 'async';
+      im.onload = () => resolve(im);
+      im.onerror = reject;
+      im.src = src;
+    });
+    skinSheetCache.set(src, p);
+    return p;
+  }
+
+  // Alpha-scan a downscaled copy of frame 0 to find the bird's tight bounds.
+  function measureSkinBox(img, src) {
+    const cached = skinBoxCache.get(src);
+    if (cached) return cached;
+    const fw = img.naturalWidth / BIRD_SPRITE_FRAMES;
+    const fh = img.naturalHeight;
+    let box = { sx: 0, sy: fh * 0.33, sw: fw, sh: fh * 0.30 };   // safe fallback
+    try {
+      const SW = 100, SH = Math.max(1, Math.round(SW * fh / fw));
+      const oc = document.createElement('canvas');
+      oc.width = SW; oc.height = SH;
+      const octx = oc.getContext('2d', { willReadFrequently: true });
+      octx.drawImage(img, 0, 0, fw, fh, 0, 0, SW, SH);
+      const d = octx.getImageData(0, 0, SW, SH).data;
+      let minX = SW, minY = SH, maxX = -1, maxY = -1;
+      for (let y = 0; y < SH; y++) {
+        for (let x = 0; x < SW; x++) {
+          if (d[(y * SW + x) * 4 + 3] > 12) {
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (maxX >= 0) {
+        const kx = fw / SW, ky = fh / SH;
+        const padX = (maxX - minX + 1) * 0.07, padY = (maxY - minY + 1) * 0.07;
+        const x0 = Math.max(0, minX - padX), y0 = Math.max(0, minY - padY);
+        const x1 = Math.min(SW, maxX + 1 + padX), y1 = Math.min(SH, maxY + 1 + padY);
+        box = { sx: x0 * kx, sy: y0 * ky, sw: (x1 - x0) * kx, sh: (y1 - y0) * ky };
+      }
+    } catch (_) { /* keep fallback */ }
+    skinBoxCache.set(src, box);
+    return box;
+  }
+
+  function paintSkinPreview(canvas, img, box) {
+    const cssW = canvas.clientWidth || 120;
+    const cssH = canvas.clientHeight || 74;
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width  = Math.round(cssW * ratio);
+    canvas.height = Math.round(cssH * ratio);
+    const g = canvas.getContext('2d');
+    if (!g) return;
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    g.imageSmoothingEnabled = true;
+    if (typeof g.imageSmoothingQuality === 'string') g.imageSmoothingQuality = 'high';
+    const fit = Math.min((canvas.width * 0.9) / box.sw, (canvas.height * 0.86) / box.sh);
+    const dw = box.sw * fit, dh = box.sh * fit;
+    const dx = (canvas.width - dw) / 2;
+    const dy = (canvas.height - dh) / 2 + canvas.height * 0.02;
+    g.save();
+    g.globalAlpha = 0.3;
+    g.fillStyle = '#000';
+    g.beginPath();
+    g.ellipse(canvas.width / 2, dy + dh * 0.9, dw * 0.33, dh * 0.07, 0, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+    g.drawImage(img, box.sx, box.sy, box.sw, box.sh, dx, dy, dw, dh);
+  }
+
+  function fillSkinCanvas(canvas) {
+    const src = canvas.dataset.src;
+    if (!src || canvas.dataset.painted === '1') return;
+    canvas.dataset.painted = '1';
+    loadSkinSheet(src)
+      .then((img) => { paintSkinPreview(canvas, img, measureSkinBox(img, src)); })
+      .catch(() => { canvas.dataset.painted = ''; });
+  }
+
+  function ensurePreviewObserver() {
+    if (previewObserver || typeof IntersectionObserver !== 'function') return;
+    previewObserver = new IntersectionObserver((entries) => {
+      for (let i = 0; i < entries.length; i++) {
+        if (entries[i].isIntersecting) {
+          const c = entries[i].target;
+          previewObserver.unobserve(c);
+          fillSkinCanvas(c);
+        }
+      }
+    }, { root: els.lockerGrid || null, rootMargin: '150px' });
+  }
+
+  function renderQuestStrip() {
+    const host = els.lockerQuest;
+    if (!host) return;
+    host.textContent = '';
+    if (unlockAll) { host.hidden = true; return; }
+    const g = nextLockedGoal();
+    host.hidden = false;
+    if (!g) {
+      host.dataset.state = 'done';
+      const done = document.createElement('span');
+      done.className = 'games-fifi-quest-label';
+      done.textContent = '✦ Every skin & arena unlocked';
+      host.appendChild(done);
+      return;
+    }
+    host.dataset.state = 'active';
+    const have = Math.max(0, Math.min(bestScore, g.need));
+    const pct = Math.round((have / g.need) * 100);
+
+    const tag = document.createElement('span');
+    tag.className = 'games-fifi-quest-tag';
+    tag.textContent = 'NEXT UNLOCK';
+    host.appendChild(tag);
+
+    const label = document.createElement('span');
+    label.className = 'games-fifi-quest-label';
+    label.textContent = (g.kind === 'arena' ? '🏙 ' : '🐦 ') + g.label;
+    host.appendChild(label);
+
+    const num = document.createElement('span');
+    num.className = 'games-fifi-quest-num';
+    num.textContent = have + ' / ' + g.need;
+    host.appendChild(num);
+
+    const bar = document.createElement('span');
+    bar.className = 'games-fifi-quest-bar';
+    const fill = document.createElement('i');
+    fill.style.width = pct + '%';
+    bar.appendChild(fill);
+    host.appendChild(bar);
+  }
+
+  function renderLocker() {
+    if (els.lockerBest) {
+      els.lockerBest.textContent = unlockAll ? 'All unlocked (dev)' : ('Lifetime best · ' + bestScore + ' gaps');
+    }
+    renderQuestStrip();
+    updateQuestHints();
+    if (els.equipped) els.equipped.textContent = equippedLine();
+    if (els.lockerTabs) {
+      const tabs = els.lockerTabs.querySelectorAll('[data-locker-tab]');
+      for (let i = 0; i < tabs.length; i++) {
+        const on = tabs[i].getAttribute('data-locker-tab') === lockerTab;
+        tabs[i].classList.toggle('is-active', on);
+        tabs[i].setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+    }
+    const host = els.lockerGrid;
+    if (!host) return;
+    if (previewObserver) previewObserver.disconnect();
+    host.textContent = '';
+    const items = lockerTab === 'arenas' ? ARENAS : BIRD_SKINS;
+    const selected = lockerTab === 'arenas' ? selectedArenaId : selectedSkinId;
+    const skinCanvases = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const open = isUnlocked(item.need);
+      const tier = tierForNeed(item.need);
+      const isOn = item.id === selected;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'games-fifi-locker-card' + (isOn ? ' is-selected' : '') + (open ? '' : ' is-locked');
+      btn.dataset.id = item.id;
+      btn.dataset.tier = tier;
+      btn.disabled = false;
+      btn.setAttribute('role', 'option');
+      btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+      btn.setAttribute('aria-selected', isOn ? 'true' : 'false');
+      btn.setAttribute('aria-disabled', open ? 'false' : 'true');
+
+      const art = document.createElement('span');
+      art.className = lockerTab === 'arenas' ? 'games-fifi-locker-thumb' : 'games-fifi-locker-swatch';
+      if (lockerTab === 'arenas') {
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.alt = '';
+        // Mirror drawBackground()'s own fallback: an arena whose art isn't in yet
+        // shows the Meadow thumbnail instead of a broken-image icon.
+        img.addEventListener('error', () => {
+          if (img.dataset.fallback) return;
+          img.dataset.fallback = '1';
+          img.src = BG_SPRITE_PATH;
+        });
+        img.src = item.src;
+        art.appendChild(img);
+      } else {
+        // Tightly-framed portrait of the real bird sprite, painted to a canvas.
+        art.style.setProperty('--chip', item.swatch || '#39ff14');
+        const cv = document.createElement('canvas');
+        cv.className = 'games-fifi-locker-bird';
+        cv.setAttribute('aria-hidden', 'true');
+        cv.dataset.src = skinPaths(item).bird;
+        art.appendChild(cv);
+        skinCanvases.push(cv);
+      }
+      btn.appendChild(art);
+
+      if ((tier === 'rare' || tier === 'elite') && open) {
+        const tag = document.createElement('span');
+        tag.className = 'games-fifi-locker-tier';
+        tag.textContent = tier === 'elite' ? 'ELITE' : 'RARE';
+        btn.appendChild(tag);
+      }
+
+      const name = document.createElement('span');
+      name.className = 'games-fifi-locker-card-name';
+      name.textContent = item.label;
+      btn.appendChild(name);
+
+      const meta = document.createElement('span');
+      meta.className = 'games-fifi-locker-card-meta';
+      meta.textContent = open
+        ? (isOn ? 'Equipped' : 'Tap to equip')
+        : ('Locked · ' + Math.max(0, Math.min(bestScore, item.need)) + ' / ' + item.need + ' gaps');
+      btn.appendChild(meta);
+
+      if (!open) {
+        const cardbar = document.createElement('span');
+        cardbar.className = 'games-fifi-locker-cardbar';
+        const cf = document.createElement('i');
+        cf.style.width = Math.round((Math.max(0, Math.min(bestScore, item.need)) / item.need) * 100) + '%';
+        cardbar.appendChild(cf);
+        btn.appendChild(cardbar);
+
+        const lock = document.createElement('span');
+        lock.className = 'games-fifi-locker-lock';
+        lock.setAttribute('aria-hidden', 'true');
+        lock.textContent = '🔒';
+        btn.appendChild(lock);
+      } else if (isOn) {
+        const badge = document.createElement('span');
+        badge.className = 'games-fifi-locker-badge';
+        badge.textContent = 'ON';
+        btn.appendChild(badge);
+      }
+
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (!open) {
+          showToast('Score ' + item.need + ' to unlock ' + item.label);
+          return;
+        }
+        if (lockerTab === 'arenas') selectArena(item.id);
+        else selectSkin(item.id);
+      });
+      host.appendChild(btn);
+    }
+
+    // Paint skin portraits: lazily via the observer, or straight away if the
+    // browser has no IntersectionObserver.
+    if (skinCanvases.length) {
+      ensurePreviewObserver();
+      for (let i = 0; i < skinCanvases.length; i++) {
+        if (previewObserver) previewObserver.observe(skinCanvases[i]);
+        else fillSkinCanvas(skinCanvases[i]);
+      }
+    }
+  }
+
+  function wireLocker() {
+    const openers = [els.lockerOpen, els.overLocker, els.menuLockerBtn];
+    for (let i = 0; i < openers.length; i++) {
+      if (!openers[i]) continue;
+      openers[i].addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (gameState === S_PLAYING || gameState === S_DYING || gameState === S_READY) return;
+        openLocker();
+      });
+    }
+    if (els.lockerClose) {
+      els.lockerClose.addEventListener('click', (ev) => { ev.stopPropagation(); closeLocker(); });
+    }
+    if (els.locker) {
+      els.locker.addEventListener('click', (ev) => {
+        if (ev.target === els.locker) closeLocker();
+      });
+    }
+    if (els.lockerTabs) {
+      els.lockerTabs.addEventListener('click', (ev) => {
+        const tab = ev.target && ev.target.closest ? ev.target.closest('[data-locker-tab]') : null;
+        if (!tab) return;
+        lockerTab = tab.getAttribute('data-locker-tab') === 'arenas' ? 'arenas' : 'birds';
+        renderLocker();
+      });
+    }
+    if (els.playBtn) {
+      els.playBtn.addEventListener('click', (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        closeLocker();
+        void enterReady();
+      });
+    }
+    if (els.againBtn) {
+      els.againBtn.addEventListener('click', (ev) => {
+        ev.preventDefault(); ev.stopPropagation();
+        closeLocker();
+        void enterReady();
+      });
+    }
   }
 
   // ─── REDUCE MOTION ────────────────────────────────────────────────────────────
@@ -1025,6 +1960,9 @@
     if (!canvas) return;
     ctx = canvas.getContext('2d', { alpha: false });
 
+    const storedGhost = loadGhostBest();
+    if (storedGhost) { ghostSamples = storedGhost.samples; ghostScore = storedGhost.score; }
+
     els.best     = $('fifi-bird-stat-best');
     els.runs     = $('fifi-bird-stat-runs');
     els.pipes    = $('fifi-bird-stat-pipes');
@@ -1032,8 +1970,24 @@
     els.scoreHud = $('fifi-bird-run-score');
     els.hint     = $('fifi-bird-hint');
     els.wrap     = $('fifi-bird-canvas-wrap');
-    els.soundBtn = $('fifi-bird-sound-btn');
-    els.fsBtn    = $('fifi-bird-fullscreen-btn');
+    els.soundBtn      = $('fifi-bird-sound-btn');
+    els.fsBtn         = $('fifi-bird-fullscreen-btn');
+    els.menuHud       = $('fifi-bird-menu');
+    els.overHud       = $('fifi-bird-over');
+    els.playBtn       = $('fifi-bird-play-btn');
+    els.againBtn      = $('fifi-bird-again-btn');
+    els.locker        = $('fifi-bird-locker');
+    els.lockerGrid    = $('fifi-bird-locker-grid');
+    els.lockerBest    = $('fifi-bird-locker-best');
+    els.lockerClose   = $('fifi-bird-locker-close');
+    els.lockerTabs    = document.querySelector('.games-fifi-locker-tabs');
+    els.lockerOpen    = $('fifi-bird-locker-open');
+    els.overLocker    = $('fifi-bird-over-locker');
+    els.menuLockerBtn = $('fifi-bird-menu-locker-btn');
+    els.toast         = $('fifi-bird-toast');
+    els.equipped      = $('fifi-bird-equipped');
+    els.lockerQuest   = $('fifi-bird-locker-quest');
+    els.menuQuest     = $('fifi-bird-menu-quest');
 
     syncSpeedFromReduceMotion();
     const mq = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -1050,6 +2004,13 @@
     document.addEventListener('keydown', onKey);
     wireSoundButton();
     wireFullscreenButton();
+
+    // Preload squelch samples so the death impact isn't delayed on first hit.
+    const ac = getAudio();
+    if (ac) {
+      ensureFlapBuffer(ac);
+      ensureImpactBuffer(ac);
+    }
     document.addEventListener('fuqmea-fifi-progress-sync', () => void refreshStats());
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && document.querySelector('[data-tab-panel="fifi"]:not([hidden])')) {
@@ -1057,9 +2018,13 @@
       }
     });
 
-    loadBirdSprite();
-    loadBgSprite();
-    loadPipeSprite();
+    loadCosmetics();
+    // Optimistically show the stored skin/arena now; refreshStats() runs the
+    // authoritative clamp + unlock seeding once the real best score is known.
+    applySelectedCosmetics();
+    wireLocker();
+    renderLocker();
+    syncHud();
 
     // Start screen is on-canvas; hide the HTML overlay hint
     if (els.hint) els.hint.hidden = true;

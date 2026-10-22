@@ -1,6 +1,8 @@
-// Verifies caller has 'admin' or 'vivid' role, uploads file to Cloudflare R2
-// under the `fifi/` prefix, and returns its public URL. The caller (vivid
-// admin panel) writes the URL into fifi_zone_settings via set_fifi_zone_settings.
+// Verifies caller has 'admin' role, uploads file to Cloudflare R2 under the
+// `fifi/` prefix, and returns its public URL. The caller (vivid admin panel)
+// writes the URL into fifi_zone_settings via set_fifi_zone_settings.
+// The 'vivid' role was retired (see migration 20260513130000) and is no
+// longer accepted here.
 //
 // Required Edge Function secrets (Supabase Dashboard → Edge Functions → Secrets):
 //   R2_ACCOUNT_ID         — Cloudflare account ID
@@ -78,7 +80,7 @@ Deno.serve(async (req) => {
 
     const { data: { user } } = await userClient.auth.getUser();
     const role = (user?.app_metadata as { role?: string } | undefined)?.role;
-    if (!user || (role !== 'admin' && role !== 'vivid')) {
+    if (!user || role !== 'admin') {
       return json({ error: 'not authorized' }, 403);
     }
 
