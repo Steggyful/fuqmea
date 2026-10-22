@@ -56,7 +56,7 @@
     { id: 'fuqmea_lime',   label: 'Fuqmea',    need: 5,   swatch: '#39ff14', bird: SKIN_DIR + 'fifi_sprite_fuqmea_lime.png', pipe: SKIN_DIR + 'fifi_pipe_fuqmea_lime.png' },
     { id: 'crimson',       label: 'Crimson',   need: 10,  swatch: '#c41414' },
     { id: 'sunset_orange', label: 'Sunset',    need: 15,  swatch: '#e06010' },
-    { id: 'gold',          label: 'Gold',      need: 20,  swatch: '#d4a017' },
+    { id: 'gold',          label: 'Gold',      need: 100, swatch: '#d4a017' }, // capstone — highest need of any skin
     { id: 'fuqmea_hazard', label: 'Hazard',    need: 25,  swatch: '#ffff00', bird: SKIN_DIR + 'fifi_sprite_fuqmea_hazard.png', pipe: SKIN_DIR + 'fifi_pipe_fuqmea_hazard.png' },
     { id: 'teal',          label: 'Teal',      need: 30,  swatch: '#1aa8a8' },
     { id: 'hot_pink',      label: 'Hot Pink',  need: 35,  swatch: '#e02080' },
@@ -65,7 +65,7 @@
     { id: 'midnight',      label: 'Midnight',  need: 60,  swatch: '#3a1a80' },
     { id: 'solar',         label: 'Solar',     need: 70,  swatch: '#f0c000' },
     { id: 'pearl',         label: 'Pearl',     need: 85,  swatch: '#d0d8e0' },
-    { id: 'obsidian',      label: 'Obsidian',  need: 100, swatch: '#1a2430' },
+    { id: 'obsidian',      label: 'Obsidian',  need: 20,  swatch: '#1a2430' },
     { id: 'lime',          label: 'Lime',      need: 12,  swatch: '#32c428' },
     { id: 'mint',          label: 'Mint',      need: 18,  swatch: '#3ecf9a' },
     { id: 'forest',        label: 'Forest',    need: 22,  swatch: '#1e7a28' },
@@ -75,14 +75,19 @@
     { id: 'copper',        label: 'Copper',    need: 65,  swatch: '#b06020' },
     { id: 'slate',         label: 'Slate',     need: 80,  swatch: '#6a7380' }
   ];
+  // Arena needs are deliberately offset from the skin ladder below (8/28/42/58/75/92
+  // vs skins' 5/10/12.../100) rather than landing on the same numbers — six of them
+  // used to fall on an exact skin threshold too, so the ladder delivered nothing for
+  // long stretches and then two rewards at once. Staggered, something new unlocks
+  // roughly every 2-5 gaps almost everywhere, widening only near the very end.
   const ARENAS = [
     { id: 'meadow',         label: 'Meadow',    need: 0,   src: BG_SPRITE_PATH },
-    { id: 'sunset_city',    label: 'Sunset',    need: 15,  src: ARENA_DIR + 'sunset_city_scroll.png' },
-    { id: 'terminal_city',  label: 'Terminal',  need: 25,  src: ARENA_DIR + 'terminal_city.jpg' },
-    { id: 'night_city',     label: 'Night',     need: 35,  src: ARENA_DIR + 'night_city_scroll.png' },
-    { id: 'neon_rooftop',   label: 'Rooftop',   need: 50,  src: ARENA_DIR + 'neon_rooftop_scroll.png' },
-    { id: 'toxic_meadow',   label: 'Toxic',     need: 65,  src: ARENA_DIR + 'toxic_meadow_scroll.png' },
-    { id: 'spaceship',      label: 'Ship',      need: 80,  src: ARENA_DIR + 'spaceship_scroll.png' }
+    { id: 'sunset_city',    label: 'Sunset',    need: 8,   src: ARENA_DIR + 'sunset_city_scroll.png' },
+    { id: 'terminal_city',  label: 'Terminal',  need: 28,  src: ARENA_DIR + 'terminal_city.jpg' },
+    { id: 'night_city',     label: 'Night',     need: 42,  src: ARENA_DIR + 'night_city_scroll.png' },
+    { id: 'neon_rooftop',   label: 'Rooftop',   need: 58,  src: ARENA_DIR + 'neon_rooftop_scroll.png' },
+    { id: 'toxic_meadow',   label: 'Toxic',     need: 75,  src: ARENA_DIR + 'toxic_meadow_scroll.png' },
+    { id: 'spaceship',      label: 'Ship',      need: 92,  src: ARENA_DIR + 'spaceship_scroll.png' }
   ];
 
   BIRD_SKINS.sort((a, b) => a.need - b.need || a.label.localeCompare(b.label));
@@ -979,6 +984,14 @@
     if (!lastTs) lastTs = ts;
     const dt = Math.min(32, ts - lastTs);
     lastTs = ts;
+
+    // The locker is a DOM overlay with backdrop-filter: blur() — cheap over the
+    // small windowed canvas, but re-blurring a full-screen backdrop every tick
+    // got expensive in fullscreen. Nothing behind it needs to keep animating
+    // (the locker can only open on the idle/game-over screens anyway), so just
+    // freeze the canvas instead of redrawing a frame nobody can see move.
+    if (lockerOpen) return;
+
     const rawScale = dt / 16.67;
     // EMA smoothing: a single delayed frame (e.g. just after a tap) doesn't
     // produce a one-frame leap in pipes/bird — extra dt is spread across the
@@ -1378,7 +1391,7 @@
     const paths = skinPaths(skin);
     loadBirdSprite(paths.bird);
     loadPipeSprite(paths.pipe);
-    renderLocker();
+    updateLockerSelection();
     return true;
   }
   function selectArena(id) {
@@ -1387,8 +1400,40 @@
     selectedArenaId = arena.id;
     saveCosmetics();
     loadBgSprite(arena.src);
-    renderLocker();
+    updateLockerSelection();
     return true;
+  }
+
+  // Swapping skins/arenas used to call the full renderLocker(), which wipes and
+  // rebuilds every card (and repaints every skin canvas) from scratch — visible
+  // as the whole grid flashing on every tap. Just move the selected/equipped
+  // state between the two affected cards instead.
+  function updateLockerSelection() {
+    if (els.equipped) els.equipped.textContent = equippedLine();
+    const host = els.lockerGrid;
+    if (!host) return;
+    const selected = lockerTab === 'arenas' ? selectedArenaId : selectedSkinId;
+    const cards = host.querySelectorAll('.games-fifi-locker-card');
+    for (let i = 0; i < cards.length; i++) {
+      const btn = cards[i];
+      const isOn = btn.dataset.id === selected;
+      if (isOn === btn.classList.contains('is-selected')) continue;
+      btn.classList.toggle('is-selected', isOn);
+      btn.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+      btn.setAttribute('aria-selected', isOn ? 'true' : 'false');
+      if (btn.classList.contains('is-locked')) continue; // meta/badge below only exist on unlocked cards
+      const meta = btn.querySelector('.games-fifi-locker-card-meta');
+      if (meta) meta.textContent = isOn ? 'Equipped' : 'Tap to equip';
+      let badge = btn.querySelector('.games-fifi-locker-badge');
+      if (isOn && !badge) {
+        badge = document.createElement('span');
+        badge.className = 'games-fifi-locker-badge';
+        badge.textContent = 'ON';
+        btn.appendChild(badge);
+      } else if (!isOn && badge) {
+        badge.remove();
+      }
+    }
   }
 
   function equippedLine() {
@@ -1606,7 +1651,7 @@
 
     const tag = document.createElement('span');
     tag.className = 'games-fifi-quest-tag';
-    tag.textContent = 'NEXT QUEST';
+    tag.textContent = 'NEXT UNLOCK';
     host.appendChild(tag);
 
     const label = document.createElement('span');
@@ -1709,7 +1754,7 @@
       meta.className = 'games-fifi-locker-card-meta';
       meta.textContent = open
         ? (isOn ? 'Equipped' : 'Tap to equip')
-        : ('Quest · ' + Math.max(0, Math.min(bestScore, item.need)) + ' / ' + item.need + ' gaps');
+        : ('Locked · ' + Math.max(0, Math.min(bestScore, item.need)) + ' / ' + item.need + ' gaps');
       btn.appendChild(meta);
 
       if (!open) {

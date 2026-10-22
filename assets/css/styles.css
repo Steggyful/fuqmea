@@ -5253,6 +5253,12 @@ body.fifi-bird-fs-lock {
 .games-fifi-canvas-wrap:-webkit-full-screen .games-fifi-locker,
 .games-fifi-canvas-wrap.is-pseudo-fullscreen .games-fifi-locker {
   padding: max(0.5rem, env(safe-area-inset-top)) 0.55rem max(0.5rem, env(safe-area-inset-bottom));
+  /* backdrop-filter's blur cost scales with the blurred area — cheap over the
+     small windowed canvas, expensive over a full monitor. The canvas is frozen
+     behind the locker anyway, so there's nothing a blur is hiding motion from;
+     drop it here and keep the solid gradient background for contrast instead. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 @media (min-width: 720px) {
