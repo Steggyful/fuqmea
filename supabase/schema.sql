@@ -1226,7 +1226,11 @@ grant execute on function public.admin_reset_weekly(uuid) to authenticated;
 grant execute on function public.admin_list_users() to authenticated;
 
 -- ── Vivid Admin ──────────────────────────────────────────────────────────────
--- Grant role via Supabase Dashboard → Auth → Users → Edit → app_metadata: {"role":"vivid"}
+-- The 'vivid' app_metadata role is retired (see migration
+-- 20260513130000_retire_vivid_role.sql) — every function below now requires
+-- 'admin'. This table/schema block is otherwise stale relative to the later
+-- fifi_zone_settings migrations (song/song_credit columns, 7-param
+-- set_fifi_zone_settings) and isn't reconciled here.
 
 create table if not exists public.fifi_zone_settings (
   id smallint primary key check (id = 1),
@@ -1277,7 +1281,7 @@ declare
   v_tt   text := nullif(trim(coalesce(p_tagline_text, '')), '');
   v_tu   text := nullif(trim(coalesce(p_tagline_url,  '')), '');
 begin
-  if v_role not in ('admin', 'vivid') then raise exception 'not authorized'; end if;
+  if v_role <> 'admin' then raise exception 'not authorized'; end if;
   if v_img is not null and char_length(v_img) > 500 then raise exception 'image_url too long'; end if;
   if v_cap is not null and char_length(v_cap) > 200 then raise exception 'caption too long'; end if;
   if v_tt  is not null and char_length(v_tt)  > 120 then raise exception 'tagline_text too long'; end if;

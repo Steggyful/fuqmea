@@ -10,7 +10,7 @@ const R2_PUBLIC_BASE = 'https://memes.fuqmea.com';
 
 /** If gallery.json is missing or fails to load; paths must exist in the repo. */
 const FALLBACK_GALLERY_PATHS = [
-  'assets/images/01 Vivid - Shocked.jpg',
+  'assets/images/Angry - Happy For You.jpg',
   'assets/images/Cat - Smile.JPG',
   'assets/images/Emoji - Bonk.png'
 ];

@@ -2052,7 +2052,10 @@ h1 {
 
 .home-socials-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  /* auto-fit + justify-content so a single card centers instead of leaving an
+     empty second column (was a fixed 2-column grid). */
+  grid-template-columns: repeat(auto-fit, minmax(280px, 340px));
+  justify-content: center;
   gap: 1.4rem;
   align-items: stretch;
 }
@@ -2150,7 +2153,7 @@ h1 {
   }
 
   .home-socials-grid {
-    grid-template-columns: repeat(2, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(320px, 380px));
     gap: 2.2rem;
   }
 
@@ -2910,7 +2913,7 @@ h1 {
   }
 
   .home-socials-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 0.65rem;
   }
 
