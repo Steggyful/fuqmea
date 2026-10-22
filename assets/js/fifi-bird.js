@@ -240,7 +240,6 @@
   let flashAmt   = 0;
   let deadTs     = 0;    // RAF timestamp when S_DEAD was entered
   let deathWasNewBest = false;
-  let winParticles = [];  // new-best confetti on the game-over panel
 
   // ─── SERVER SESSION ───────────────────────────────────────────────────────────
   let runSessionId   = null;
@@ -813,47 +812,6 @@
     return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
   }
 
-  // ─── NEW-BEST CONFETTI ───────────────────────────────────────────────────────
-  const WIN_PARTICLE_COLORS = ['#39ff14', '#ffff00', '#7ec8e0', '#ffffff', '#00e8ff'];
-  function spawnWinParticles() {
-    winParticles = [];
-    if (reduceMotion || !deathWasNewBest) return;
-    for (let i = 0; i < 22; i++) {
-      const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
-      const spd = 120 + Math.random() * 240;   // px/s
-      winParticles.push({
-        x0: W / 2 + (Math.random() - 0.5) * 90,
-        y0: H * 0.3,
-        vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd,
-        size: 3 + Math.random() * 4,
-        rot: Math.random() * Math.PI,
-        spin: (Math.random() - 0.5) * 12,
-        color: WIN_PARTICLE_COLORS[i % WIN_PARTICLE_COLORS.length]
-      });
-    }
-  }
-  function drawWinParticles(now) {
-    if (!winParticles.length) return;
-    const t = (now - deadTs) / 1000;
-    if (t > 1.9) { winParticles = []; return; }
-    const G = 520;   // px/s^2
-    const fade = Math.max(0, 1 - t / 1.9);
-    for (let i = 0; i < winParticles.length; i++) {
-      const p = winParticles[i];
-      const x = p.x0 + p.vx * t;
-      const y = p.y0 + p.vy * t + 0.5 * G * t * t;
-      if (y > H + 20) continue;
-      ctx.save();
-      ctx.globalAlpha = fade;
-      ctx.translate(x, y);
-      ctx.rotate(p.rot + p.spin * t);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.6);
-      ctx.restore();
-    }
-  }
-
   function drawGameOverScreen(now) {
     const elapsed = now - deadTs;
     ctx.fillStyle = 'rgba(0,0,0,0.56)';
@@ -944,7 +902,6 @@
     }
 
     ctx.restore();
-    drawWinParticles(now);
   }
 
   // ─── MAIN RENDER ─────────────────────────────────────────────────────────────
@@ -1093,7 +1050,6 @@
         gameState = S_DEAD;
         deadTs = ts;
         deathWasNewBest = score > 0 && score > bestScore;
-        spawnWinParticles();
         if (deathWasNewBest) vibrate([20, 40, 20, 40, 20]);
         void endRound();
       }
@@ -1282,7 +1238,6 @@
       birdY = PLAY_H * 0.46; birdVy = 0; birdAngle = 0;
       smoothedDtScale = 1;
       deathWasNewBest = false;
-      winParticles = [];
       ghostRecording = []; ghostAngle = 0;
       runSessionId = null; runStartedPerf = null; runRng = null;
       if (els.scoreHud) els.scoreHud.textContent = '0';
