@@ -904,13 +904,15 @@ async function startRotator() {
   const sourceList = await loadGalleryList();
   if (!sourceList.length) return;
 
-  const firstImage = sourceList[0];
+  // loadGalleryList() pins gallery.json's "featured" entry to index 0, which
+  // used to mean the rotator's very first slide was always that one fixed
+  // image rather than a random one. Shuffle the whole pool so every slide,
+  // including the first, is random per page load.
   const uniqueSources = [...new Set(sourceList)];
-  const randomPool = uniqueSources.filter(src => src !== firstImage);
-  shuffleArray(randomPool);
+  shuffleArray(uniqueSources);
 
   const maxRandomSlides = getMaxRotatorSlides();
-  const rotatorList = [firstImage, ...randomPool.slice(0, maxRandomSlides)];
+  const rotatorList = uniqueSources.slice(0, maxRandomSlides + 1);
 
   rotatorList.forEach((src, i) => {
     const img = document.createElement('img');
@@ -1423,7 +1425,7 @@ function parseMockLiveStatuses() {
   const result = new Map();
   if (!mockLiveParam) return result;
 
-  // Format: ?mockLive=ssgvivid:tiktok:420,steggyful1:twitch:77
+  // Format: ?mockLive=steggyful1:twitch:77
   mockLiveParam.split(',').map(x => x.trim()).filter(Boolean).forEach(entry => {
     const [usernameRaw, platformRaw, viewersRaw] = entry.split(':');
     const username = (usernameRaw || '').trim().toLowerCase();
@@ -1639,21 +1641,17 @@ function initLiveStatus() {
   // Avoid header-strip flash on load: keep hidden until we have confirmed live data.
   setLiveStatusVisibility(false);
   setStreamerCardVisibility('steggyful1', false);
-  setStreamerCardVisibility('ssgvivid', false);
 
   if (!LIVE_STATUS_ENABLED) {
     updateStreamerLive("steggyful1", "live-steggyful1", "live-text-steggyful1");
-    updateStreamerLive("ssgvivid", "live-ssgvivid", "live-text-ssgvivid");
     return;
   }
 
   updateStreamerLive("steggyful1", "live-steggyful1", "live-text-steggyful1");
-  updateStreamerLive("ssgvivid", "live-ssgvivid", "live-text-ssgvivid");
 
   liveStatusIntervalId = window.setInterval(() => {
     if (document.hidden) return;
     updateStreamerLive("steggyful1", "live-steggyful1", "live-text-steggyful1");
-    updateStreamerLive("ssgvivid", "live-ssgvivid", "live-text-ssgvivid");
   }, LIVE_STATUS_INTERVAL_MS);
 
   // Debounce visibility change to avoid flashing when switching tabs
@@ -1666,14 +1664,11 @@ function initLiveStatus() {
       visibilityTimeout = setTimeout(() => {
         const now = Date.now();
         const cache1 = liveStatusCache.get('steggyful1');
-        const cache2 = liveStatusCache.get('ssgvivid');
         const cacheAge1 = cache1 ? now - cache1.checkedAt : Infinity;
-        const cacheAge2 = cache2 ? now - cache2.checkedAt : Infinity;
-        
+
         // Only update if cache is older than 10 seconds
-        if (cacheAge1 > 10000 || cacheAge2 > 10000) {
+        if (cacheAge1 > 10000) {
           updateStreamerLive("steggyful1", "live-steggyful1", "live-text-steggyful1");
-          updateStreamerLive("ssgvivid", "live-ssgvivid", "live-text-ssgvivid");
         }
       }, 500);
     }
