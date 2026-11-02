@@ -943,6 +943,16 @@ to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
 
+-- record_fifi_bird_run() does `select ... for update` against this table to
+-- validate the run before consuming it; without a select policy that always
+-- returns zero rows under RLS, so every recorded run would fail as
+-- fifi_invalid_run regardless of whether the insert above succeeded.
+drop policy if exists fifi_bird_run_sessions_owner_select on public.fifi_bird_run_sessions;
+create policy fifi_bird_run_sessions_owner_select
+on public.fifi_bird_run_sessions for select
+to authenticated
+using (auth.uid() = user_id);
+
 grant select, insert, update on public.fifi_bird_run_sessions to authenticated;
 
 create or replace function public.start_fifi_bird_run()
@@ -972,7 +982,7 @@ begin
   return query
   insert into public.fifi_bird_run_sessions (user_id, seed)
   values (v_uid, v_seed)
-  returning id, seed;
+  returning id, fifi_bird_run_sessions.seed;
 end;
 $$;
 
