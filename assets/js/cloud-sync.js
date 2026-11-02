@@ -1672,7 +1672,9 @@
       await hydrateWalletAfterLogin().catch(() => {});
       await mergeFifiWorkingLocalIntoCloudOnce().catch(() => {});
       try {
-        window.dispatchEvent(new CustomEvent('fuqmea-fifi-progress-sync'));
+        // fifi-bird.js listens on `document`, not `window` -- these are
+        // different EventTargets, so dispatching on window never reached it.
+        document.dispatchEvent(new CustomEvent('fuqmea-fifi-progress-sync'));
       } catch (_) {
         /**/
       }
