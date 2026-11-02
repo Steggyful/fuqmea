@@ -11,9 +11,9 @@
   <meta property="og:description" content="Aura farm (crash-style), blackjack, coin flip, RPS, slots · fun FUQ tokens">
   <meta property="og:url" content="https://fuqmea.com/games.html">
   <meta name="twitter:card" content="summary">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://*.functions.supabase.co https://www.google-analytics.com https://*.analytics.google.com https://*.google-analytics.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://decapi.me https://www.tiktok.com https://*.supabase.co https://*.functions.supabase.co wss://*.supabase.co https://www.google-analytics.com https://*.analytics.google.com https://*.google-analytics.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'">
   <title>fuqmea.com • GAMES</title>
-  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.67">
+  <link rel="stylesheet" href="assets/css/styles.css?v=2.2.80">
   <script src="assets/js/cookie-consent.js?v=1.0.0"></script>
 </head>
 <body class="games-page">
@@ -276,58 +276,96 @@
         </div>
 
         <div class="games-tab-panel" id="games-panel-bj" role="tabpanel" aria-labelledby="games-tab-bj" data-tab-panel="bj">
-          <section class="games-card games-card--bj" aria-labelledby="bj-title">
-            <h2 id="bj-title">FUQ BLACKJACK</h2>
-            <div class="games-win-streak-bar games-win-streak-bar--bj" aria-label="Blackjack win streak">
-              <span class="games-win-streak-pair"><span class="games-win-streak-label">Win streak</span> <strong id="bj-win-streak-current" class="games-win-streak-val">0</strong></span>
-              <span class="games-win-streak-dot" aria-hidden="true">·</span>
-              <span class="games-win-streak-pair"><span class="games-win-streak-label">Best</span> <strong id="bj-win-streak-best" class="games-win-streak-val">0</strong></span>
-            </div>
-            <p class="games-rules">Fresh deck every hand. Dealer hits <strong>soft 17</strong>. Blackjack pays <strong>3:2</strong>. You can <strong>split</strong> any active pair repeatedly as long as you keep matching pairs and can cover the stake. <strong>Double</strong> is allowed on split hands too.</p>
-            <div class="games-fieldset">
-              <span class="games-label">Bet</span>
-              <div class="games-bet-row games-bet-row--bj">
-                <label class="games-bet-active"><input type="radio" name="bj-bet" value="5" id="bj-bet-5" checked> 5</label>
-                <label><input type="radio" name="bj-bet" value="10" id="bj-bet-10"> 10</label>
-                <label><input type="radio" name="bj-bet" value="25" id="bj-bet-25"> 25</label>
-                <label><input type="radio" name="bj-bet" value="50" id="bj-bet-50"> 50</label>
-                <label><input type="radio" name="bj-bet" value="100" id="bj-bet-100"> 100</label>
+          <section class="games-card games-card--bj games-bj-wrap" aria-labelledby="bj-title">
+            <div class="games-bj-main">
+              <h2 id="bj-title">FUQ BLACKJACK</h2>
+              <div class="games-win-streak-bar games-win-streak-bar--bj" aria-label="Blackjack win streak">
+                <span class="games-win-streak-pair"><span class="games-win-streak-label">Win streak</span> <strong id="bj-win-streak-current" class="games-win-streak-val">0</strong></span>
+                <span class="games-win-streak-dot" aria-hidden="true">·</span>
+                <span class="games-win-streak-pair"><span class="games-win-streak-label">Best</span> <strong id="bj-win-streak-best" class="games-win-streak-val">0</strong></span>
               </div>
-            </div>
-            <div class="games-bj-table" aria-label="Blackjack table">
-              <div class="games-bj-hand games-bj-hand--dealer">
-                <div class="games-bj-hand-head">
-                  <span class="games-bj-hand-title">Dealer</span>
-                  <span class="games-bj-hand-score" id="bj-dealer-score" aria-live="polite">—</span>
+              <p class="games-rules">Fresh deck every hand. Dealer hits <strong>soft 17</strong>. Blackjack pays <strong>3:2</strong>. You can <strong>split</strong> any active pair repeatedly as long as you keep matching pairs and can cover the stake. <strong>Double</strong> is allowed on split hands too.</p>
+              <div class="games-fieldset">
+                <div class="games-bj-bet-head">
+                  <span class="games-label">Bet</span>
+                  <span class="games-bj-bet-balance" aria-hidden="true">
+                    <span class="games-bj-bet-balance-label">Balance</span>
+                    <span class="games-bj-bet-balance-value js-games-balance">200</span>
+                    <span class="games-bj-bet-balance-unit">FUQ</span>
+                  </span>
                 </div>
-                <div class="games-bj-cards" id="bj-dealer-cards" aria-live="polite"></div>
-              </div>
-              <div class="games-bj-hand games-bj-hand--player">
-                <div class="games-bj-hand-head">
-                  <span class="games-bj-hand-title">You</span>
+                <div class="games-bet-row games-bet-row--bj">
+                  <label class="games-bet-active"><input type="radio" name="bj-bet" value="5" id="bj-bet-5" checked> 5</label>
+                  <label><input type="radio" name="bj-bet" value="10" id="bj-bet-10"> 10</label>
+                  <label><input type="radio" name="bj-bet" value="25" id="bj-bet-25"> 25</label>
+                  <label><input type="radio" name="bj-bet" value="50" id="bj-bet-50"> 50</label>
+                  <label><input type="radio" name="bj-bet" value="100" id="bj-bet-100"> 100</label>
                 </div>
-                <div id="bj-player-hands" class="games-bj-player-hands" aria-live="polite"></div>
+              </div>
+              <div class="games-bj-table" aria-label="Blackjack table">
+                <div class="games-bj-table-seats" id="bj-table-seats" aria-label="Who's at the table"></div>
+                <div class="games-bj-hand games-bj-hand--dealer">
+                  <div class="games-bj-hand-head">
+                    <span class="games-bj-hand-title">Dealer</span>
+                    <span class="games-bj-hand-score" id="bj-dealer-score" aria-live="polite">—</span>
+                  </div>
+                  <div class="games-bj-cards" id="bj-dealer-cards" aria-live="polite"></div>
+                </div>
+                <div class="games-bj-table-divider" aria-hidden="true"></div>
+                <div class="games-bj-hand games-bj-hand--player">
+                  <div class="games-bj-hand-head">
+                    <span class="games-bj-hand-title">You</span>
+                  </div>
+                  <div id="bj-player-hands" class="games-bj-player-hands" aria-live="polite"></div>
+                </div>
+              </div>
+              <div class="games-bj-actions">
+                <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--deal" id="bj-deal-btn">DEAL</button>
+                <div class="games-bj-play-row games-bj-play-row--concealed" id="bj-play-buttons" hidden>
+                  <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--hit" id="bj-hit-btn">HIT</button>
+                  <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--stand" id="bj-stand-btn">STAND</button>
+                  <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--double" id="bj-double-btn" title="Double this hand’s bet, take exactly one more card">DOUBLE</button>
+                  <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--split" id="bj-split-btn" title="Split pair into two hands (costs another bet)">SPLIT</button>
+                </div>
+              </div>
+              <div class="games-result-dock">
+                <div id="bj-outcome" class="games-outcome games-outcome--pending games-outcome--dock" aria-live="polite">
+                  <span class="games-outcome-badge" id="bj-outcome-badge">···</span>
+                  <span class="games-outcome-sub" id="bj-outcome-sub">Pick a bet and deal</span>
+                </div>
               </div>
             </div>
-            <div class="games-bj-actions">
-              <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--deal" id="bj-deal-btn">DEAL</button>
-              <div class="games-bj-play-row games-bj-play-row--concealed" id="bj-play-buttons" hidden>
-                <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--hit" id="bj-hit-btn">HIT</button>
-                <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--stand" id="bj-stand-btn">STAND</button>
-                <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--double" id="bj-double-btn" title="Double this hand’s bet, take exactly one more card">DOUBLE</button>
-                <button type="button" class="button games-action-btn games-bj-btn games-bj-btn--split" id="bj-split-btn" title="Split pair into two hands (costs another bet)">SPLIT</button>
+
+            <div class="games-bj-lobby" aria-labelledby="bj-lobby-title">
+              <div class="games-bj-lobby-head">
+                <h2 id="bj-lobby-title">TABLE CHAT</h2>
+                <span class="games-bj-lobby-status-wrap">
+                  <i class="games-bj-lobby-live-dot" id="bj-lobby-live-dot" aria-hidden="true" hidden></i>
+                  <span class="games-bj-lobby-status" id="bj-lobby-status">connecting…</span>
+                </span>
               </div>
-            </div>
-            <div class="games-result-dock">
-              <div id="bj-outcome" class="games-outcome games-outcome--pending games-outcome--dock" aria-live="polite">
-                <span class="games-outcome-badge" id="bj-outcome-badge">···</span>
-                <span class="games-outcome-sub" id="bj-outcome-sub">Pick a bet and deal</span>
+              <div class="games-bj-lobby-who" id="bj-lobby-who" aria-label="Who's at the table"></div>
+              <div class="games-bj-lobby-namegate" id="bj-lobby-namegate" hidden>
+                <label for="bj-lobby-name-input" class="games-label">Pick a table name</label>
+                <div class="games-bj-lobby-namegate-row">
+                  <input type="text" class="games-bj-lobby-input" id="bj-lobby-name-input" maxlength="24" placeholder="e.g. DuckHunter">
+                  <button type="button" class="button games-action-btn games-bj-lobby-send" id="bj-lobby-name-save">JOIN</button>
+                </div>
               </div>
-              <div class="games-result-dock-balance" aria-hidden="true">
-                <span class="games-result-dock-balance-label">Balance</span>
-                <span class="games-result-dock-balance-value js-games-balance">200</span>
-                <span class="games-result-dock-balance-unit">FUQ</span>
+              <div class="games-bj-lobby-feed" id="bj-lobby-feed" aria-live="polite"></div>
+              <div class="games-bj-meme-panel" id="bj-lobby-meme-panel" hidden>
+                <div class="games-bj-meme-panel-head">
+                  <span class="games-bj-meme-panel-title">Send a meme</span>
+                  <button type="button" class="games-bj-meme-panel-close" id="bj-lobby-meme-close" aria-label="Close meme picker">✕</button>
+                </div>
+                <input type="text" class="games-bj-meme-search" id="bj-lobby-meme-search" placeholder="Search memes…" autocomplete="off">
+                <div class="games-bj-meme-grid" id="bj-lobby-meme-grid"></div>
               </div>
+              <form class="games-bj-lobby-form" id="bj-lobby-form">
+                <button type="button" class="games-bj-lobby-meme-btn" id="bj-lobby-meme-btn" aria-label="Send a meme" title="Send a meme">🖼️</button>
+                <input type="text" class="games-bj-lobby-input" id="bj-lobby-input" maxlength="240" placeholder="Say something…" autocomplete="off">
+                <button type="submit" class="button games-action-btn games-bj-lobby-send" id="bj-lobby-send">SEND</button>
+              </form>
             </div>
           </section>
         </div>
@@ -597,10 +635,6 @@
             </p>
             <div class="games-fifi-stats" aria-live="polite">
               <div class="games-fifi-stat">
-                <span class="games-fifi-stat-label">Best run</span>
-                <strong id="fifi-bird-stat-best" class="games-fifi-stat-val">0</strong>
-              </div>
-              <div class="games-fifi-stat">
                 <span class="games-fifi-stat-label">Games</span>
                 <strong id="fifi-bird-stat-runs" class="games-fifi-stat-val">0</strong>
               </div>
@@ -689,9 +723,10 @@
   <script src="assets/js/cloud-config.js?v=1.3.2" defer></script>
   <script src="assets/js/vendor/supabase.umd.min.js?v=2.49.8" defer></script>
   <script src="assets/js/display-name-policy.js?v=1.0.0" defer></script>
-  <script src="assets/js/cloud-sync.js?v=1.30.0" defer></script>
+  <script src="assets/js/cloud-sync.js?v=1.30.1" defer></script>
   <script src="assets/js/fifi-bird.js?v=2.7.4" defer></script>
-  <script src="assets/js/games.js?v=2.8.9" defer></script>
+  <script src="assets/js/games.js?v=2.9.1" defer></script>
+  <script src="assets/js/bj-lobby.js?v=1.5.0" defer></script>
   <script src="assets/js/discord-link.js?v=1.0.0" defer></script>
 </body>
 </html>

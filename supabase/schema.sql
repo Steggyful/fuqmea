@@ -962,9 +962,12 @@ begin
   delete from public.fifi_bird_run_sessions
   where user_id = v_uid and consumed_at is null;
 
+  -- Two independent draws combined into one bigint. Max is
+  -- ~2.0e9 * 2.0e9 + 2.0e9 ≈ 4.0e18, safely under bigint's ~9.22e18 ceiling
+  -- (the previous constants overflowed bigint on essentially every call).
   v_seed :=
-    (floor(random() * 1.0e15)::bigint * 1300021)
-    + (floor(random() * 1.0e15)::bigint * 790007);
+    (floor(random() * 2.0e9)::bigint * 2000000000)
+    + floor(random() * 2.0e9)::bigint;
 
   return query
   insert into public.fifi_bird_run_sessions (user_id, seed)

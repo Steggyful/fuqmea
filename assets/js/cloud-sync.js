@@ -360,6 +360,15 @@
     return signedInCached;
   }
 
+  /** Same precedence as the leaderboard-name preview: display_name if set (2+ chars), else handle. Null if signed out or profile hasn't loaded yet. */
+  function getDisplayName() {
+    if (!signedInCached || !lastLoadedProfileRow) return null;
+    const dnRaw = lastLoadedProfileRow.display_name != null ? String(lastLoadedProfileRow.display_name).trim() : '';
+    const handleRaw = lastLoadedProfileRow.handle != null ? String(lastLoadedProfileRow.handle).trim() : '';
+    const shown = dnRaw.length >= 2 ? dnRaw : handleRaw;
+    return shown || null;
+  }
+
   /** Guest blurb vs signed-in line + optional status strip (games-cloud-msg + games-cloud-auth-inline-msg). */
   function setCloudAccountPanelMode(opts) {
     if (!opts || typeof opts !== 'object') return;
@@ -1987,6 +1996,7 @@
   window.FuqCloud = {
     enabled: isEnabled,
     isSignedIn,
+    getDisplayName,
     getFifiBirdProgress,
     startFifiBirdRun,
     recordFifiBirdRun,

@@ -775,6 +775,9 @@
     const delta = w.tokens - bjState.roundStartBalance;
     bumpWeeklyFuqEarnedFromGames(delta);
     pushHistory('bj', detail, delta, w.tokens, { wager_amount: bjState.baseBet });
+    if (window.BjLobby && typeof window.BjLobby.broadcastResult === 'function') {
+      try { window.BjLobby.broadcastResult({ mood, delta }); } catch (_) {}
+    }
     setGameOutcome('bj', mood, sub);
     bjState.phase = 'done';
     bjState.holeHidden = false;
@@ -1012,7 +1015,7 @@
 
     bjRenderHands();
     bjUiPlayerTurn();
-    setGameOutcome('bj', 'pending', 'Hit, stand, double, or split a pair.');
+    setGameOutcome('bj', 'pending', '');
   }
 
   async function bjHit() {
@@ -1118,7 +1121,7 @@
       return;
     }
     bjUiPlayerTurn();
-    setGameOutcome('bj', 'pending', `Hand ${ah + 1} split. Hit, stand, double, or split again.`);
+    setGameOutcome('bj', 'pending', `Hand ${ah + 1} split.`);
   }
 
   function initBlackjack() {
