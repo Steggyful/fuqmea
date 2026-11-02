@@ -5022,6 +5022,13 @@ body.fifi-bird-fs-lock {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  /* Without this, a flex item defaults to min-height:auto (its content size),
+     so it never shrinks to the sheet's bounded height and this overflow-y
+     never gets anything to scroll within — the sheet's own `overflow: hidden`
+     just clips the bottom instead. Only showed up windowed (small canvas);
+     fullscreen had enough room that the clipped content never got cut off. */
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .games-fifi-locker-card {
   --tier: var(--fifi-lime);
@@ -5266,7 +5273,12 @@ body.fifi-bird-fs-lock {
 
 @media (min-width: 720px) {
   .games-fifi-locker-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .games-fifi-locker-sheet { max-width: 34rem; margin: auto; }
+  /* margin: auto (both axes) was the actual bug: a flex item's vertical auto
+     margins opt it out of align-items: stretch, so the sheet sized to its full
+     content height (1375px+) instead of the ~600px canvas, got clipped by the
+     wrap's overflow: hidden, and had nothing bounded left to scroll within.
+     Horizontal-only centering keeps the intent without disabling stretch. */
+  .games-fifi-locker-sheet { max-width: 34rem; margin: 0 auto; }
 }
 
 @media (hover: hover) {
@@ -5702,13 +5714,68 @@ body.fifi-bird-fs-lock {
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
+/* Felt table surface — stays in the blackjack card's own purple rather than
+   the default casino green, since purple is already this game's identity
+   elsewhere on the card. Soft glow where the dealer sits, a vignette pooling
+   toward the bottom, inset rim shadows to read as a raised table edge. */
 .games-bj-table {
   margin: 1rem 0 0.75rem;
-  padding: 0.85rem 0.75rem;
-  border-radius: 8px;
-  border: 2px solid rgba(200, 160, 255, 0.35);
-  background: linear-gradient(180deg, rgba(30, 22, 40, 0.85) 0%, rgba(0, 0, 0, 0.55) 100%);
-  box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.45);
+  padding: 1.1rem 0.9rem;
+  border-radius: 18px;
+  border: 3px solid rgba(200, 160, 255, 0.4);
+  background:
+    radial-gradient(ellipse 90% 60% at 50% 0%, rgba(200, 140, 255, 0.16), transparent 65%),
+    radial-gradient(ellipse 130% 100% at 50% 100%, rgba(10, 6, 16, 0.9), transparent 70%),
+    radial-gradient(ellipse 140% 110% at 50% 50%, #251935 0%, #140d1f 55%, #07050b 100%);
+  box-shadow:
+    inset 0 0 55px rgba(0, 0, 0, 0.65),
+    inset 0 2px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -3px 14px rgba(0, 0, 0, 0.55),
+    0 10px 26px rgba(0, 0, 0, 0.35);
+}
+
+/* Compact echo of the lobby's pill row, sat right on the felt so "people are
+   actually here" reads even without scrolling to the chat panel. Hidden
+   entirely (via JS, :empty) when nobody else has joined yet. */
+.games-bj-table-seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: center;
+  margin-bottom: 0.7rem;
+}
+
+.games-bj-table-seats:empty {
+  display: none;
+}
+
+.games-bj-table-seat {
+  --seat-color: #d4a5ff;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--seat-color);
+  background: color-mix(in srgb, var(--seat-color) 10%, rgba(0, 0, 0, 0.35));
+  border: 1px solid color-mix(in srgb, var(--seat-color) 40%, transparent);
+  border-radius: 999px;
+  padding: 0.12rem 0.5rem 0.12rem 0.35rem;
+}
+
+.games-bj-table-seat-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--seat-color);
+  box-shadow: 0 0 4px var(--seat-color);
+}
+
+.games-bj-table-divider {
+  height: 1px;
+  margin: 0.15rem auto 0.85rem;
+  width: 86%;
+  background: linear-gradient(90deg, transparent, rgba(200, 140, 255, 0.4) 50%, transparent);
 }
 
 .games-bj-hand {
@@ -5848,15 +5915,126 @@ body.fifi-bird-fs-lock {
   letter-spacing: 0.12em;
 }
 
+/* BJ-only bet row header: keeps the Balance readout right next to the chips
+   you're about to bet with, instead of only at the bottom of the card. */
+.games-bj-bet-head {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.games-bj-bet-balance {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  gap: 0.22rem 0.38rem;
+}
+
+.games-bj-bet-balance-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.62;
+  color: var(--games-card-accent);
+}
+
+.games-bj-bet-balance-value {
+  font-size: 1.1rem;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--games-card-accent);
+  text-shadow: 0 0 10px var(--games-card-glow); /* fallback */
+  text-shadow: 0 0 10px color-mix(in srgb, var(--games-card-glow) 70%, transparent);
+}
+
+.games-bj-bet-balance-unit {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  opacity: 0.62;
+  color: var(--games-card-accent); /* fallback */
+  color: color-mix(in srgb, var(--games-card-accent) 65%, rgba(180, 180, 180, 0.45));
+}
+
+/* Poker-chip bet selector — same radio/label markup and JS (.games-bet-active
+   toggle) as every other game's bet row, just restyled as round chips instead
+   of pill buttons. Scoped to --bj so it doesn't touch the other games. */
+.games-bet-row--bj {
+  gap: 0.7rem 0.85rem;
+}
+
+/* .games-bet-row.games-bet-row--bj (not just .games-bet-row--bj) so this beats
+   the shared .games-bet-row label rule on specificity instead of depending on
+   which one happens to come later in the file — that's what let the plain
+   dark pill background win for every chip except whichever was active. */
+.games-bet-row.games-bet-row--bj label {
+  --chip-color: #8a8a94;
+  --chip-hi: rgba(255, 255, 255, 0.4);
+  position: relative;
+  width: 3.3rem;
+  height: 3.3rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  background:
+    radial-gradient(circle at 34% 28%, var(--chip-hi), transparent 46%),
+    var(--chip-color);
+  box-shadow:
+    0 3px 0 rgba(0, 0, 0, 0.55),
+    0 4px 10px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 4px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 6px rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 0.86rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.games-bet-row.games-bet-row--bj label:nth-of-type(1) { --chip-color: #d43a3a; } /* 5  */
+.games-bet-row.games-bet-row--bj label:nth-of-type(2) { --chip-color: #2e7fd6; } /* 10 */
+.games-bet-row.games-bet-row--bj label:nth-of-type(3) { --chip-color: #1f9e6b; } /* 25 */
+.games-bet-row.games-bet-row--bj label:nth-of-type(4) { --chip-color: #e08a2a; } /* 50 */
+.games-bet-row.games-bet-row--bj label:nth-of-type(5) { --chip-color: #a855f7; } /* 100 */
+
+@media (hover: hover) {
+  .games-bet-row.games-bet-row--bj label:hover {
+    transform: translateY(-3px) scale(1.04);
+  }
+}
+
+.games-bet-row.games-bet-row--bj label.games-bet-active,
+.games-bet-row.games-bet-row--bj label:has(input:checked) {
+  border-color: var(--lime);
+  background:
+    radial-gradient(circle at 34% 28%, var(--chip-hi), transparent 46%),
+    var(--chip-color);
+  box-shadow:
+    0 0 0 3px rgba(57, 255, 20, 0.35),
+    0 3px 0 rgba(0, 0, 0, 0.55),
+    0 0 18px rgba(57, 255, 20, 0.45),
+    inset 0 0 0 4px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 6px rgba(255, 255, 255, 0.22);
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .games-bet-row.games-bet-row--bj label:hover,
+  .games-bet-row.games-bet-row--bj label.games-bet-active {
+    transform: none;
+  }
+}
+
 .games-bj-actions {
   margin-top: 0.5rem;
 }
 
 .games-bj-play-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
-  justify-content: center;
   margin-top: 0.5rem;
 }
 
@@ -5873,9 +6051,10 @@ body.fifi-bird-fs-lock {
 }
 
 .games-bj-play-row .games-bj-btn {
-  flex: 1 1 calc(25% - 0.4rem);
+  flex: none;
   min-width: 0;
-  max-width: 10rem;
+  max-width: none;
+  width: 100%;
   margin: 0;
   box-sizing: border-box;
 }
@@ -6031,36 +6210,21 @@ body.fifi-bird-fs-lock {
   }
 }
 
-/* Narrow viewports: 4 equal flex columns squeeze "DOUBLE" — use 2×2 grid for readable labels */
-@media (max-width: 720px) {
-  .games-bj-play-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.5rem;
-    justify-content: stretch;
-  }
-
-  .games-bj-play-row .games-bj-btn {
-    flex: none;
-    min-width: 0;
-    max-width: none;
-    width: 100%;
-  }
-
-  .games-bj-play-row .button.games-action-btn {
-    padding: 12px 12px !important;
-    font-size: 0.88rem !important;
-    letter-spacing: 0.05em;
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    line-height: 1.15;
-    min-height: 2.75rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-  }
+/* 2x2 grid is the unconditional default so labels never squeeze or overlap,
+   regardless of viewport width or how narrow the side-by-side chat layout makes this column */
+.games-bj-play-row .button.games-action-btn {
+  padding: 12px 12px !important;
+  font-size: 0.88rem !important;
+  letter-spacing: 0.05em;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.15;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 @media (max-width: 380px) {
@@ -7290,5 +7454,412 @@ details.games-history-panel::before {
     font-size: 1.35rem;
     min-width: 3.1rem;
     padding: 10px 14px;
+  }
+}
+
+/* ─── Blackjack table lobby (presence + chat + results feed) ────────────────── */
+/* One table, one card — the game and its chat live inside the same
+   .games-card--bj boundary instead of two separate stacked cards. Single
+   column (game, then chat below) until there's room to sit them side by
+   side. */
+.games-bj-wrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+.games-bj-main {
+  min-width: 0;
+}
+
+.games-bj-lobby {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(200, 140, 255, 0.25);
+}
+
+@media (min-width: 900px) {
+  .games-bj-wrap {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+    /* stretch (the grid default) so chat fills the same height as the table
+       instead of floating short at the top with dead space beneath it */
+    align-items: stretch;
+  }
+
+  .games-bj-lobby {
+    padding-top: 0;
+    padding-left: 1.25rem;
+    border-top: none;
+    border-left: 1px solid rgba(200, 140, 255, 0.25);
+  }
+}
+
+.games-bj-lobby-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+
+.games-bj-lobby-status-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.games-bj-lobby-status {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.games-bj-lobby-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--lime);
+  box-shadow: 0 0 6px var(--lime);
+  animation: pulse-lobby-live 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse-lobby-live {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(57, 255, 20, 0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(57, 255, 20, 0); }
+}
+
+.games-bj-lobby-who {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+  min-height: 1.6em;
+}
+
+.games-bj-lobby-pill {
+  --pill-color: #d4a5ff;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--pill-color);
+  background: color-mix(in srgb, var(--pill-color) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--pill-color) 45%, transparent);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem 0.2rem 0.45rem;
+}
+
+.games-bj-lobby-pill--me {
+  font-weight: 800;
+}
+
+.games-bj-lobby-pill-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pill-color);
+  box-shadow: 0 0 5px var(--pill-color);
+}
+
+.games-bj-lobby-pill-guest {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin-left: 0.15rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .games-bj-lobby-live-dot {
+    animation: none;
+  }
+}
+
+.games-bj-lobby-namegate {
+  border: 1px solid rgba(200, 140, 255, 0.35);
+  border-radius: 8px;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.75rem;
+  background: rgba(200, 140, 255, 0.06);
+}
+
+.games-bj-lobby-namegate-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.games-bj-lobby-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1 1 auto;
+  min-height: 220px;
+  overflow-y: auto;
+  border: 1px solid rgba(200, 140, 255, 0.25);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.65rem;
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.games-bj-lobby-row {
+  word-break: break-word;
+}
+
+.games-bj-lobby-name {
+  font-weight: 700;
+  color: var(--games-card-accent, #d4a5ff);
+  margin-right: 0.4em;
+}
+
+.games-bj-lobby-name--me {
+  color: var(--lime);
+}
+
+.games-bj-lobby-text {
+  opacity: 0.92;
+}
+
+.games-bj-lobby-meme-img {
+  display: block;
+  max-width: 150px;
+  max-height: 120px;
+  width: auto;
+  height: auto;
+  margin-top: 0.3rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.games-bj-lobby-result {
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0.85;
+  font-style: italic;
+}
+
+.games-bj-lobby-result--win,
+.games-bj-lobby-result--jackpot {
+  color: var(--lime);
+}
+
+.games-bj-lobby-result--lose {
+  color: #ff6a6a;
+}
+
+.games-bj-lobby-result--tie {
+  color: #cfcfcf;
+}
+
+.games-bj-lobby-system {
+  opacity: 0.6;
+  font-style: italic;
+  font-size: 0.82rem;
+}
+
+.games-bj-lobby-guest-tag {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #b8b8b8;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+  margin-right: 0.35em;
+  vertical-align: middle;
+  cursor: help;
+}
+
+.games-bj-lobby-form {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+/* A class-level `display` declaration otherwise beats the UA [hidden]{display:none}
+   rule at equal specificity (whichever comes later in the stylesheet wins) — so
+   toggling the `hidden` attribute alone silently didn't hide this flex row. */
+.games-bj-lobby-form[hidden] {
+  display: none;
+}
+
+.games-bj-lobby-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1.5px solid rgba(200, 140, 255, 0.4);
+  border-radius: 8px;
+  color: #fff;
+  padding: 0.7rem 0.75rem;
+  font: inherit;
+  /* Stay at/above 16px — anything smaller makes iOS Safari auto-zoom the page
+     on focus. */
+  font-size: 16px;
+  min-height: 2.75rem;
+}
+
+.games-bj-lobby-input:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 1px;
+}
+
+.games-bj-lobby-send {
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  flex: 0 0 auto;
+  padding: 0.6rem 1.1rem !important;
+  font-size: 0.85rem !important;
+  min-height: 2.75rem;
+}
+
+.games-bj-lobby-meme-btn {
+  flex: 0 0 auto;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  border-radius: 8px;
+  border: 1.5px solid rgba(200, 140, 255, 0.4);
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.games-bj-lobby-meme-btn:hover,
+.games-bj-lobby-meme-btn:focus-visible {
+  border-color: var(--lime);
+  background: rgba(57, 255, 20, 0.08);
+}
+
+.games-bj-meme-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 220px;
+  margin-bottom: 0.65rem;
+  padding: 0.6rem 0.65rem;
+  border: 1px solid rgba(200, 140, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.games-bj-meme-panel[hidden] {
+  display: none;
+}
+
+.games-bj-meme-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+}
+
+.games-bj-meme-panel-title {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.games-bj-meme-panel-close {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.65;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.2rem;
+}
+
+.games-bj-meme-panel-close:hover,
+.games-bj-meme-panel-close:focus-visible {
+  opacity: 1;
+  color: var(--lime);
+}
+
+.games-bj-meme-search {
+  flex: 0 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1.5px solid rgba(200, 140, 255, 0.4);
+  border-radius: 8px;
+  color: #fff;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  /* Stay at/above 16px — anything smaller makes iOS Safari auto-zoom the page on focus. */
+  font-size: 16px;
+  min-height: 2.4rem;
+}
+
+.games-bj-meme-search:focus-visible {
+  outline: 2px solid var(--lime);
+  outline-offset: 1px;
+}
+
+.games-bj-meme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 0.4rem;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.games-bj-meme-grid-btn {
+  display: block;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.games-bj-meme-grid-btn:hover,
+.games-bj-meme-grid-btn:focus-visible {
+  border-color: var(--lime);
+  transform: translateY(-1px);
+}
+
+.games-bj-meme-grid-btn img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.games-bj-meme-grid-status {
+  font-size: 0.82rem;
+  opacity: 0.6;
+  font-style: italic;
+  padding: 0.5rem 0.2rem;
+}
+
+@media (max-width: 520px) {
+  .games-bj-lobby-feed {
+    height: 170px;
+    font-size: 0.82rem;
   }
 }
